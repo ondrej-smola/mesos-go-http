@@ -1,0 +1,109 @@
+version: '2'
+
+services:
+  zk:
+    image: bobrik/zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZK_CONFIG: tickTime=2000,initLimit=10,syncLimit=5,maxClientCnxns=128,forceSync=no,clientPort=2181
+      ZK_ID: 1
+
+  master1:
+    image: mesosphere/mesos-master:$MESOS_VERSION
+    ports:
+      - "5050:5050"
+    depends_on:
+      - zk
+    environment:
+      MESOS_ZK: zk://zk:2181/mesos
+      MESOS_HOSTNAME: $DOCKER_IP
+      MESOS_QUORUM: 2
+      MESOS_CLUSTER: docker-compose
+      MESOS_WORK_DIR: /var/lib/mesos
+      MESOS_LOG_DIR: /var/log/mesos
+      MESOS_PORT: 5050
+    links:
+      - zk
+
+  master2:
+      image: mesosphere/mesos-master:$MESOS_VERSION
+      ports:
+        - "5051:5051"
+      depends_on:
+        - zk
+      environment:
+        MESOS_ZK: zk://zk:2181/mesos
+        MESOS_HOSTNAME: $DOCKER_IP
+        MESOS_QUORUM: 2
+        MESOS_CLUSTER: docker-compose
+        MESOS_WORK_DIR: /var/lib/mesos
+        MESOS_LOG_DIR: /var/log/mesos
+        MESOS_PORT: 5051
+      links:
+         - zk
+
+  master3:
+      image: mesosphere/mesos-master:$MESOS_VERSION
+      ports:
+        - "5052:5052"
+      depends_on:
+        - zk
+      environment:
+        MESOS_ZK: zk://zk:2181/mesos
+        MESOS_HOSTNAME: $DOCKER_IP
+        MESOS_QUORUM: 2
+        MESOS_CLUSTER: docker-compose
+        MESOS_WORK_DIR: /var/lib/mesos
+        MESOS_LOG_DIR: /var/log/mesos
+        MESOS_PORT: 5052
+      links:
+        - zk
+
+  slave1:
+    image: mesosphere/mesos-slave:$MESOS_VERSION
+    ports:
+        - "5061:5061"
+    pid: host
+    privileged: true
+    depends_on:
+        - master1
+        - master2
+        - master3
+    environment:
+      MESOS_MASTER: zk://zk:2181/mesos
+      MESOS_HOSTNAME: $DOCKER_IP
+      MESOS_CONTAINERIZERS: docker,mesos
+      MESOS_WORK_DIR: /tmp/mesos
+      MESOS_LOG_DIR: /var/log/mesos
+      MESOS_PORT: 5061
+    links:
+     - zk
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup
+      - /usr/bin/docker:/usr/bin/docker:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  slave2:
+      image: mesosphere/mesos-slave:$MESOS_VERSION
+      ports:
+        - "5062:5062"
+      pid: host
+      privileged: true
+      depends_on:
+          - master1
+          - master2
+          - master3
+      environment:
+        MESOS_MASTER: zk://zk:2181/mesos
+        MESOS_HOSTNAME: $DOCKER_IP
+        MESOS_CONTAINERIZERS: docker,mesos
+        MESOS_WORK_DIR: /tmp/mesos
+        MESOS_LOG_DIR: /var/log/mesos
+        MESOS_PORT: 5062
+      links:
+       - zk
+      volumes:
+        - /sys/fs/cgroup:/sys/fs/cgroup
+        - /usr/bin/docker:/usr/bin/docker:ro
+        - /var/run/docker.sock:/var/run/docker.sock

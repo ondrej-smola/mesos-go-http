@@ -1,0 +1,289 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package mesos.operator.agent;
+
+import "github.com/ondrej-smola/mesos-go-http/mesos.proto";
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option go_package = "agent";
+
+option (gogoproto.enum_stringer_all) = false;
+option (gogoproto.goproto_enum_prefix_all) = true;
+option (gogoproto.goproto_enum_stringer_all) = true;
+
+/**
+ * Calls that can be sent to the v1 agent API.
+ *
+ * A call is described using the standard protocol buffer "union"
+ * trick, see
+ * https://developers.google.com/protocol-buffers/docs/techniques#union.
+ */
+message Call {
+   // If a call of type `Call::FOO` requires additional parameters they can be
+   // included in the corresponding `Call::Foo` message. Similarly, if a call
+   // receives a synchronous response it will be returned as a `Response`
+   // message of type `Response::FOO`; see `Call::LaunchNestedContainerSession`
+   // and `Call::AttachContainerOutput` for exceptions.
+  enum Type {
+    UNKNOWN = 0;
+
+    GET_HEALTH = 1;         // Retrieves the agent's health status.
+    GET_FLAGS = 2;          // Retrieves the agent's flag configuration.
+    GET_VERSION = 3;        // Retrieves the agent's version information.
+    GET_METRICS = 4;        // See 'GetMetrics' below.
+
+    GET_LOGGING_LEVEL = 5;  // Retrieves the agent's logging level.
+    SET_LOGGING_LEVEL = 6;  // See 'SetLoggingLevel' below.
+
+    LIST_FILES = 7;
+    READ_FILE = 8;          // See 'ReadFile' below.
+
+    GET_STATE = 9;
+
+    GET_CONTAINERS = 10;
+    GET_FRAMEWORKS = 11;    // Retrieves the information about known frameworks.
+    GET_EXECUTORS = 12;     // Retrieves the information about known executors.
+    GET_TASKS = 13;         // Retrieves the information about known tasks.
+
+    // Calls for managing nested containers underneath an executor's container.
+    LAUNCH_NESTED_CONTAINER = 14;  // See 'LaunchNestedContainer' below.
+    WAIT_NESTED_CONTAINER = 15;    // See 'WaitNestedContainer' below.
+    KILL_NESTED_CONTAINER = 16;    // See 'KillNestedContainer' below.
+  }
+
+  // Provides a snapshot of the current metrics tracked by the agent.
+  message GetMetrics {
+    // If set, `timeout` would be used to determines the maximum amount of time
+    // the API will take to respond. If the timeout is exceeded, some metrics
+    // may not be included in the response.
+    optional DurationInfo timeout = 1;
+  }
+
+  // Sets the logging verbosity level for a specified duration. Mesos uses
+  // [glog](https://github.com/google/glog) for logging. The library only uses
+  // verbose logging which means nothing will be output unless the verbosity
+  // level is set (by default it's 0, libprocess uses levels 1, 2, and 3).
+  message SetLoggingLevel {
+    // The verbosity level.
+    required uint32 level = 1 [(gogoproto.nullable) = false];
+    // The duration to keep verbosity level toggled. After this duration, the
+    // verbosity level of log would revert to the original level.
+    required DurationInfo duration = 2 [(gogoproto.nullable) = false];
+  }
+
+  // Provides the file listing for a directory.
+  message ListFiles {
+    required string path = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Reads data from a file.
+  message ReadFile {
+    // The path of file.
+    required string path = 1 [(gogoproto.nullable) = false];
+
+    // Initial offset in file to start reading from.
+    required uint64 offset = 2 [(gogoproto.nullable) = false];
+
+    // The maximum number of bytes to read. The read length is capped at 16
+    // memory pages.
+    optional uint64 length = 3;
+  }
+
+  // Launches a nested container within an executor's tree of containers.
+  message LaunchNestedContainer {
+    required ContainerID container_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ContainerID"];
+    optional CommandInfo command = 2;
+    optional ContainerInfo container = 3;
+  }
+
+  // Waits for the nested container to terminate and receives the exit status.
+  message WaitNestedContainer {
+    required ContainerID container_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ContainerID"];
+  }
+
+  // Kills the nested container. Currently only supports SIGKILL.
+  message KillNestedContainer {
+    required ContainerID container_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ContainerID"];
+  }
+
+  optional Type type = 1 [(gogoproto.nullable) = false];
+
+  optional GetMetrics get_metrics = 2 [(gogoproto.customname) = "GetMetrics"];
+  optional SetLoggingLevel set_logging_level = 3 [(gogoproto.customname) = "SetLoggingLevel"];
+  optional ListFiles list_files = 4 [(gogoproto.customname) = "ListFiles"];
+  optional ReadFile read_file = 5  [(gogoproto.customname) = "ReadFile"];
+  optional LaunchNestedContainer launch_nested_container = 6 [(gogoproto.customname) = "LaunchNestedContainer"];
+  optional WaitNestedContainer wait_nested_container = 7 [(gogoproto.customname) = "WaitNestedContainer"];
+  optional KillNestedContainer kill_nested_container = 8 [(gogoproto.customname) = "KillNestedContainer"];
+}
+
+
+/**
+ * Synchronous responses for all calls made to the v1 agent API.
+ */
+message Response {
+  // Each of the responses of type `FOO` corresponds to `Foo` message below.
+  enum Type {
+    UNKNOWN = 0;
+
+    GET_HEALTH = 1;                // See 'GetHealth' below.
+    GET_FLAGS = 2;                 // See 'GetFlags' below.
+    GET_VERSION = 3;               // See 'GetVersion' below.
+    GET_METRICS = 4;               // See 'GetMetrics' below.
+
+    GET_LOGGING_LEVEL = 5;         // See 'GetLoggingLevel' below.
+
+    LIST_FILES = 6;
+    READ_FILE = 7;                 // See 'ReadFile' below.
+
+    GET_STATE = 8;
+
+    GET_CONTAINERS = 9;
+    GET_FRAMEWORKS = 10;           // See 'GetFrameworks' below.
+    GET_EXECUTORS = 11;            // See 'GetExecutors' below.
+    GET_TASKS = 12;                // See 'GetTasks' below.
+
+    WAIT_NESTED_CONTAINER = 13;    // See 'WaitNestedContainer' below.
+  }
+
+  // `healthy` would be true if the agent is healthy. Delayed responses are also
+  // indicative of the poor health of the agent.
+  message GetHealth {
+    required bool healthy = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Contains the flag configuration of the agent.
+  message GetFlags {
+    repeated Flag flags = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Contains the version information of the agent.
+  message GetVersion {
+    required VersionInfo version_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "VersionInfo"];
+  }
+
+  // Contains a snapshot of the current metrics.
+  message GetMetrics {
+    repeated Metric metrics = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Contains the logging level of the agent.
+  message GetLoggingLevel {
+    required uint32 level = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Contains the file listing(similar to `ls -l`) for a directory.
+  message ListFiles {
+    repeated FileInfo file_infos = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "FileInfos"];
+  }
+
+  // Contains the file data.
+  message ReadFile {
+    // The size of file (in bytes).
+    required uint64 size = 1 [(gogoproto.nullable) = false];
+
+    required bytes data = 2 [(gogoproto.nullable) = true];
+  }
+
+  // Contains full state of the agent i.e. information about the tasks,
+  // frameworks and executors running in the cluster.
+  message GetState {
+    optional GetTasks get_tasks = 1 [(gogoproto.customname) = "GetTasks"];
+    optional GetExecutors get_executors = 2 [(gogoproto.customname) = "GetExecutors"];
+    optional GetFrameworks get_frameworks = 3 [(gogoproto.customname) = "GetFrameworks"];
+  }
+
+  // Information about containers running on this agent. It contains
+  // ContainerStatus and ResourceStatistics along with some metadata
+  // of the containers.
+  message GetContainers {
+    message Container {
+      required FrameworkID framework_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "FrameworkID"];
+      required ExecutorID executor_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "ExecutorID"];
+      required string executor_name = 3  [(gogoproto.nullable) = false, (gogoproto.customname) = "ExecutorName"];
+      required ContainerID container_id = 4  [(gogoproto.nullable) = false, (gogoproto.customname) = "ContainerID"];
+      optional ContainerStatus container_status = 5  [(gogoproto.customname) = "ContainerStatus"];
+      optional ResourceStatistics resource_statistics = 6  [(gogoproto.customname) = "ResourceStatistics"];
+    }
+
+    repeated Container containers = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Information about all the frameworks known to the agent at the current
+  // time.
+  message GetFrameworks {
+    message Framework {
+      required FrameworkInfo framework_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "FrameworkInfo"];
+    }
+
+    repeated Framework frameworks = 1 [(gogoproto.nullable) = false];
+    repeated Framework completed_frameworks = 2  [(gogoproto.nullable) = false, (gogoproto.customname) = "CompletedFrameworks"];
+  }
+
+  // Lists information about all the executors known to the agent at the
+  // current time.
+  message GetExecutors {
+    message Executor {
+      required ExecutorInfo executor_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ExecutorInfo"];
+    }
+
+    repeated Executor executors = 1 [(gogoproto.nullable) = false];
+    repeated Executor completed_executors = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "FrameworkInfo"];
+  }
+
+  // Lists information about all the tasks known to the agent at the current
+  // time.
+  message GetTasks {
+    // Tasks that are pending in the agent's queue before an executor is
+    // launched.
+    repeated Task pending_tasks = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PendingTasks"];
+
+    // Tasks that are enqueued for a launched executor that has not yet
+    // registered.
+    repeated Task queued_tasks = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "QueuedTasks"];
+
+    // Tasks that are running.
+    repeated Task launched_tasks = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "LaunchedTasks"];
+
+    // Tasks that are terminated but pending updates.
+    repeated Task terminated_tasks = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "TerminatedTasks"];
+
+    // Tasks that are terminated and updates acked.
+    repeated Task completed_tasks = 5  [(gogoproto.nullable) = false, (gogoproto.customname) = "CompletedTasks"];
+  }
+
+  // Returns termination information about the nested container.
+  message WaitNestedContainer {
+    optional int32 exit_status = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PendingTasks"];
+  }
+
+  optional Type type = 1 [(gogoproto.nullable) = false];
+
+  optional GetHealth get_health = 2 [(gogoproto.customname) = "GetHealth"];
+  optional GetFlags get_flags = 3 [(gogoproto.customname) = "GetFlags"];
+  optional GetVersion get_version = 4 [(gogoproto.customname) = "GetVersion"];
+  optional GetMetrics get_metrics = 5 [(gogoproto.customname) = "GetMetrics"];
+  optional GetLoggingLevel get_logging_level = 6 [(gogoproto.customname) = "GetLoggingLevel"];
+  optional ListFiles list_files = 7 [(gogoproto.customname) = "ListFiles"];
+  optional ReadFile read_file = 8 [(gogoproto.customname) = "ReadFile"];
+  optional GetState get_state = 9 [(gogoproto.customname) = "GetState"];
+  optional GetContainers get_containers = 10 [(gogoproto.customname) = "GetContainers"];
+  optional GetFrameworks get_frameworks = 11 [(gogoproto.customname) = "GetFrameworks"];
+  optional GetExecutors get_executors = 12 [(gogoproto.customname) = "GetExecutors"];
+  optional GetTasks get_tasks = 13 [(gogoproto.customname) = "GetTasks"];
+  optional WaitNestedContainer wait_nested_container = 14 [(gogoproto.customname) = "WaitNestedContainer"];
+}
