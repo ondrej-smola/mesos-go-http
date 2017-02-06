@@ -35,7 +35,7 @@ func main() {
 		leader.New(
 			scheduler.EndpointFunc,
 			masters,
-			leader.WithLogger(log.NewContext(logger).With("component", "leader_client"))),
+			leader.WithLogger(log.NewContext(logger).With("src", "leader_client"))),
 	)
 
 	blueprint := flow.BlueprintBuilder().
@@ -43,18 +43,18 @@ func main() {
 		Append(heartbeat.Blueprint()).
 		Append(ack.Blueprint()).
 		Append(fwid.Blueprint()).
-		RunWith(sched, flow.WithLogger(log.NewContext(logger).With("component", "flow")))
+		RunWith(sched, flow.WithLogger(log.NewContext(logger).With("src", "flow")))
 	//
 
-	wants := mesos.Resources{}
-	wants = wants.Add(
+	wants := mesos.Resources{
 		mesos.BuildResource().Name("cpus").Scalar(1).Build(),
 		mesos.BuildResource().Name("mem").Scalar(256).Build(),
-	)
+	}
+
 	a := &app{
 		totalTasks: 5,
 		wants:      wants,
-		log:        log.NewContext(logger).With("component", "main"),
+		log:        log.NewContext(logger).With("src", "main"),
 	}
 
 	ctx := context.Background()
@@ -66,7 +66,7 @@ func main() {
 
 	for attempt := range retry.Attempts() {
 		a.tasksLaunched = 0
-		a.log.Log("action", "connecting", "attempt", attempt)
+		a.log.Log("event", "connecting", "attempt", attempt)
 		fl := blueprint.Mat()
 		err := fl.Push(scheduler.Subscribe(mesos.FrameworkInfo{User: "root", Name: "test"}), ctx)
 		for err == nil {
@@ -74,15 +74,15 @@ func main() {
 			if err == nil {
 				switch m := msg.(type) {
 				case *scheduler.Event:
-					a.log.Log("action", "message_received", "type", m.Type.String())
+					a.log.Log("event", "message_received", "type", m.Type.String())
 					switch m.Type {
 					case scheduler.Event_SUBSCRIBED:
 						retry.Reset()
 					case scheduler.Event_UPDATE:
 						status := m.Update.Status
 						a.log.Log(
-							"action", "state_update",
-							"task", status.TaskID.Value,
+							"event", "status_update",
+							"task_id", status.TaskID.Value,
 							"status", status.State.String(),
 							"msg", status.Message,
 						)
@@ -93,7 +93,8 @@ func main() {
 			}
 		}
 
-		a.log.Log("state", "failed", "attempt", attempt, "err", err)
+		a.log.Log("event", "failed", "attempt", attempt, "err", err)
+		fl.Close()
 	}
 }
 
@@ -110,8 +111,6 @@ func (a *app) handleOffers(offers []mesos.Offer, flow flow.Flow) error {
 		for a.tasksLaunched < a.totalTasks && offerResources.ContainsAll(a.wants) {
 			a.tasksLaunched++
 			taskID := a.tasksLaunched
-
-			logger.Log("action", "append_task", "task_id", taskID)
 
 			t := mesos.TaskInfo{
 				Name:    "Task " + strconv.Itoa(taskID),
@@ -135,13 +134,13 @@ func (a *app) handleOffers(offers []mesos.Offer, flow flow.Flow) error {
 		}
 
 		if len(tasks) > 0 {
-			logger.Log("action", "launch_tasks", "count", len(tasks))
+			logger.Log("event", "launch", "count", len(tasks))
 			accept := scheduler.Accept(
 				scheduler.OfferOperations{scheduler.OpLaunch(tasks...)}.WithOffers(o.ID),
 			)
 			return flow.Push(accept, context.Background())
 		} else {
-			logger.Log("action", "decline_offer")
+			logger.Log("event", "declined")
 			return flow.Push(scheduler.Decline(o.ID), context.Background())
 		}
 	}

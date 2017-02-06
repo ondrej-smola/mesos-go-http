@@ -107,7 +107,7 @@ func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.
 					break
 				}
 			} else {
-				c.log.Log("event", "connected to leader", "endpoint", endpoint)
+				c.log.Log("event", "connected_to_leader", "endpoint", endpoint)
 				c.leader = newClient
 				return resp, nil
 			}
