@@ -2,8 +2,8 @@ package flow
 
 import "context"
 
-// TODO(os) needs testing
-// Purpose of TestFlow is to allow easy testing of Flow related components and as utility for library users to mock
+// TODO(os) experimental
+// Purpose of TestFlow is to allow easy testing of Flow related components and as utility for library users to
 // mock this library
 type (
 	msg struct {
@@ -17,6 +17,11 @@ type (
 		pull chan chan *msg
 	}
 
+	TestFlowBlueprint struct {
+		NextFlowIn  chan bool
+		NextFlowOut chan Flow
+	}
+
 	TestPushReply struct {
 		to chan *msg
 	}
@@ -25,6 +30,18 @@ type (
 		to chan *msg
 	}
 )
+
+func NewTestFlowBlueprint() *TestFlowBlueprint {
+	return &TestFlowBlueprint{
+		NextFlowIn:  make(chan bool),
+		NextFlowOut: make(chan Flow),
+	}
+}
+
+func (t *TestFlowBlueprint) Mat(opts ...MatOpt) Flow {
+	t.NextFlowIn <- true
+	return <-t.NextFlowOut
+}
 
 func NewTestFlow() *TestFlow {
 	return &TestFlow{

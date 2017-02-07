@@ -44,9 +44,23 @@ type (
 	}
 
 	// Blueprint can be materialized to create instance of flow
-	Blueprint      func(...MatOpt) Flow
-	StageBlueprint func(...MatOpt) Stage
-	SinkBlueprint  func(...MatOpt) Sink
+	Blueprint interface {
+		Mat(opts ...MatOpt) Flow
+	}
+
+	BlueprintFunc func(opts ...MatOpt) Flow
+
+	StageBlueprint interface {
+		Mat(opts ...MatOpt) Stage
+	}
+
+	StageBlueprintFunc func(opts ...MatOpt) Stage
+
+	SinkBlueprint interface {
+		Mat(opts ...MatOpt) Sink
+	}
+
+	SinkBlueprintFunc func(opts ...MatOpt) Sink
 
 	// Flow builder builds up chain of stages that are terminated in sink
 	FlowBuilder interface {
@@ -75,17 +89,17 @@ type (
 )
 
 // Materialize flow based on blueprint
-func (f Blueprint) Mat(opts ...MatOpt) Flow {
+func (f BlueprintFunc) Mat(opts ...MatOpt) Flow {
 	return f(opts...)
 }
 
 // Materialize stage based on blueprint
-func (f StageBlueprint) Mat(opts ...MatOpt) Stage {
+func (f StageBlueprintFunc) Mat(opts ...MatOpt) Stage {
 	return f(opts...)
 }
 
 // Materialize stage based on blueprint
-func (f SinkBlueprint) Mat(opts ...MatOpt) Sink {
+func (f SinkBlueprintFunc) Mat(opts ...MatOpt) Sink {
 	return f(opts...)
 }
 
@@ -121,7 +135,7 @@ func (l *blueprintBuilder) Append(p StageBlueprint) FlowBlueprintBuilder {
 }
 
 func (l *blueprintBuilder) RunWith(s SinkBlueprint, opts ...MatOpt) Blueprint {
-	return func(addOpts ...MatOpt) Flow {
+	return BlueprintFunc(func(addOpts ...MatOpt) Flow {
 		allOpts := append(opts, addOpts...)
 
 		f := New()
@@ -129,7 +143,7 @@ func (l *blueprintBuilder) RunWith(s SinkBlueprint, opts ...MatOpt) Blueprint {
 			f.Append(pb.Mat(allOpts...))
 		}
 		return f.RunWith(s.Mat(allOpts...))
-	}
+	})
 }
 
 // Set logger for flow, flow components should inherit this logger

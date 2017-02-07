@@ -61,14 +61,14 @@ func WithLogger(l log.Logger) Opt {
 var _ = flow.Flow(&Client{})
 
 func Blueprint(client mesos.Client, opts ...Opt) flow.SinkBlueprint {
-	return func(matOpts ...flow.MatOpt) flow.Sink {
+	return flow.SinkBlueprintFunc(func(matOpts ...flow.MatOpt) flow.Sink {
 		cfg := flow.MatOpts(matOpts).Config()
 
 		if cfg.Log != nil {
 			opts = append(opts, WithLogger(log.NewContext(cfg.Log).With("sink", "scheduler")))
 		}
 		return New(client, opts...)
-	}
+	})
 }
 
 func New(client mesos.Client, opts ...Opt) *Client {

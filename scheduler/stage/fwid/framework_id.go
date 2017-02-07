@@ -25,9 +25,9 @@ func WithFrameworkId(id mesos.FrameworkID) Opt {
 }
 
 func Blueprint(opts ...Opt) flow.StageBlueprint {
-	return func(matOpts ...flow.MatOpt) flow.Stage {
+	return flow.StageBlueprintFunc(func(matOpts ...flow.MatOpt) flow.Stage {
 		return New(opts...)
-	}
+	})
 }
 
 // Sets framework id from subscribe call on all following calls

@@ -14,9 +14,9 @@ type (
 )
 
 func Blueprint(opts ...scheduler.CallOpt) flow.StageBlueprint {
-	return func(...flow.MatOpt) flow.Stage {
+	return flow.StageBlueprintFunc(func(...flow.MatOpt) flow.Stage {
 		return New(opts...)
-	}
+	})
 }
 
 // Applies opts to all pushed scheduler calls

@@ -35,13 +35,13 @@ func WithFailOnFailedAck() Opt {
 }
 
 func Blueprint(opts ...Opt) flow.StageBlueprint {
-	return func(matOpts ...flow.MatOpt) flow.Stage {
+	return flow.StageBlueprintFunc(func(matOpts ...flow.MatOpt) flow.Stage {
 		cfg := flow.MatOpts(matOpts).Config()
 		if cfg.Log != nil {
 			opts = append(opts, WithLogger(log.NewContext(cfg.Log).With("stage", "heartbeats")))
 		}
 		return New(opts...)
-	}
+	})
 }
 
 // Automatically acknowledges all pulled update requests.
