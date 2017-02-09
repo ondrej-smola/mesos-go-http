@@ -2,6 +2,7 @@ package mesos
 
 import (
 	"context"
+	"fmt"
 	"github.com/ondrej-smola/mesos-go-http/codec"
 	"io"
 	"net/http"
@@ -64,4 +65,8 @@ func WithClose(b bool) RequestOpt {
 	return func(r *http.Request) {
 		r.Close = b
 	}
+}
+
+func V1ApiEndpointFunc(hostPort string) string {
+	return fmt.Sprintf("http://%v/api/v1", hostPort)
 }

@@ -6,7 +6,8 @@ import (
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/codec"
 	"github.com/ondrej-smola/mesos-go-http/codec/framing"
-	"github.com/ondrej-smola/mesos-go-http/codec/framing/selectors"
+	"github.com/ondrej-smola/mesos-go-http/codec/framing/recordio"
+	"github.com/ondrej-smola/mesos-go-http/codec/framing/single"
 	"github.com/pkg/errors"
 	"io"
 	"net/http"
@@ -34,7 +35,7 @@ type (
 		errorMapper ErrorMapperFunc
 		response    ResponseHandler
 		request     RequestBuilder
-		framing     framing.Selector
+		framing     framing.Provider
 		do          DoFunc
 	}
 
@@ -123,7 +124,19 @@ func WithCodec(codec *codec.Codec) Opt {
 	}
 }
 
-func WithFramingSelector(p framing.Selector) Opt {
+func WithRecordIOFraming() Opt {
+	return func(c *Client) {
+		c.framing = recordio.NewProvider()
+	}
+}
+
+func WithSingleFraming() Opt {
+	return func(c *Client) {
+		c.framing = single.NewProvider()
+	}
+}
+
+func WithFramingProvider(p framing.Provider) Opt {
 	return func(c *Client) {
 		c.framing = p
 	}
@@ -146,7 +159,7 @@ func New(endpoint string, opts ...Opt) *Client {
 		errorMapper: DefaultErrorMapper,
 		do:          NewDoFunc(),
 		endpoint:    endpoint,
-		framing:     selectors.ByContentLength,
+		framing:     single.NewProvider(),
 	}
 
 	client.request = client.buildRequest
@@ -201,8 +214,7 @@ func (c *Client) handleResponse(resp *http.Response, err error, cancel context.C
 			resp.Body.Close()
 			return nil, UnexpectedContentTypeErr
 		}
-		framer := c.framing(resp)
-		dec = c.codec.NewDecoder(framer(resp.Body))
+		dec = c.codec.NewDecoder(c.framing(resp.Body))
 	}
 
 	return &response{

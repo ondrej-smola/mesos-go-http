@@ -2,6 +2,7 @@ package leader
 
 import (
 	"context"
+	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/client"
@@ -18,7 +19,8 @@ type (
 
 	// Client for handling requests that must be send to leading master.
 	LeaderClient struct {
-		endpoint       mesos.EndpointFunc
+		clientOpts     []client.Opt
+		endpointFunc   mesos.EndpointFunc
 		clientProvider client.Provider
 		maxRedirects   int
 		masters        mesos.Masters
@@ -37,6 +39,29 @@ func WithClientProvider(p client.Provider) Opt {
 	}
 }
 
+func WithMasters(hostPorts ...string) Opt {
+	masters := mesos.NewMasters(hostPorts...)
+	if err := masters.Valid(); err != nil {
+		panic(fmt.Sprintf("Invalid mesos masters: %v", err))
+	}
+
+	return func(l *LeaderClient) {
+		l.masters = masters
+	}
+}
+
+func WithClientOpts(opts ...client.Opt) Opt {
+	return func(l *LeaderClient) {
+		l.clientOpts = opts
+	}
+}
+
+func WithEndpointFunc(f mesos.EndpointFunc) Opt {
+	return func(l *LeaderClient) {
+		l.endpointFunc = f
+	}
+}
+
 // Maximum number of redirects during single connection attempt to leader.
 func WithMaxRedirects(count int) Opt {
 	return func(l *LeaderClient) {
@@ -50,17 +75,20 @@ func WithLogger(l log.Logger) Opt {
 	}
 }
 
-func New(endpoint mesos.EndpointFunc, masters mesos.Masters, opts ...Opt) *LeaderClient {
+func New(opts ...Opt) *LeaderClient {
 	l := &LeaderClient{
-		endpoint:       endpoint,
-		log:            log.NewNopLogger(),
-		masters:        masters,
-		clientProvider: client.NewProvider(),
-		maxRedirects:   5,
+		endpointFunc: mesos.V1ApiEndpointFunc,
+		log:          log.NewNopLogger(),
+		masters:      mesos.DEFAULT_MASTERS,
+		maxRedirects: 5,
 	}
 
 	for _, o := range opts {
 		o(l)
+	}
+
+	if l.clientProvider == nil {
+		l.clientProvider = client.NewProvider(l.clientOpts...)
 	}
 
 	return l
@@ -92,13 +120,13 @@ func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.
 	c.log.Log("event", "connecting to leader", "to", strings.Join(c.masters, ","))
 
 	for _, m := range c.masters {
-		endpoint := c.endpoint(m)
+		endpoint := c.endpointFunc(m)
 
 		for i := 0; i < c.maxRedirects; i++ {
 			newClient := c.clientProvider(endpoint)
 			if resp, err := newClient.Do(msg, ctx, opts...); err != nil {
 				if ok, newLeader := client.IsRedirect(err); ok {
-					to := c.endpoint(newLeader)
+					to := c.endpointFunc(newLeader)
 					c.log.Log("event", "redirected", "from", endpoint, "to", to, "attempt", i+1)
 					endpoint = to
 					continue

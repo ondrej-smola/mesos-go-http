@@ -2,7 +2,6 @@ package framing
 
 import (
 	"io"
-	"net/http"
 )
 
 type (
@@ -14,10 +13,6 @@ type (
 
 	// Map io.Reader to framing.Reader
 	Provider func(r io.Reader) Reader
-
-	// Select provider based on response properties
-	// Should not modify response
-	Selector func(r *http.Response) Provider
 )
 
 // Functional adaptation of Reader interface

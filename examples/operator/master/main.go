@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http"
+	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/client/leader"
+	"github.com/ondrej-smola/mesos-go-http/codec"
 	"github.com/ondrej-smola/mesos-go-http/operator/master"
 	"github.com/pkg/errors"
 	"os"
@@ -17,9 +19,9 @@ func main() {
 	logger := log.NewContext(log.NewLogfmtLogger(w))
 
 	c := leader.New(
-		master.EndpointFunc,
-		mesos.Masters{"10.0.75.2:5050", "10.0.75.2:5051", "10.0.75.2:5052"},
+		leader.WithMasters(os.Args[1:]...),
 		leader.WithLogger(logger),
+		leader.WithClientProvider(client.NewProvider(client.WithCodec(codec.JsonCodec))),
 	)
 
 	resp, err := c.Do(&master.Call{
@@ -34,7 +36,7 @@ func main() {
 	ev := &master.Response{}
 	err = resp.Read(ev)
 	if err != nil {
-		panic(errors.Wrap(err, "Response read"))
+		panic(fmt.Sprintf("%+v", err))
 	}
 
 	if ev.Type != master.Response_GET_AGENTS {

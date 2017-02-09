@@ -48,7 +48,7 @@ type (
 	}
 )
 
-func EndpointFunc(hostPort string) string {
+func V1SchedulerAPIEndpointFunc(hostPort string) string {
 	return fmt.Sprintf("http://%v/api/v1/scheduler", hostPort)
 }
 

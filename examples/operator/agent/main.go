@@ -3,13 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/operator/agent"
 	"github.com/pkg/errors"
 )
 
 func main() {
-	c := client.NewProvider().New(agent.EndpointFunc("10.0.75.2:5061"))
+	c := client.NewProvider().New(mesos.V1ApiEndpointFunc("10.0.75.2:5061"))
 
 	resp, err := c.Do(&agent.Call{
 		Type: agent.Call_GET_VERSION,

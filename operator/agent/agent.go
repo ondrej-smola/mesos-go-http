@@ -2,7 +2,6 @@ package agent
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/gogo/protobuf/jsonpb"
 )
 
@@ -26,8 +25,4 @@ func (e *Response) MarshalJSON() ([]byte, error) {
 
 func (e *Response) UnmarshalJSON(in []byte) error {
 	return jsonpb.Unmarshal(bytes.NewBuffer(in), e)
-}
-
-func EndpointFunc(hostPort string) string {
-	return fmt.Sprintf("http://%v/api/v1", hostPort)
 }

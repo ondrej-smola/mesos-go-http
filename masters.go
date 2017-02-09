@@ -7,6 +7,8 @@ import (
 
 type Masters []string
 
+var DEFAULT_MASTERS = Masters{"localhost:5050"}
+
 // list of host:port
 func NewMasters(m ...string) Masters {
 	return Masters(m)

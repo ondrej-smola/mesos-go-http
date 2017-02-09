@@ -5,6 +5,7 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/backoff"
+	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/client/leader"
 	"github.com/ondrej-smola/mesos-go-http/flow"
 	"github.com/ondrej-smola/mesos-go-http/scheduler"
@@ -29,13 +30,13 @@ func main() {
 	w := log.NewSyncWriter(os.Stderr)
 	logger := log.NewContext(log.NewLogfmtLogger(w)).With("ts", log.DefaultTimestampUTC)
 
-	masters := mesos.NewMasters("10.0.75.2:5050", "10.0.75.2:5051", "10.0.75.2:5052")
-
 	sched := scheduler.Blueprint(
 		leader.New(
-			scheduler.EndpointFunc,
-			masters,
-			leader.WithLogger(log.NewContext(logger).With("src", "leader_client"))),
+			leader.WithEndpointFunc(scheduler.V1SchedulerAPIEndpointFunc),
+			leader.WithMasters("10.0.75.2:5050", "10.0.75.2:5051", "10.0.75.2:5052"),
+			leader.WithLogger(log.NewContext(logger).With("src", "leader_client")),
+			leader.WithClientOpts(client.WithRecordIOFraming()),
+		),
 	)
 
 	blueprint := flow.BlueprintBuilder().
