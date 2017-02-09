@@ -242,7 +242,7 @@ message Response {
     }
 
     repeated Executor executors = 1 [(gogoproto.nullable) = false];
-    repeated Executor completed_executors = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "FrameworkInfo"];
+    repeated Executor completed_executors = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CompletedExecutors"];
   }
 
   // Lists information about all the tasks known to the agent at the current
@@ -268,7 +268,7 @@ message Response {
 
   // Returns termination information about the nested container.
   message WaitNestedContainer {
-    optional int32 exit_status = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PendingTasks"];
+    optional int32 exit_status = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ExitStatus"];
   }
 
   optional Type type = 1 [(gogoproto.nullable) = false];
