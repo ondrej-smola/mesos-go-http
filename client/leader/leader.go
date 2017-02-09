@@ -21,9 +21,8 @@ type (
 		clientOpts     []client.Opt
 		clientProvider client.Provider
 		maxRedirects   int
-		masters        mesos.Masters
-
-		log log.Logger
+		masters        []string
+		log            log.Logger
 
 		sync.RWMutex
 		// mutex for
@@ -57,10 +56,10 @@ func WithLogger(l log.Logger) Opt {
 	}
 }
 
-func New(masters mesos.Masters, opts ...Opt) *LeaderClient {
+func New(endpoints []string, opts ...Opt) *LeaderClient {
 	l := &LeaderClient{
 		log:          log.NewNopLogger(),
-		masters:      masters,
+		masters:      endpoints,
 		maxRedirects: 5,
 	}
 
