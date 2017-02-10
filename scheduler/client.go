@@ -3,9 +3,9 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/flow"
+	"github.com/ondrej-smola/mesos-go-http/log"
 	"github.com/pkg/errors"
 )
 
@@ -65,8 +65,9 @@ func Blueprint(client mesos.Client, opts ...Opt) flow.SinkBlueprint {
 		cfg := flow.MatOpts(matOpts).Config()
 
 		if cfg.Log != nil {
-			opts = append(opts, WithLogger(log.NewContext(cfg.Log).With("sink", "scheduler")))
+			opts = append(opts, WithLogger(log.NewContext(cfg.Log).With("src", "scheduler_client")))
 		}
+
 		return New(client, opts...)
 	})
 }
@@ -148,12 +149,11 @@ func (c *Client) IsSink() {}
 
 // main client loop
 func (c *Client) schedulerLoop() {
-	l := log.NewContext(c.log).With("internal", "scheduler_loop")
 
 	for {
 		select {
 		case <-c.ctx.Done():
-			l.Log("event", "cancelled")
+			c.log.Log("event", "main_loop_cancelled")
 			return
 		case r := <-c.read:
 			// read requests are dispatched asynchronously
@@ -163,7 +163,7 @@ func (c *Client) schedulerLoop() {
 			if c.streamId == "" {
 				resp, err := c.subscribe(<-w)
 				if err == nil {
-					l.Log("event", "subscribed", "stream-id", c.streamId)
+					c.log.Log("event", "subscribed", "stream-id", c.streamId)
 					go c.readerLoop(resp, c.ctx)
 				}
 				w <- &event{err: err}
@@ -231,7 +231,7 @@ func (c *Client) subscribe(ev *event) (mesos.Response, error) {
 }
 
 func (c *Client) readerLoop(resp mesos.Response, ctx context.Context) {
-	defer c.log.Log("event", "reader_loop", "state", "cancelled")
+	defer c.log.Log("event", "reader_loop_cancelled")
 	defer resp.Close()
 
 	for {

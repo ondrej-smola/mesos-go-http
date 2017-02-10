@@ -2,7 +2,7 @@ package flow
 
 import (
 	"context"
-	"github.com/go-kit/kit/log"
+	"github.com/ondrej-smola/mesos-go-http/log"
 	"io"
 )
 

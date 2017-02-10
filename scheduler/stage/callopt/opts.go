@@ -49,7 +49,3 @@ func (i *callOpts) Via(f flow.Flow) {
 func (i *callOpts) Close() error {
 	return i.via.Close()
 }
-
-func (i *callOpts) Name() string {
-	return "call_opt"
-}

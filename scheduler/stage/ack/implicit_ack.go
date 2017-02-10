@@ -2,9 +2,9 @@ package ack
 
 import (
 	"context"
-	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/flow"
+	"github.com/ondrej-smola/mesos-go-http/log"
 	"github.com/ondrej-smola/mesos-go-http/scheduler"
 	"github.com/pkg/errors"
 	"sync"
@@ -38,7 +38,7 @@ func Blueprint(opts ...Opt) flow.StageBlueprint {
 	return flow.StageBlueprintFunc(func(matOpts ...flow.MatOpt) flow.Stage {
 		cfg := flow.MatOpts(matOpts).Config()
 		if cfg.Log != nil {
-			opts = append(opts, WithLogger(log.NewContext(cfg.Log).With("stage", "heartbeats")))
+			opts = append(opts, WithLogger(log.NewContext(cfg.Log).With("src", "implicit_ack_stage")))
 		}
 		return New(opts...)
 	})
@@ -98,7 +98,7 @@ func (i *Acks) Pull(ctx context.Context) (flow.Message, error) {
 						return nil, errors.Errorf("Failed to send implicit ack for %v cause: %v", e, err)
 					} else {
 						i.log.Log(
-							"event", "ack_failed",
+							"event", "implicit_ack_failed",
 							"task", state.TaskID.Value,
 							"agent", state.AgentID.Value,
 							"state", state.State.Enum(),
@@ -116,10 +116,6 @@ func (i *Acks) Pull(ctx context.Context) (flow.Message, error) {
 
 func (i *Acks) Via(f flow.Flow) {
 	i.via = f
-}
-
-func (i *Acks) Name() string {
-	return "implicit_ack"
 }
 
 func (i *Acks) Close() error {

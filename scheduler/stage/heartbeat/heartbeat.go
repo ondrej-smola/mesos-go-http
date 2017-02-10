@@ -3,8 +3,8 @@ package heartbeat
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http/flow"
+	"github.com/ondrej-smola/mesos-go-http/log"
 	"github.com/ondrej-smola/mesos-go-http/scheduler"
 	"time"
 )
@@ -99,7 +99,7 @@ func (h *Heartbeats) Pull(ctx context.Context) (flow.Message, error) {
 			if scheduler.IsSubscribed(e) && !deadlineSet {
 				tmp := int64(e.Subscribed.HeartbeatIntervalSeconds) * (h.maxMissed + 1)
 				deadline := time.Duration(tmp) * time.Second
-				h.log.Log("event", "heartbeat", "deadline", deadline)
+				h.log.Log("event", "heartbeat_set", "deadline", deadline)
 				h.heartbeatDeadline = deadline
 			}
 		}

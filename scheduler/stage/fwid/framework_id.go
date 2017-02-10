@@ -84,10 +84,6 @@ func (h *FwId) Via(f flow.Flow) {
 	h.via = f
 }
 
-func (h *FwId) Name() string {
-	return "FrameworkId"
-}
-
 func (h *FwId) Close() error {
 	return h.via.Close()
 }

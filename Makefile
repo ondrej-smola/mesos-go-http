@@ -21,11 +21,15 @@ vet:
 fmt:
 	@go $@ $(PACKAGES)
 
-.PHONY: test
+.PHONY: install-dependencies
 install-dependencies:
-	go get github.com/FiloSottile/gvt
-	cd vendor/github.com/onsi/ginkgo/ginkgo && go install
-	cd vendor/github.com/gogo/protobuf/protoc-gen-gogoslick && go install
+	go get github.com/gogo/protobuf/protoc-gen-gogoslick
+	go get github.com/pkg/errors
+
+.PHONY: install-test-dependencies
+install-test-dependencies:
+	go get github.com/onsi/ginkgo/ginkgo
+	go get github.com/onsi/gomega
 
 .PHONY: proto
 proto:

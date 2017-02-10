@@ -54,6 +54,31 @@
 			"notests": true
 		},
 		{
+			"importpath": "github.com/go-kit/kit/log",
+			"repository": "https://github.com/go-kit/kit",
+			"vcs": "git",
+			"revision": "a59216a7ce3200b6ba0c05ee8b6da44b852833ce",
+			"branch": "master",
+			"path": "/log",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/go-logfmt/logfmt",
+			"repository": "https://github.com/go-logfmt/logfmt",
+			"vcs": "git",
+			"revision": "390ab7935ee28ec6b286364bba9b4dd6410cb3d5",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/go-stack/stack",
+			"repository": "https://github.com/go-stack/stack",
+			"vcs": "git",
+			"revision": "100eb0c0a9c5b306ca2fb4f165df21d80ada4b82",
+			"branch": "master",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/hashicorp/hcl",
 			"repository": "https://github.com/hashicorp/hcl",
 			"vcs": "git",
@@ -74,6 +99,14 @@
 			"repository": "https://github.com/kr/fs",
 			"vcs": "git",
 			"revision": "2788f0dbd16903de03cb8186e5c7d97b69ad387b",
+			"branch": "master",
+			"notests": true
+		},
+		{
+			"importpath": "github.com/kr/logfmt",
+			"repository": "https://github.com/kr/logfmt",
+			"vcs": "git",
+			"revision": "b84e30acd515aadc4b783ad4ff83aff3299bdfe0",
 			"branch": "master",
 			"notests": true
 		},

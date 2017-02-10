@@ -2,104 +2,11 @@
 	"version": 0,
 	"dependencies": [
 		{
-			"importpath": "github.com/go-kit/kit/log",
-			"repository": "https://github.com/go-kit/kit",
-			"vcs": "git",
-			"revision": "bbb2306ec1318f1da5e9cba56bf933d0c7641e84",
-			"branch": "master",
-			"path": "/log",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/go-logfmt/logfmt",
-			"repository": "https://github.com/go-logfmt/logfmt",
-			"vcs": "git",
-			"revision": "390ab7935ee28ec6b286364bba9b4dd6410cb3d5",
-			"branch": "master",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/go-stack/stack",
-			"repository": "https://github.com/go-stack/stack",
-			"vcs": "git",
-			"revision": "100eb0c0a9c5b306ca2fb4f165df21d80ada4b82",
-			"branch": "master",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/gogo/protobuf",
-			"repository": "https://github.com/gogo/protobuf",
-			"vcs": "git",
-			"revision": "f6b4bb7b2dde1736b809b3da996ed72f278e9be9",
-			"branch": "master",
-			"notests": true,
-			"allfiles": true
-		},
-		{
-			"importpath": "github.com/golang/protobuf/proto",
-			"repository": "https://github.com/golang/protobuf",
-			"vcs": "git",
-			"revision": "8ee79997227bf9b34611aee7946ae64735e6fd93",
-			"branch": "master",
-			"path": "/proto",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/golang/protobuf/ptypes/any",
-			"repository": "https://github.com/golang/protobuf",
-			"vcs": "git",
-			"revision": "8ee79997227bf9b34611aee7946ae64735e6fd93",
-			"branch": "master",
-			"path": "ptypes/any",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/kr/logfmt",
-			"repository": "https://github.com/kr/logfmt",
-			"vcs": "git",
-			"revision": "b84e30acd515aadc4b783ad4ff83aff3299bdfe0",
-			"branch": "master",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/onsi/ginkgo",
-			"repository": "https://github.com/onsi/ginkgo",
-			"vcs": "git",
-			"revision": "a23f924ce96d61f963fb6219b8ff069d8d768cc2",
-			"branch": "master",
-			"notests": true
-		},
-		{
-			"importpath": "github.com/onsi/gomega",
-			"repository": "https://github.com/onsi/gomega",
-			"vcs": "git",
-			"revision": "e85f63af4302dc0e4277c6008ecf803f1d80e4f0",
-			"branch": "master",
-			"notests": true
-		},
-		{
 			"importpath": "github.com/pkg/errors",
 			"repository": "https://github.com/pkg/errors",
 			"vcs": "git",
 			"revision": "248dadf4e9068a0b3e79f02ed0a610d935de5302",
 			"branch": "master",
-			"notests": true
-		},
-		{
-			"importpath": "golang.org/x/sys/unix",
-			"repository": "https://go.googlesource.com/sys",
-			"vcs": "git",
-			"revision": "d75a52659825e75fff6158388dddc6a5b04f9ba5",
-			"branch": "master",
-			"path": "/unix",
-			"notests": true
-		},
-		{
-			"importpath": "gopkg.in/yaml.v2",
-			"repository": "https://gopkg.in/yaml.v2",
-			"vcs": "git",
-			"revision": "4c78c975fe7c825c6d1466c42be594d1d6f3aba6",
-			"branch": "v2",
 			"notests": true
 		}
 	]

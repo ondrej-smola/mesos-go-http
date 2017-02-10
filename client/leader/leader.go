@@ -3,10 +3,10 @@ package leader
 import (
 	"context"
 	"fmt"
-	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/codec"
+	"github.com/ondrej-smola/mesos-go-http/log"
 	"github.com/pkg/errors"
 	"strings"
 	"sync"
