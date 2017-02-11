@@ -24,7 +24,6 @@ fmt:
 .PHONY: install-dependencies
 install-dependencies:
 	go get github.com/gogo/protobuf/protoc-gen-gogoslick
-	go get github.com/pkg/errors
 
 .PHONY: install-test-dependencies
 install-test-dependencies:

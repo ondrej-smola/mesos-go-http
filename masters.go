@@ -2,16 +2,22 @@ package mesos
 
 import (
 	"github.com/pkg/errors"
-	"net"
+	"net/url"
 )
 
 type Masters []string
 
-var DEFAULT_MASTERS = Masters{"localhost:5050"}
-
 // list of host:port
 func NewMasters(m ...string) Masters {
 	return Masters(m)
+}
+
+func MustValidMasters(m ...string) Masters {
+	ms := Masters(m)
+	if err := ms.Valid(); err != nil {
+		panic(err)
+	}
+	return ms
 }
 
 func (m Masters) Empty() bool {
@@ -24,7 +30,7 @@ func (m Masters) Valid() error {
 	}
 
 	for i, e := range m {
-		if _, _, err := net.SplitHostPort(e); err != nil {
+		if _, err := url.Parse(e); err != nil {
 			return errors.Wrapf(err, "Masters[%v]:", i)
 		}
 	}

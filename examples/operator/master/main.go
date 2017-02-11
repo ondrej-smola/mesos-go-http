@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"github.com/go-kit/kit/log"
 	"github.com/ondrej-smola/mesos-go-http"
-	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/client/leader"
-	"github.com/ondrej-smola/mesos-go-http/codec"
 	"github.com/ondrej-smola/mesos-go-http/operator/master"
 	"github.com/pkg/errors"
 	"os"
@@ -19,9 +17,8 @@ func main() {
 	logger := log.NewContext(log.NewLogfmtLogger(w))
 
 	c := leader.New(
-		leader.WithMasters(os.Args[1:]...),
+		mesos.MustValidMasters(os.Args[1:]...),
 		leader.WithLogger(logger),
-		leader.WithClientProvider(client.NewProvider(client.WithCodec(codec.JsonCodec))),
 	)
 
 	resp, err := c.Do(&master.Call{

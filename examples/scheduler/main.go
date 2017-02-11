@@ -32,8 +32,10 @@ func main() {
 
 	sched := scheduler.Blueprint(
 		leader.New(
-			leader.WithEndpointFunc(scheduler.V1SchedulerAPIEndpointFunc),
-			leader.WithMasters("10.0.75.2:5050", "10.0.75.2:5051", "10.0.75.2:5052"),
+			mesos.MustValidMasters(
+				"http://10.0.75.2:5050/api/v1/scheduler",
+				"http://10.0.75.2:5051/api/v1/scheduler",
+				"http://10.0.75.2:5052/api/v1/scheduler"),
 			leader.WithLogger(log.NewContext(logger).With("src", "leader_client")),
 			leader.WithClientOpts(client.WithRecordIOFraming()),
 		),
@@ -139,10 +141,16 @@ func (a *app) handleOffers(offers []mesos.Offer, flow flow.Flow) error {
 			accept := scheduler.Accept(
 				scheduler.OfferOperations{scheduler.OpLaunch(tasks...)}.WithOffers(o.ID),
 			)
-			return flow.Push(accept, context.Background())
+			err := flow.Push(accept, context.Background())
+			if err != nil {
+				return err
+			}
 		} else {
 			logger.Log("event", "declined")
-			return flow.Push(scheduler.Decline(o.ID), context.Background())
+			err := flow.Push(scheduler.Decline(o.ID), context.Background())
+			if err != nil {
+				return err
+			}
 		}
 	}
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
-	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/operator/agent"
 	"github.com/spf13/cobra"
@@ -17,7 +16,7 @@ func main() {
 	marsh := jsonpb.Marshaler{}
 
 	getAgent := func() *agent.Client {
-		return agent.New(client.New(mesos.V1ApiEndpointFunc(endpoint)))
+		return agent.New(client.New(endpoint))
 	}
 
 	printResponse := func(c proto.Message) {
@@ -152,7 +151,7 @@ func main() {
 	}
 
 	var rootCmd = &cobra.Command{Use: "Mesos Operator Example Agent CLI"}
-	rootCmd.PersistentFlags().StringVarP(&endpoint, "endpoint", "e", "127.0.0.1:5051", "host port of agent")
+	rootCmd.PersistentFlags().StringVarP(&endpoint, "endpoint", "e", "http://127.0.0.1:5051/api/v1", "host port of agent")
 	rootCmd.AddCommand(getHealth, getFlags, getVersion, getMetrics)
 	rootCmd.AddCommand(getLoggingLevel, getState, getContainers, getFrameworks)
 	rootCmd.AddCommand(getExecutors, getTasks)

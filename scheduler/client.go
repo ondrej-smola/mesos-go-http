@@ -48,10 +48,6 @@ type (
 	}
 )
 
-func V1SchedulerAPIEndpointFunc(hostPort string) string {
-	return fmt.Sprintf("http://%v/api/v1/scheduler", hostPort)
-}
-
 func WithLogger(l log.Logger) Opt {
 	return func(c *Client) {
 		c.log = l

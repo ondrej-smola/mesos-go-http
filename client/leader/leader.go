@@ -2,17 +2,16 @@ package leader
 
 import (
 	"context"
-	"fmt"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/codec"
 	"github.com/ondrej-smola/mesos-go-http/log"
 	"github.com/pkg/errors"
-	"strings"
+	"net/url"
 	"sync"
 )
 
-var NoAvailableLeaderFoundErr = errors.New("Mesos: unable to connect to any leader")
+var NoAvailableLeaderFoundErr = errors.New("Mesos: request failed on all leaders")
 
 type (
 	Opt func(*LeaderClient)
@@ -20,7 +19,6 @@ type (
 	// Client for handling requests that must be send to leading master.
 	LeaderClient struct {
 		clientOpts     []client.Opt
-		endpointFunc   mesos.EndpointFunc
 		clientProvider client.Provider
 		maxRedirects   int
 		masters        mesos.Masters
@@ -29,7 +27,8 @@ type (
 
 		sync.RWMutex
 		// mutex for
-		leader mesos.Client
+		leader   mesos.Client
+		endpoint string
 	}
 )
 
@@ -39,26 +38,9 @@ func WithClientProvider(p client.Provider) Opt {
 	}
 }
 
-func WithMasters(hostPorts ...string) Opt {
-	masters := mesos.NewMasters(hostPorts...)
-	if err := masters.Valid(); err != nil {
-		panic(fmt.Sprintf("Invalid mesos masters: %v", err))
-	}
-
-	return func(l *LeaderClient) {
-		l.masters = masters
-	}
-}
-
 func WithClientOpts(opts ...client.Opt) Opt {
 	return func(l *LeaderClient) {
 		l.clientOpts = opts
-	}
-}
-
-func WithEndpointFunc(f mesos.EndpointFunc) Opt {
-	return func(l *LeaderClient) {
-		l.endpointFunc = f
 	}
 }
 
@@ -75,11 +57,10 @@ func WithLogger(l log.Logger) Opt {
 	}
 }
 
-func New(opts ...Opt) *LeaderClient {
+func New(masters mesos.Masters, opts ...Opt) *LeaderClient {
 	l := &LeaderClient{
-		endpointFunc: mesos.V1ApiEndpointFunc,
 		log:          log.NewNopLogger(),
-		masters:      mesos.DEFAULT_MASTERS,
+		masters:      masters,
 		maxRedirects: 5,
 	}
 
@@ -97,9 +78,9 @@ func New(opts ...Opt) *LeaderClient {
 // Sends Message to current leader (following redirects) and returning response.
 // Current leader is reused for subsequent requests.
 func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, error) {
-
 	c.RLock()
 	leader := c.leader
+	endpoint := c.endpoint
 	c.RUnlock()
 
 	// shared path
@@ -116,18 +97,27 @@ func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.
 	c.Lock()
 	defer c.Unlock()
 	c.leader = nil
-
-	c.log.Log("event", "connecting to leader", "to", strings.Join(c.masters, ","))
+	c.endpoint = ""
 
 	for _, m := range c.masters {
-		endpoint := c.endpointFunc(m)
+		endpoint = m
 
 		for i := 0; i < c.maxRedirects; i++ {
 			newClient := c.clientProvider(endpoint)
 			if resp, err := newClient.Do(msg, ctx, opts...); err != nil {
 				if ok, newLeader := client.IsRedirect(err); ok {
-					to := c.endpointFunc(newLeader)
-					c.log.Log("event", "redirected", "from", endpoint, "to", to, "attempt", i+1)
+					leaderUrl, err := url.Parse(endpoint)
+					if err != nil {
+						return nil, errors.Wrap(err, "URL parse")
+					}
+					leaderUrl.Host = newLeader
+					to := leaderUrl.String()
+					c.log.Log(
+						"event", "redirected",
+						"from", endpoint,
+						"to", to,
+						"attempt", i+1,
+						"debug", true)
 					endpoint = to
 					continue
 				} else {
@@ -135,8 +125,12 @@ func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.
 					break
 				}
 			} else {
-				c.log.Log("event", "connected_to_leader", "endpoint", endpoint)
+				c.log.Log(
+					"event", "connected_to_leader",
+					"endpoint", endpoint,
+					"debug", true)
 				c.leader = newClient
+				c.endpoint = endpoint
 				return resp, nil
 			}
 		}
