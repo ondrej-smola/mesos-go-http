@@ -9,6 +9,9 @@ PROTOC_INCLUDE := $(PROTOC_INCLUDE) -Ioperator/master
 PACKAGES ?= $(shell go list ./... | grep -v vendor)
 PROJECT_NAMESPACE := github.com/ondrej-smola/mesos-go-http
 
+.PHONY: install
+install: install-dependencies binaries
+
 .PHONY: test
 test:
 	ginkgo -r -skip vendor
