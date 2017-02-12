@@ -2,16 +2,14 @@ package leader
 
 import (
 	"context"
+	"github.com/gogo/protobuf/proto"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/client"
-	"github.com/ondrej-smola/mesos-go-http/codec"
 	"github.com/ondrej-smola/mesos-go-http/log"
 	"github.com/pkg/errors"
 	"net/url"
 	"sync"
 )
-
-var NoAvailableLeaderFoundErr = errors.New("Mesos: request failed on all leaders")
 
 type (
 	Opt func(*LeaderClient)
@@ -76,7 +74,7 @@ func New(endpoints []string, opts ...Opt) *LeaderClient {
 
 // Sends Message to current leader (following redirects) and returning response.
 // Current leader is reused for subsequent requests.
-func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, error) {
+func (c *LeaderClient) Do(msg proto.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, error) {
 	c.RLock()
 	leader := c.leader
 	endpoint := c.endpoint
@@ -97,6 +95,7 @@ func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.
 	defer c.Unlock()
 	c.leader = nil
 	c.endpoint = ""
+	var lastErr error
 
 	for _, m := range c.masters {
 		endpoint = m
@@ -120,6 +119,7 @@ func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.
 					endpoint = to
 					continue
 				} else {
+					lastErr = err
 					c.log.Log("event", "call", "endpoint", endpoint, "err", err)
 					break
 				}
@@ -135,5 +135,5 @@ func (c *LeaderClient) Do(msg codec.Message, ctx context.Context, opts ...mesos.
 		}
 	}
 
-	return nil, NoAvailableLeaderFoundErr
+	return nil, errors.Errorf("Mesos: request failed on all endpoints, last err: %v", lastErr)
 }

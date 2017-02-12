@@ -1,26 +1,20 @@
 package codec
 
 import (
-	"encoding/json"
+	"bytes"
 	"fmt"
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/ondrej-smola/mesos-go-http/codec/framing"
 	"io"
 )
 
 type (
-	Message interface {
-		json.Marshaler
-		json.Unmarshaler
-		proto.Marshaler
-		proto.Unmarshaler
-	}
-
 	NewEncoderFunc func(w io.Writer) *Encoder
 	NewDecoderFunc func(r framing.Reader) *Decoder
 
-	UnmarshalFunc func(src []byte, m Message) error
-	MarshalFunc   func(m Message) ([]byte, error)
+	UnmarshalFunc func(src []byte, m proto.Message) error
+	MarshalFunc   func(m proto.Message) ([]byte, error)
 
 	Codec struct {
 		Name               string
@@ -80,20 +74,22 @@ var (
 )
 
 func NewJsonEncoder(w io.Writer) *Encoder {
+	marsh := jsonpb.Marshaler{EmitDefaults: true}
+
 	return &Encoder{
 		w: w,
-		mf: func(m Message) ([]byte, error) {
-			return m.MarshalJSON()
+		mf: func(m proto.Message) ([]byte, error) {
+			b := &bytes.Buffer{}
+			err := marsh.Marshal(b, m)
+			return b.Bytes(), err
 		},
 	}
 }
 
 func NewProtobufEncoder(w io.Writer) *Encoder {
 	return &Encoder{
-		w: w,
-		mf: func(m Message) ([]byte, error) {
-			return m.Marshal()
-		},
+		w:  w,
+		mf: proto.Marshal,
 	}
 }
 
@@ -101,9 +97,7 @@ func NewProtobufDecoder(r framing.Reader) *Decoder {
 	return &Decoder{
 		r:   r,
 		buf: make([]byte, DECODER_BUFFER_SIZE),
-		uf: func(src []byte, m Message) error {
-			return m.Unmarshal(src)
-		},
+		uf:  proto.Unmarshal,
 	}
 }
 
@@ -111,13 +105,13 @@ func NewJsonDecoder(r framing.Reader) *Decoder {
 	return &Decoder{
 		r:   r,
 		buf: make([]byte, DECODER_BUFFER_SIZE),
-		uf: func(src []byte, m Message) error {
-			return m.UnmarshalJSON(src)
+		uf: func(src []byte, m proto.Message) error {
+			return jsonpb.Unmarshal(bytes.NewBuffer(src), m)
 		},
 	}
 }
 
-func (e *Encoder) Encode(m Message) error {
+func (e *Encoder) Encode(m proto.Message) error {
 	bs, err := e.mf(m)
 	if err != nil {
 		return err
@@ -127,7 +121,7 @@ func (e *Encoder) Encode(m Message) error {
 }
 
 // Decode reads the next message from its input and stores it in the value pointed to by m.
-func (d *Decoder) Decode(m Message) error {
+func (d *Decoder) Decode(m proto.Message) error {
 	var (
 		buf     = d.buf
 		readlen = 0

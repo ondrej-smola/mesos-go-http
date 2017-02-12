@@ -2,7 +2,7 @@ package mesos
 
 import (
 	"context"
-	"github.com/ondrej-smola/mesos-go-http/codec"
+	"github.com/gogo/protobuf/proto"
 	"io"
 	"net/http"
 )
@@ -15,20 +15,20 @@ type (
 	EndpointFunc func(string) string
 
 	Response interface {
-		Read(m codec.Message) error
+		Read(m proto.Message) error
 		// return assigned Mesos-Stream-Id if set
 		StreamId() string
 		io.Closer
 	}
 
-	DoFunc func(codec.Message, context.Context, ...RequestOpt) (resp Response, err error)
+	DoFunc func(proto.Message, context.Context, ...RequestOpt) (resp Response, err error)
 
 	Client interface {
-		Do(codec.Message, context.Context, ...RequestOpt) (resp Response, err error)
+		Do(proto.Message, context.Context, ...RequestOpt) (resp Response, err error)
 	}
 )
 
-func (cf DoFunc) Do(m codec.Message, ctx context.Context, opts ...RequestOpt) (Response, error) {
+func (cf DoFunc) Do(m proto.Message, ctx context.Context, opts ...RequestOpt) (Response, error) {
 	return cf(m, ctx, opts...)
 }
 

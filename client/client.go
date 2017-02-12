@@ -3,6 +3,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"github.com/gogo/protobuf/proto"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/codec"
 	"github.com/ondrej-smola/mesos-go-http/codec/framing"
@@ -17,7 +18,7 @@ import (
 type (
 	Provider func(endpoint string, opts ...Opt) mesos.Client
 
-	RequestBuilder func(codec.Message, context.Context, ...mesos.RequestOpt) (*http.Request, error)
+	RequestBuilder func(proto.Message, context.Context, ...mesos.RequestOpt) (*http.Request, error)
 
 	DoFunc func(*http.Request) (*http.Response, error)
 
@@ -69,7 +70,7 @@ func (r *response) StreamId() string {
 	return r.head.Get(mesos.MESOS_STREAM_ID_HEADER)
 }
 
-func (r *response) Read(m codec.Message) error {
+func (r *response) Read(m proto.Message) error {
 	if r.dec == nil {
 		return EmptyResponseErr
 	}
@@ -172,7 +173,7 @@ func New(endpoint string, opts ...Opt) *Client {
 	return client
 }
 
-func (c *Client) buildRequest(m codec.Message, ctx context.Context, opts ...mesos.RequestOpt) (*http.Request, error) {
+func (c *Client) buildRequest(m proto.Message, ctx context.Context, opts ...mesos.RequestOpt) (*http.Request, error) {
 	cod := c.codec
 	buf := &bytes.Buffer{}
 	err := cod.NewEncoder(buf).Encode(m)
@@ -229,7 +230,7 @@ func (c *Client) Endpoint() string {
 	return c.endpoint
 }
 
-func (c *Client) Do(m codec.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, error) {
+func (c *Client) Do(m proto.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, error) {
 	var req *http.Request
 
 	ctx, cancel := context.WithCancel(ctx)
