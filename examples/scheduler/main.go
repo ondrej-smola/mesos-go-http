@@ -32,10 +32,9 @@ func main() {
 
 	sched := scheduler.Blueprint(
 		leader.New(
-			mesos.MustValidMasters(
-				"http://10.0.75.2:5050/api/v1/scheduler",
+			[]string{"http://10.0.75.2:5050/api/v1/scheduler",
 				"http://10.0.75.2:5051/api/v1/scheduler",
-				"http://10.0.75.2:5052/api/v1/scheduler"),
+				"http://10.0.75.2:5052/api/v1/scheduler"},
 			leader.WithLogger(log.NewContext(logger).With("src", "leader_client")),
 			leader.WithClientOpts(client.WithRecordIOFraming()),
 		),
