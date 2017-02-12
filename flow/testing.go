@@ -1,6 +1,10 @@
 package flow
 
-import "context"
+import (
+	"context"
+	"github.com/pkg/errors"
+	"time"
+)
 
 // TODO(os) experimental
 // Purpose of TestFlow is to allow easy testing of Flow related components and as utility for library users to
@@ -13,8 +17,10 @@ type (
 	}
 
 	TestFlow struct {
-		push chan chan *msg
-		pull chan chan *msg
+		push     chan chan *msg
+		pull     chan chan *msg
+		closeIn  chan bool
+		closeOut chan error
 	}
 
 	TestFlowBlueprint struct {
@@ -28,6 +34,10 @@ type (
 
 	TestPullReply struct {
 		to chan *msg
+	}
+
+	CloseReply struct {
+		to chan error
 	}
 )
 
@@ -45,8 +55,10 @@ func (t *TestFlowBlueprint) Mat(opts ...MatOpt) Flow {
 
 func NewTestFlow() *TestFlow {
 	return &TestFlow{
-		push: make(chan chan *msg),
-		pull: make(chan chan *msg),
+		push:     make(chan chan *msg),
+		pull:     make(chan chan *msg),
+		closeIn:  make(chan bool),
+		closeOut: make(chan error),
 	}
 }
 
@@ -70,15 +82,42 @@ func (r *TestPullReply) Error(err error) {
 	close(r.to)
 }
 
+func (r *CloseReply) OK() {
+	close(r.to)
+}
+
+func (r *CloseReply) Error(err error) {
+	r.to <- err
+	close(r.to)
+}
+
+func (t *TestFlow) ExpectNoPush(wait time.Duration) error {
+	select {
+	case p := <-t.push:
+		return errors.Errorf("Unexpected push: %v", <-p)
+	case <-time.After(wait):
+		return nil
+	}
+}
+
+func (t *TestFlow) ExpectNoPull(wait time.Duration) error {
+	select {
+	case <-t.pull:
+		return errors.New("Unexpected pull")
+	case <-time.After(wait):
+		return nil
+	}
+}
+
 // caller must reply to every receive
-func (t *TestFlow) AcceptPush() (Message, context.Context, *TestPushReply) {
+func (t *TestFlow) ExpectPush() (Message, context.Context, *TestPushReply) {
 	req := <-t.push
 	msg := <-req
 	return msg.m, msg.ctx, &TestPushReply{to: req}
 }
 
 // caller must reply to every receive
-func (t *TestFlow) AcceptPull() (context.Context, *TestPullReply) {
+func (t *TestFlow) ExpectPull() (context.Context, *TestPullReply) {
 	req := <-t.pull
 	msg := <-req
 	return msg.ctx, &TestPullReply{to: req}
@@ -98,4 +137,15 @@ func (t *TestFlow) Push(m Message, ctx context.Context) error {
 	req <- &msg{m: m, ctx: ctx}
 	res := <-req
 	return res.err
+}
+
+func (t *TestFlow) Close() error {
+	t.closeIn <- true
+	return <-t.closeOut
+}
+
+// can be called only once
+func (t *TestFlow) AcceptClose() *CloseReply {
+	<-t.closeIn
+	return &CloseReply{to: t.closeOut}
 }

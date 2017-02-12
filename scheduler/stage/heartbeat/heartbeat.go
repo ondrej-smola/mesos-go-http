@@ -36,7 +36,7 @@ func WithLogger(l log.Logger) Opt {
 	}
 }
 
-func WithDeadline(d time.Duration) Opt {
+func WithHeartbeatDeadline(d time.Duration) Opt {
 	if d <= 0 {
 		panic(fmt.Sprintf("Deadline must be > 0, is %v", d))
 	}
@@ -70,6 +70,8 @@ func New(opts ...Opt) *Heartbeats {
 		o(h)
 	}
 
+	h.heartbeatDeadline = h.heartbeatDeadline * time.Duration(h.maxMissed+1)
+
 	return h
 }
 
@@ -97,8 +99,9 @@ func (h *Heartbeats) Pull(ctx context.Context) (flow.Message, error) {
 		switch e := ev.(type) {
 		case *scheduler.Event:
 			if scheduler.IsSubscribed(e) && !deadlineSet {
-				tmp := int64(e.Subscribed.HeartbeatIntervalSeconds) * (h.maxMissed + 1)
-				deadline := time.Duration(tmp) * time.Second
+				// use precision up to milliseconds
+				tmp := int64(e.Subscribed.HeartbeatIntervalSeconds*1000) * (h.maxMissed + 1)
+				deadline := time.Duration(tmp) * time.Millisecond
 				h.log.Log("event", "heartbeat_set", "deadline", deadline)
 				h.heartbeatDeadline = deadline
 			}

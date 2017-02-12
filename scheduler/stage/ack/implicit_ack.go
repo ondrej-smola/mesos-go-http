@@ -89,6 +89,11 @@ func (i *Acks) Pull(ctx context.Context) (flow.Message, error) {
 			}
 
 			state := e.Update.Status
+
+			if state.AgentID == nil {
+				return nil, errors.Errorf("AgentId must be set on status update: %v", state)
+			}
+
 			if len(state.UUID) > 0 {
 				call := scheduler.Acknowledge(state.AgentID.Value, state.TaskID.Value, state.UUID).
 					With(scheduler.FrameworkId(mesos.FrameworkID{Value: fwId}))
