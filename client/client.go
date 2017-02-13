@@ -107,7 +107,7 @@ func WithRequestBuilder(r RequestBuilder) Opt {
 	}
 }
 
-func WithRequestOptions(opts ...mesos.RequestOpt) Opt {
+func WithRequestOpts(opts ...mesos.RequestOpt) Opt {
 	return func(c *Client) {
 		c.requestOpts = opts
 	}
@@ -233,8 +233,10 @@ func (c *Client) Endpoint() string {
 func (c *Client) Do(m proto.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, error) {
 	var req *http.Request
 
+	reqOpts := append(c.requestOpts, opts...)
+
 	ctx, cancel := context.WithCancel(ctx)
-	req, err := c.request(m, ctx, opts...)
+	req, err := c.request(m, ctx, reqOpts...)
 	if err != nil {
 		cancel()
 		return nil, errors.Wrap(err, "Request build failed")
