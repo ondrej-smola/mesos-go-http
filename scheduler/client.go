@@ -25,9 +25,9 @@ type (
 		reqId uint64
 	}
 
-	// Handles thread-safe communication with Mesos leader
+	// Handles thread-safe communication with Mesos client
 	// Supports multiple concurrent read and write requests
-	// First request must be subscribe call
+	// First push request must be subscribe call
 	Client struct {
 		client mesos.Client
 
@@ -143,9 +143,7 @@ func (c *Client) Close() error {
 // implements flow.Sink interface
 func (c *Client) IsSink() {}
 
-// main client loop
 func (c *Client) schedulerLoop() {
-
 	for {
 		select {
 		case <-c.ctx.Done():
@@ -205,7 +203,6 @@ func (c *Client) doRead(read chan *event) {
 	}
 }
 
-// returns mesos-stream-id or error
 func (c *Client) subscribe(ev *event) (mesos.Response, error) {
 	isSubscribe, subscribe := IsSubscribeMessage(ev.event)
 

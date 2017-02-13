@@ -52,10 +52,17 @@ func WithMesosStreamId(id string) RequestOpt {
 	return WithHeader(MESOS_STREAM_ID_HEADER, id)
 }
 
-// Header returns an RequestOpt that adds a header value to an HTTP requests's header.
+// With header returns an RequestOpt that adds a header value to an HTTP requests's header.
 func WithHeader(k, v string) RequestOpt {
 	return func(r *http.Request) {
 		r.Header.Add(k, v)
+	}
+}
+
+// WithAuthorization returns an RequestOpt that sets authorization header value
+func WithAuthorization(auth string) RequestOpt {
+	return func(r *http.Request) {
+		r.Header.Set("Authorization", auth)
 	}
 }
 
