@@ -2,7 +2,7 @@ package flow
 
 import (
 	"context"
-	"github.com/pkg/errors"
+	"fmt"
 	"time"
 )
 
@@ -21,6 +21,8 @@ type (
 		pull     chan chan *msg
 		closeIn  chan bool
 		closeOut chan error
+
+		maxWait time.Duration
 	}
 
 	TestFlowBlueprint struct {
@@ -28,17 +30,23 @@ type (
 		NextFlowOut chan Flow
 	}
 
-	TestPushReply struct {
+	TestPushContext struct {
+		Msg Message
+		Ctx context.Context
+
 		to chan *msg
 	}
 
-	TestPullReply struct {
-		to chan *msg
+	TestPullContext struct {
+		Ctx context.Context
+		to  chan *msg
 	}
 
 	CloseReply struct {
 		to chan error
 	}
+
+	TestFlowOpt func(t *TestFlow)
 )
 
 func NewTestFlowBlueprint() *TestFlowBlueprint {
@@ -53,31 +61,38 @@ func (t *TestFlowBlueprint) Mat(opts ...MatOpt) Flow {
 	return <-t.NextFlowOut
 }
 
+func WithDefaultMaxWait(w time.Duration) TestFlowOpt {
+	return func(t *TestFlow) {
+		t.maxWait = w
+	}
+}
+
 func NewTestFlow() *TestFlow {
 	return &TestFlow{
 		push:     make(chan chan *msg),
 		pull:     make(chan chan *msg),
 		closeIn:  make(chan bool),
 		closeOut: make(chan error),
+		maxWait:  time.Second,
 	}
 }
 
-func (r *TestPushReply) OK() {
+func (r *TestPushContext) OK() {
 	r.to <- &msg{}
 	close(r.to)
 }
 
-func (r *TestPushReply) Error(err error) {
+func (r *TestPushContext) Error(err error) {
 	r.to <- &msg{err: err}
 	close(r.to)
 }
 
-func (r *TestPullReply) Message(m Message) {
+func (r *TestPullContext) Message(m Message) {
 	r.to <- &msg{m: m}
 	close(r.to)
 }
 
-func (r *TestPullReply) Error(err error) {
+func (r *TestPullContext) Error(err error) {
 	r.to <- &msg{err: err}
 	close(r.to)
 }
@@ -91,36 +106,62 @@ func (r *CloseReply) Error(err error) {
 	close(r.to)
 }
 
-func (t *TestFlow) ExpectNoPush(wait time.Duration) error {
+func (t *TestFlow) ExpectNoPush(wait ...time.Duration) {
+	w := t.maxWait
+	if len(wait) == 1 {
+		w = wait[0]
+	}
+
 	select {
 	case p := <-t.push:
-		return errors.Errorf("Unexpected push: %v", <-p)
-	case <-time.After(wait):
-		return nil
+		panic(fmt.Sprintf("Unexpected push: %v", <-p))
+	case <-time.After(w):
 	}
 }
 
-func (t *TestFlow) ExpectNoPull(wait time.Duration) error {
+func (t *TestFlow) ExpectNoPull(wait ...time.Duration) {
+	w := t.maxWait
+	if len(wait) == 1 {
+		w = wait[0]
+	}
+
 	select {
 	case <-t.pull:
-		return errors.New("Unexpected pull")
-	case <-time.After(wait):
-		return nil
+		panic("Unexpected pull")
+	case <-time.After(w):
 	}
 }
 
 // caller must reply to every receive
-func (t *TestFlow) ExpectPush() (Message, context.Context, *TestPushReply) {
-	req := <-t.push
-	msg := <-req
-	return msg.m, msg.ctx, &TestPushReply{to: req}
+func (t *TestFlow) ExpectPush(wait ...time.Duration) *TestPushContext {
+	w := t.maxWait
+	if len(wait) == 1 {
+		w = wait[0]
+	}
+
+	select {
+	case req := <-t.push:
+		msg := <-req
+		return &TestPushContext{Msg: msg.m, Ctx: msg.ctx, to: req}
+	case <-time.After(w):
+		panic("Push timeout")
+	}
 }
 
 // caller must reply to every receive
-func (t *TestFlow) ExpectPull() (context.Context, *TestPullReply) {
-	req := <-t.pull
-	msg := <-req
-	return msg.ctx, &TestPullReply{to: req}
+func (t *TestFlow) ExpectPull(wait ...time.Duration) *TestPullContext {
+	w := t.maxWait
+	if len(wait) == 1 {
+		w = wait[0]
+	}
+
+	select {
+	case req := <-t.pull:
+		msg := <-req
+		return &TestPullContext{Ctx: msg.ctx, to: req}
+	case <-time.After(w):
+		panic("Pull timeout")
+	}
 }
 
 func (t *TestFlow) Pull(ctx context.Context) (Message, error) {

@@ -27,14 +27,14 @@ var _ = Describe("FrameworkId stage", func() {
 		go func() {
 			defer GinkgoRecover()
 			id := "5"
-			_, pullReply := sink.ExpectPull()
-			pullReply.Message(scheduler.Subscribed(id))
+			pull := sink.ExpectPull()
+			pull.Message(scheduler.Subscribed(id))
 
-			m, _, reply := sink.ExpectPush()
-			c, ok := m.(*scheduler.Call)
+			push := sink.ExpectPush()
+			c, ok := push.Msg.(*scheduler.Call)
 			Expect(ok).To(BeTrue())
 			Expect(c.FrameworkID.Value).To(Equal(id))
-			reply.OK()
+			push.OK()
 		}()
 
 		_, err := fwId.Pull(context.Background())
@@ -55,11 +55,11 @@ var _ = Describe("FrameworkId stage", func() {
 		go func() {
 			defer GinkgoRecover()
 
-			m, _, reply := sink.ExpectPush()
-			c, ok := m.(*scheduler.Call)
+			push := sink.ExpectPush()
+			c, ok := push.Msg.(*scheduler.Call)
 			Expect(ok).To(BeTrue())
 			Expect(c.FrameworkID.Value).To(Equal(id))
-			reply.OK()
+			push.OK()
 		}()
 
 		err := fwId.Push(&scheduler.Call{Type: scheduler.Call_KILL}, context.Background())

@@ -27,22 +27,22 @@ var _ = Describe("FrameworkId stage", func() {
 		go func() {
 			defer GinkgoRecover()
 			id := "5"
-			_, pullReply := sink.ExpectPull()
+			pull := sink.ExpectPull()
 			s := scheduler.Subscribed(id)
 			s.Subscribed.HeartbeatIntervalSeconds = 0.005 // 5 millis
-			pullReply.Message(s)
+			pull.Message(s)
 
 			// this pull times out
-			ctx, reply := sink.ExpectPull()
+			pull = sink.ExpectPull()
 			start := time.Now()
-			<-ctx.Done()
+			<-pull.Ctx.Done()
 			Expect(time.Now().Sub(start)).To(BeNumerically("~", 10*time.Millisecond, time.Millisecond))
-			reply.Error(ctx.Err())
+			pull.Error(pull.Ctx.Err())
 
 			// this pull does not
-			_, reply = sink.ExpectPull()
+			pull = sink.ExpectPull()
 			time.Sleep(5 * time.Millisecond)
-			reply.Message(&scheduler.Event{})
+			pull.Message(&scheduler.Event{})
 		}()
 
 		_, err := fwId.Pull(context.Background())
@@ -65,22 +65,22 @@ var _ = Describe("FrameworkId stage", func() {
 		go func() {
 			defer GinkgoRecover()
 			id := "5"
-			_, pullReply := sink.ExpectPull()
+			pull := sink.ExpectPull()
 			s := scheduler.Subscribed(id)
 			s.Subscribed.HeartbeatIntervalSeconds = 0.005 // 5 millis - should be IGNORED
-			pullReply.Message(s)
+			pull.Message(s)
 
 			// this pull times out
-			ctx, reply := sink.ExpectPull()
+			pull = sink.ExpectPull()
 			start := time.Now()
-			<-ctx.Done()
+			<-pull.Ctx.Done()
 			Expect(time.Now().Sub(start)).To(BeNumerically("~", 40*time.Millisecond, time.Millisecond))
-			reply.Error(ctx.Err())
+			pull.Error(pull.Ctx.Err())
 
 			// this pull does not
-			_, reply = sink.ExpectPull()
+			pull = sink.ExpectPull()
 			time.Sleep(30 * time.Millisecond)
-			reply.Message(&scheduler.Event{})
+			pull.Message(&scheduler.Event{})
 		}()
 
 		_, err := fwId.Pull(context.Background())
