@@ -3,6 +3,7 @@ package mesos_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"time"
 )
 
 var _ = Describe("ResourcesBench", func() {
@@ -17,7 +18,7 @@ var _ = Describe("ResourcesBench", func() {
 				current = current.Plus(current...).Plus(current...).Minus(current...).Minus(current...)
 			}
 		})
-		// should take at most 20 micros per operation
-		Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "SomethingHard() shouldn't take too long.")
+		Expect(runtime.Seconds()).
+			Should(BeNumerically("<", time.Duration(count)*20*time.Microsecond), "Should take at most 20 micros per operation")
 	}, 10)
 })

@@ -128,20 +128,16 @@ func (d *Decoder) Decode(m proto.Message) error {
 	)
 	for {
 		eof, nr, err := d.r.ReadFrame(buf)
-		if err != nil {
-			return err
-		}
-
 		readlen += nr
 		if readlen > MAX_SIZE_BYTES {
 			return ErrSize
 		}
 
-		if eof {
+		if eof && readlen > 0 {
 			return d.uf(d.buf[:readlen], m)
-		}
-
-		if len(buf) == nr {
+		} else if err != nil {
+			return err
+		} else if len(buf) == nr {
 			// readlen and len(d.buf) are the same here
 			newbuf := make([]byte, readlen+4096)
 			copy(newbuf, d.buf)
