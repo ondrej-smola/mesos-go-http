@@ -16,8 +16,6 @@ type (
 
 	Response interface {
 		Read(m proto.Message) error
-		// return assigned Mesos-Stream-Id if set
-		StreamId() string
 		io.Closer
 	}
 

@@ -66,6 +66,7 @@ func (r *response) Close() error {
 	return r.body.Close()
 }
 
+// implements scheduler.ResponseWithMesosStreamId
 func (r *response) StreamId() string {
 	return r.head.Get(mesos.MESOS_STREAM_ID_HEADER)
 }

@@ -46,6 +46,11 @@ type (
 
 		log log.Logger
 	}
+
+	// Marker interface to get streamId from mesos response
+	ResponseWithMesosStreamId interface {
+		StreamId() string
+	}
 )
 
 func WithLogger(l log.Logger) Opt {
@@ -214,7 +219,13 @@ func (c *Client) subscribe(ev *event) (mesos.Response, error) {
 	if res, err := c.client.Do(subscribe, c.ctx, mesos.WithClose(true)); err != nil {
 		return nil, err
 	} else {
-		sid := res.StreamId()
+
+		s, ok := res.(ResponseWithMesosStreamId)
+		if !ok {
+			return nil, errors.Errorf("Client response does not implement MesosStreamId interface, got type %T", res)
+		}
+
+		sid := s.StreamId()
 		if sid == "" {
 			return nil, errors.Errorf("Mesos is expected to set %v but it is empty", mesos.MESOS_STREAM_ID_HEADER)
 		}
