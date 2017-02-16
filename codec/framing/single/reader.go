@@ -23,10 +23,11 @@ func NewProvider() framing.Provider {
 
 func (rr *Reader) ReadFrame(p []byte) (endOfFrame bool, n int, err error) {
 	n, err = rr.r.Read(p)
-	if n > 0 && err == io.EOF {
+
+	if err == io.EOF {
 		endOfFrame = true
-		err = nil
 	}
+
 	return
 }
 

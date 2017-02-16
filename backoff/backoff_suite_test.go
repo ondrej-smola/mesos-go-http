@@ -37,10 +37,10 @@ var _ = Describe("Backoff", func() {
 			last = cur
 		}
 
-		Expect(diffs[0]).To(BeNumerically("~", 0, tolerance))
-		Expect(diffs[1]).To(BeNumerically("~", 10*time.Millisecond, tolerance))
-		Expect(diffs[2]).To(BeNumerically("~", 20*time.Millisecond, tolerance))
-		Expect(diffs[3]).To(BeNumerically("~", 40*time.Millisecond, tolerance))
+		Expect(diffs[0]).To(BeNumerically(">=", 0, tolerance))
+		Expect(diffs[1]).To(BeNumerically(">=", 10*time.Millisecond, tolerance))
+		Expect(diffs[2]).To(BeNumerically(">=", 20*time.Millisecond, tolerance))
+		Expect(diffs[3]).To(BeNumerically(">=", 40*time.Millisecond, tolerance))
 	})
 
 	It("Reset", func(done Done) {
@@ -68,11 +68,11 @@ var _ = Describe("Backoff", func() {
 		}
 
 		Expect(atts).To(Equal([]int{1, 2, 3, 1, 2, 3, 4, 5}))
-		Expect(diffs[0]).To(BeNumerically("~", 0, tolerance))
-		Expect(diffs[1]).To(BeNumerically("~", 10*time.Millisecond, tolerance))
-		Expect(diffs[2]).To(BeNumerically("~", 15*time.Millisecond, tolerance))
-		Expect(diffs[3]).To(BeNumerically("~", 22*time.Millisecond, tolerance))
-		Expect(diffs[4]).To(BeNumerically("~", 34*time.Millisecond, tolerance))
+		Expect(diffs[0]).To(BeNumerically(">=", 0, tolerance))
+		Expect(diffs[1]).To(BeNumerically(">=", 10*time.Millisecond, tolerance))
+		Expect(diffs[2]).To(BeNumerically(">=", 15*time.Millisecond, tolerance))
+		Expect(diffs[3]).To(BeNumerically(">=", 22*time.Millisecond, tolerance))
+		Expect(diffs[4]).To(BeNumerically(">=", 33*time.Millisecond, tolerance))
 		close(done)
 	})
 
@@ -101,9 +101,9 @@ var _ = Describe("Backoff", func() {
 		}
 
 		Expect(diffs).To(HaveLen(3))
-		Expect(diffs[0]).To(BeNumerically("~", 0, tolerance))
-		Expect(diffs[1]).To(BeNumerically("~", 10*time.Millisecond, tolerance))
-		Expect(diffs[2]).To(BeNumerically("~", 20*time.Millisecond, tolerance))
+		Expect(diffs[0]).To(BeNumerically(">=", 0, tolerance))
+		Expect(diffs[1]).To(BeNumerically(">=", 10*time.Millisecond, tolerance))
+		Expect(diffs[2]).To(BeNumerically(">=", 20*time.Millisecond, tolerance))
 		close(done)
 	})
 
@@ -129,11 +129,11 @@ var _ = Describe("Backoff", func() {
 			last = time.Now()
 		}
 
-		Expect(diffs[0]).To(BeNumerically("~", 0, tolerance))
-		Expect(diffs[1]).To(BeNumerically("~", 11*time.Millisecond, tolerance))
-		Expect(diffs[2]).To(BeNumerically("~", 22*time.Millisecond, tolerance))
-		Expect(diffs[3]).To(BeNumerically("~", 44*time.Millisecond, tolerance))
-		Expect(diffs[4]).To(BeNumerically("~", 50*time.Millisecond, tolerance))
+		Expect(diffs[0]).To(BeNumerically(">=", 0, tolerance))
+		Expect(diffs[1]).To(BeNumerically(">=", 11*time.Millisecond, tolerance))
+		Expect(diffs[2]).To(BeNumerically(">=", 22*time.Millisecond, tolerance))
+		Expect(diffs[3]).To(BeNumerically(">=", 44*time.Millisecond, tolerance))
+		Expect(diffs[4]).To(BeNumerically(">=", 50*time.Millisecond, tolerance))
 
 		close(done)
 	})

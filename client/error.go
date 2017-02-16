@@ -10,15 +10,14 @@ import (
 )
 
 var (
-	UnauthenticatedError     = errors.New("Mesos: call not authenticated")
-	UnsubscribedError        = errors.New("Mesos: no subscription established")
-	VersionError             = errors.New("Mesos: incompatible API version")
-	MediaTypeError           = errors.New("Mesos: unsupported media type")
-	RateLimitError           = errors.New("Mesos: rate limited")
-	UnavailableError         = errors.New("Mesos: server unavailable")
-	NotFoundError            = errors.New("Mesos: endpoint not found")
-	UnexpectedContentTypeErr = errors.New("Mesos: unexpected content type")
-	EmptyResponseErr         = errors.New("Mesos: empty response")
+	UnauthenticatedError = errors.New("Mesos: call not authenticated")
+	UnsubscribedError    = errors.New("Mesos: no subscription established")
+	VersionError         = errors.New("Mesos: incompatible API version")
+	MediaTypeError       = errors.New("Mesos: unsupported media type")
+	RateLimitError       = errors.New("Mesos: rate limited")
+	UnavailableError     = errors.New("Mesos: server unavailable")
+	NotFoundError        = errors.New("Mesos: endpoint not found")
+	EmptyResponseErr     = errors.New("Mesos: empty response")
 )
 
 type (

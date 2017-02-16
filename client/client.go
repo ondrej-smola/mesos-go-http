@@ -214,7 +214,7 @@ func (c *Client) handleResponse(resp *http.Response, err error, cancel context.C
 		ct := resp.Header.Get("Content-Type")
 		if ct != c.codec.DecoderContentType {
 			resp.Body.Close()
-			return nil, UnexpectedContentTypeErr
+			return nil, errors.Errorf("Unexpected context-type  %v - should be %v", ct, c.codec.DecoderContentType)
 		}
 		dec = c.codec.NewDecoder(c.framing(resp.Body))
 	}
