@@ -1,0 +1,10 @@
+sudo: false
+language: go
+go:
+  - 1.7.5
+install:
+  - make install-dependencies
+  - make install-test-dependencies
+script:
+  - ! gofmt -s -d . 2>&1 | read diff
+  - make test

@@ -2,6 +2,8 @@
 
 Goal of this project is to provide low and high level API for Apache Mesos using HTTP API
 
+[![Build Status](https://travis-ci.org/ondrej-smola/mesos-go-http.svg?branch=master)](https://travis-ci.org/ondrej-smola/mesos-go-http)
+
 ## Status
 
 Current state of project is *alpha* as it is only lightly tested and need more adoption/feedback.
