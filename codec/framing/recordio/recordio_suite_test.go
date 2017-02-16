@@ -83,7 +83,7 @@ var _ = Describe("RecordIOReader", func() {
 		})
 
 		b.RecordValue("MB/s", float64(total)/runtime.Seconds()/1000000)
-		Expect(runtime.Seconds()).Should(BeNumerically("<", 0.01), "SomethingHard() shouldn't take too long.")
+		Expect(runtime.Seconds()).Should(BeNumerically("<", 0.02))
 	}, 5)
 })
 

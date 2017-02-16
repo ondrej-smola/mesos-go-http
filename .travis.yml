@@ -6,6 +6,6 @@ install:
   - make install-dependencies
   - make install-test-dependencies
 script:
-  - ! go fmt `go list ./... | grep -v vendor` | read
   - go vet `go list ./... | grep -v vendor`
+  - fmtTest=$(go fmt `go list ./... | grep -v vendor` 2>&1); [[ -z $fmtTest ]]
   - make test
