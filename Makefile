@@ -12,17 +12,20 @@ PROJECT_NAMESPACE := github.com/ondrej-smola/mesos-go-http
 .PHONY: install
 install: install-dependencies binaries
 
+.PHONY: pre-commit
+pre-commit: fmt vet test
+
 .PHONY: test
 test:
 	ginkgo -r -skip vendor
 
 .PHONY: vet
 vet:
-	@go $@ $(PACKAGES)
+	@go vet $(PACKAGES)
 
 .PHONY: fmt
 fmt:
-	@go $@ $(PACKAGES)
+	@go fmt $(PACKAGES)
 
 .PHONY: install-dependencies
 install-dependencies:

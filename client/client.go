@@ -16,7 +16,11 @@ import (
 )
 
 type (
-	Provider func(endpoint string, opts ...Opt) mesos.Client
+	Provider interface {
+		New(endpoint string, opts ...Opt) mesos.Client
+	}
+
+	ProviderFunc func(endpoint string, opts ...Opt) mesos.Client
 
 	RequestBuilder func(proto.Message, context.Context, ...mesos.RequestOpt) (*http.Request, error)
 
@@ -79,7 +83,7 @@ func (r *response) Read(m proto.Message) error {
 	return r.dec.Decode(m)
 }
 
-func (p Provider) New(endpoint string, opts ...Opt) mesos.Client {
+func (p ProviderFunc) New(endpoint string, opts ...Opt) mesos.Client {
 	return p(endpoint, opts...)
 }
 
@@ -145,10 +149,10 @@ func WithFramingProvider(p framing.Provider) Opt {
 }
 
 func NewProvider(opts ...Opt) Provider {
-	return func(endpoint string, addOpts ...Opt) mesos.Client {
+	return ProviderFunc(func(endpoint string, addOpts ...Opt) mesos.Client {
 		res := append(opts, addOpts...)
 		return New(endpoint, res...)
-	}
+	})
 }
 
 func New(endpoint string, opts ...Opt) *Client {

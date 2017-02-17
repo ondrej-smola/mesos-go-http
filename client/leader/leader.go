@@ -56,17 +56,14 @@ func WithLogger(l log.Logger) Opt {
 
 func New(endpoints []string, opts ...Opt) *LeaderClient {
 	l := &LeaderClient{
-		log:          log.NewNopLogger(),
-		masters:      endpoints,
-		maxRedirects: 5,
+		log:            log.NewNopLogger(),
+		masters:        endpoints,
+		clientProvider: client.NewProvider(),
+		maxRedirects:   5,
 	}
 
 	for _, o := range opts {
 		o(l)
-	}
-
-	if l.clientProvider == nil {
-		l.clientProvider = client.NewProvider(l.clientOpts...)
 	}
 
 	return l
@@ -101,7 +98,13 @@ func (c *LeaderClient) Do(msg proto.Message, ctx context.Context, opts ...mesos.
 		endpoint = m
 
 		for i := 0; i < c.maxRedirects; i++ {
-			newClient := c.clientProvider(endpoint)
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+
+			newClient := c.clientProvider.New(endpoint, c.clientOpts...)
 			if resp, err := newClient.Do(msg, ctx, opts...); err != nil {
 				if ok, newLeader := client.IsRedirect(err); ok {
 					leaderUrl, err := url.Parse(endpoint)
