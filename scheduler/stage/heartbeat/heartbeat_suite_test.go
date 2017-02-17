@@ -29,14 +29,14 @@ var _ = Describe("FrameworkId stage", func() {
 			id := "5"
 			pull := sink.ExpectPull()
 			s := scheduler.Subscribed(id)
-			s.Subscribed.HeartbeatIntervalSeconds = 0.005 // 5 millis
+			s.Subscribed.HeartbeatIntervalSeconds = 0.01 // 10 millis
 			pull.Message(s)
 
 			// this pull times out
 			pull = sink.ExpectPull()
 			start := time.Now()
 			<-pull.Ctx.Done()
-			Expect(time.Now().Sub(start)).To(BeNumerically("~", 10*time.Millisecond, time.Millisecond))
+			Expect(time.Now().Sub(start)).To(BeNumerically(">=", 20*time.Millisecond, 10*time.Millisecond))
 			pull.Error(pull.Ctx.Err())
 
 			// this pull does not
@@ -74,7 +74,7 @@ var _ = Describe("FrameworkId stage", func() {
 			pull = sink.ExpectPull()
 			start := time.Now()
 			<-pull.Ctx.Done()
-			Expect(time.Now().Sub(start)).To(BeNumerically("~", 40*time.Millisecond, time.Millisecond))
+			Expect(time.Now().Sub(start)).To(BeNumerically(">=", 40*time.Millisecond, 10*time.Millisecond))
 			pull.Error(pull.Ctx.Err())
 
 			// this pull does not
