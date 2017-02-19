@@ -21,9 +21,6 @@ type (
 		IsFlowMessage()
 	}
 
-	// Default custom message useful for sending something as message
-	PingMessage struct{}
-
 	// Flow chain of stage(s) and sink
 	Flow interface {
 		// Blocks until next message is ready or context is cancelled
@@ -90,8 +87,6 @@ type (
 		sink       SinkBlueprint
 	}
 )
-
-func (p *PingMessage) IsFlowMessage() {}
 
 // Materialize flow based on blueprint
 func (f BlueprintFunc) Mat(opts ...MatOpt) Flow {

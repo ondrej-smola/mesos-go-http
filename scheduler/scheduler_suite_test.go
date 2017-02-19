@@ -3,7 +3,6 @@ package scheduler_test
 import (
 	"context"
 	"github.com/ondrej-smola/mesos-go-http"
-	"github.com/ondrej-smola/mesos-go-http/flow"
 	. "github.com/ondrej-smola/mesos-go-http/scheduler"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -25,7 +24,7 @@ var _ = Describe("Scheduler", func() {
 		cl := mesos.NewTestChanClient()
 		sched := New(cl)
 
-		err := sched.Push(&flow.PingMessage{}, context.Background())
+		err := sched.Push(&PingMessage{}, context.Background())
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("First message must be subscribe"))
 		close(done)
@@ -167,7 +166,7 @@ var _ = Describe("Scheduler", func() {
 		Expect(sched.Push(Subscribe(mesos.FrameworkInfo{User: "test"}), ctx)).To(Succeed())
 		<-wait
 
-		Expect(sched.Push(&flow.PingMessage{}, ctx)).To(Equal(ErrBufferFull))
+		Expect(sched.Push(&PingMessage{}, ctx)).To(Equal(ErrBufferFull))
 		close(done)
 	})
 

@@ -98,6 +98,24 @@ func IsSubscribedMessage(e flow.Message) (bool, *Event) {
 	return false, nil
 }
 
+func IsResourceOffers(e flow.Message) (bool, *Event) {
+	switch r := e.(type) {
+	case *Event:
+		return r.Type == Event_OFFERS, r
+	}
+
+	return false, nil
+}
+
+func IsOfferDecline(e flow.Message) (bool, *Call) {
+	switch r := e.(type) {
+	case *Call:
+		return r.Type == Call_DECLINE, r
+	}
+
+	return false, nil
+}
+
 func IsSubscribed(e *Event) bool {
 	return e.Type == Event_SUBSCRIBED
 }
