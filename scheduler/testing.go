@@ -2,7 +2,7 @@ package scheduler
 
 import "github.com/ondrej-smola/mesos-go-http"
 
-func Subscribed(fwId string) *Event {
+func TestSubscribed(fwId string) *Event {
 	return &Event{
 		Type: Event_SUBSCRIBED,
 		Subscribed: &Event_Subscribed{
@@ -17,4 +17,10 @@ func Subscribed(fwId string) *Event {
 		},
 	}
 
+}
+
+func TestHeartbeat() *Event {
+	return &Event{
+		Type: Event_HEARTBEAT,
+	}
 }

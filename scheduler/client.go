@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"github.com/ondrej-smola/mesos-go-http"
 	"github.com/ondrej-smola/mesos-go-http/flow"
 	"github.com/ondrej-smola/mesos-go-http/log"
@@ -10,10 +9,6 @@ import (
 )
 
 var ErrBufferFull = errors.New("Scheduler: buffer is full")
-
-const (
-	DEFAULT_EVENT_BUFFER_SIZE = 64
-)
 
 type (
 	Opt func(c *Client)
@@ -29,6 +24,8 @@ type (
 	// Supports multiple concurrent read and write requests
 	// First push request must be subscribe call
 	Client struct {
+		bufferSize int
+
 		client mesos.Client
 
 		// client is subscribed when not empty
@@ -38,8 +35,6 @@ type (
 		buffer chan flow.Message
 		// write request queue
 		write chan chan *event
-		// read request queue
-		read chan chan *event
 
 		ctx    context.Context
 		cancel context.CancelFunc
@@ -59,6 +54,12 @@ func WithLogger(l log.Logger) Opt {
 	}
 }
 
+func WithBufferSize(size int) Opt {
+	return func(c *Client) {
+		c.bufferSize = size
+	}
+}
+
 var _ = flow.Flow(&Client{})
 
 func Blueprint(client mesos.Client, opts ...Opt) flow.SinkBlueprint {
@@ -73,22 +74,24 @@ func Blueprint(client mesos.Client, opts ...Opt) flow.SinkBlueprint {
 	})
 }
 
+// Provided mesos.Client must return response implementing ResponseWithMesosStreamId interface
 func New(client mesos.Client, opts ...Opt) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	c := &Client{
-		ctx:    ctx,
-		cancel: cancel,
-		client: client,
-		write:  make(chan chan *event),
-		read:   make(chan chan *event),
-		buffer: make(chan flow.Message, DEFAULT_EVENT_BUFFER_SIZE),
-		log:    log.NewNopLogger(),
+		bufferSize: 16,
+		ctx:        ctx,
+		cancel:     cancel,
+		client:     client,
+		write:      make(chan chan *event),
+		log:        log.NewNopLogger(),
 	}
 
 	for _, o := range opts {
 		o(c)
 	}
+
+	c.buffer = make(chan flow.Message, c.bufferSize)
 
 	go c.schedulerLoop()
 
@@ -117,30 +120,26 @@ func (c *Client) Push(ev flow.Message, ctx context.Context) error {
 }
 
 func (c *Client) Pull(ctx context.Context) (flow.Message, error) {
-	req := make(chan *event)
+	// read messages from buffer to allow pull after context cancelled
+	select {
+	case ev := <-c.buffer:
+		return ev, nil
+	default:
+	}
 
 	select {
-	case c.read <- req:
-		req <- &event{ctx: ctx}
+	case ev := <-c.buffer:
+		return ev, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-c.ctx.Done():
 		return nil, c.ctx.Err()
 	}
-
-	res := <-req
-	// sanity check
-	if res == nil || (res.event == nil && res.err == nil) || (res.event != nil && res.err != nil) {
-		panic(fmt.Sprintf("Invalid pull response %v", res))
-	}
-
-	return res.event, res.err
 }
 
+// Pull/Push will return context.ContextCancelled after close
 func (c *Client) Close() error {
 	c.cancel()
-	close(c.read)
-	close(c.write)
 	c.log.Log("event", "closed")
 	return nil
 }
@@ -154,17 +153,17 @@ func (c *Client) schedulerLoop() {
 		case <-c.ctx.Done():
 			c.log.Log("event", "main_loop_cancelled")
 			return
-		case r := <-c.read:
-			// read requests are dispatched asynchronously
-			go c.doRead(r)
 		case w := <-c.write:
 			// write requests are dispatched asynchronously except first call (subscribe)
 			if c.streamId == "" {
 				resp, err := c.subscribe(<-w)
-				if err == nil {
+				if err != nil {
+					c.cancel()
+				} else {
 					c.log.Log("event", "subscribed", "stream-id", c.streamId)
-					go c.readerLoop(resp, c.ctx)
+					go c.readerLoop(resp)
 				}
+
 				w <- &event{err: err}
 			} else {
 				go c.doWrite(w, c.streamId)
@@ -194,20 +193,6 @@ func (c *Client) doWrite(w chan *event, streamId string) {
 	}
 }
 
-func (c *Client) doRead(read chan *event) {
-	defer close(read)
-	req := <-read
-
-	select {
-	case ev := <-c.buffer:
-		read <- &event{event: ev}
-	case <-c.ctx.Done():
-		read <- &event{err: c.ctx.Err()}
-	case <-req.ctx.Done():
-		read <- &event{err: req.ctx.Err()}
-	}
-}
-
 func (c *Client) subscribe(ev *event) (mesos.Response, error) {
 	isSubscribe, subscribe := IsSubscribeMessage(ev.event)
 
@@ -234,7 +219,7 @@ func (c *Client) subscribe(ev *event) (mesos.Response, error) {
 	}
 }
 
-func (c *Client) readerLoop(resp mesos.Response, ctx context.Context) {
+func (c *Client) readerLoop(resp mesos.Response) {
 	defer c.log.Log("event", "reader_loop_cancelled")
 	defer resp.Close()
 
@@ -242,12 +227,13 @@ func (c *Client) readerLoop(resp mesos.Response, ctx context.Context) {
 		msg := &Event{}
 		err := resp.Read(msg)
 		if err != nil {
+			c.log.Log("event", "reader_loop", "err", err)
 			c.cancel()
 			return
 		} else {
 			select {
 			case c.buffer <- flow.Message(msg):
-			case <-ctx.Done():
+			case <-c.ctx.Done():
 				return
 			}
 		}

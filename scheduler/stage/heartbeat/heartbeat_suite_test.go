@@ -28,7 +28,7 @@ var _ = Describe("FrameworkId stage", func() {
 			defer GinkgoRecover()
 			id := "5"
 			pull := sink.ExpectPull()
-			s := scheduler.Subscribed(id)
+			s := scheduler.TestSubscribed(id)
 			s.Subscribed.HeartbeatIntervalSeconds = 0.01 // 10 millis
 			pull.Message(s)
 
@@ -66,7 +66,7 @@ var _ = Describe("FrameworkId stage", func() {
 			defer GinkgoRecover()
 			id := "5"
 			pull := sink.ExpectPull()
-			s := scheduler.Subscribed(id)
+			s := scheduler.TestSubscribed(id)
 			s.Subscribed.HeartbeatIntervalSeconds = 0.005 // 5 millis - should be IGNORED
 			pull.Message(s)
 

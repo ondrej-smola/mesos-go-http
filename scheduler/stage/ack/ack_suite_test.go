@@ -42,7 +42,7 @@ var _ = Describe("ImplicitAck state", func() {
 		go func() {
 			defer GinkgoRecover()
 			reply := sink.ExpectPull()
-			reply.Message(scheduler.Subscribed("1"))
+			reply.Message(scheduler.TestSubscribed("1"))
 			reply = sink.ExpectPull()
 			reply.Message(statusUpdate)
 			push := sink.ExpectPush()
@@ -71,7 +71,7 @@ var _ = Describe("ImplicitAck state", func() {
 		go func() {
 			defer GinkgoRecover()
 			pull := sink.ExpectPull()
-			pull.Message(scheduler.Subscribed("1"))
+			pull.Message(scheduler.TestSubscribed("1"))
 			pull = sink.ExpectPull()
 			upd := proto.Clone(statusUpdate).(*scheduler.Event)
 			upd.Update.Status.UUID = nil
@@ -96,7 +96,7 @@ var _ = Describe("ImplicitAck state", func() {
 		go func() {
 			defer GinkgoRecover()
 			pull := sink.ExpectPull()
-			pull.Message(scheduler.Subscribed("1"))
+			pull.Message(scheduler.TestSubscribed("1"))
 			pull = sink.ExpectPull()
 			pull.Message(statusUpdate)
 			push := sink.ExpectPush()
@@ -120,7 +120,7 @@ var _ = Describe("ImplicitAck state", func() {
 		go func() {
 			defer GinkgoRecover()
 			pull := sink.ExpectPull()
-			pull.Message(scheduler.Subscribed("1"))
+			pull.Message(scheduler.TestSubscribed("1"))
 			pull = sink.ExpectPull()
 			pull.Message(statusUpdate)
 			push := sink.ExpectPush()

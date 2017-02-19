@@ -28,7 +28,7 @@ var _ = Describe("FrameworkId stage", func() {
 			defer GinkgoRecover()
 			id := "5"
 			pull := sink.ExpectPull()
-			pull.Message(scheduler.Subscribed(id))
+			pull.Message(scheduler.TestSubscribed(id))
 
 			push := sink.ExpectPush()
 			c, ok := push.Msg.(*scheduler.Call)
