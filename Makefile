@@ -1,8 +1,14 @@
 
-
+ifdef SystemRoot
+	PATHSEP := \\
+	RM := del
+else
+	PATHSEP := /
+	RM := rm
+endif
 
 PROTOC_2_BIN ?= protoc2
-PROTOC_INCLUDE := -I$(GOPATH)/src -I. -Ivendor -Ivendor/github.com/gogo/protobuf/protobuf -Ischeduler/ -Ioperator/agent
+PROTOC_INCLUDE := -I$(GOPATH)/src/github.com/gogo/protobuf/protobuf -I$(GOPATH)/src -I. -Ivendor  -Ischeduler/ -Ioperator/agent
 PROTOC_INCLUDE := $(PROTOC_INCLUDE) -Ioperator/allocator -Ioperator/maintenance -Ioperator/quota
 PROTOC_INCLUDE := $(PROTOC_INCLUDE) -Ioperator/master
 
@@ -46,9 +52,17 @@ proto:
 	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/maintenance/maintenance.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
 	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/quota/quota.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
 
+.PHONY: binaries
 binaries:
-	cd examples && go install ./...
+	cd examples$(PATHSEP)scheduler && go install
+	cd examples$(PATHSEP)operator && go install
 
-clean-proto:
+.PHONY: proto-clean
+proto-clean:
 	$(RM) mesos.pb.go
-	cd scheduler && $(RM) scheduler.pb.go
+	$(RM) scheduler$(PATHSEP)scheduler.pb.go
+	$(RM) operator$(PATHSEP)agent$(PATHSEP)agent.pb.go
+	$(RM) operator$(PATHSEP)allocator$(PATHSEP)allocator.pb.go
+	$(RM) operator$(PATHSEP)maintenance$(PATHSEP)maintenance.pb.go
+	$(RM) operator$(PATHSEP)master$(PATHSEP)master.pb.go
+	$(RM) operator$(PATHSEP)quota$(PATHSEP)quota.pb.go
