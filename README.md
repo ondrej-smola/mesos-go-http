@@ -6,12 +6,12 @@ Goal of this project is to provide low and high level API for Apache Mesos using
 
 ## Status
 
-Current state of project is *alpha* as it is only lightly tested and need more adoption/feedback.
+Current state of project is *alpha* as it needs more adoption/feedback.
 Users of this library are encouraged to vendor it. API stability isn't guaranteed at this stage.
 
 ### Mesos proto versions
 
-* (MASTER) 1.1.0+
+* (MASTER) 1.1.0+ (v1)
 
 ### Features
 
@@ -21,7 +21,6 @@ Users of this library are encouraged to vendor it. API stability isn't guarantee
 - High level Flow API
 - Low level Client API
 - Examples
-
 
 ## Get started
 
@@ -38,25 +37,26 @@ operator master tasks -e http://127.0.0.1:5050/api/v1
 ```
 operator master event-stream -e http://127.0.0.1:5050/api/v1
 ```
-##### Run example scheduler (distributed sleep)
+##### Run example scheduler
 ```
 scheduler -e http://127.0.0.1:5050/api/v1/scheduler --cmd=sleep --arg=15 --tasks=5
 ```
 
 ## Local infrastructure
 
-For easy testing of master failover, agent disconnecting ...
+For easy testing of master failover, agent failed ...
 
 #### [Docker compose](https://docs.docker.com/compose/)
 
-* Set DOCKER_IP to IP of docker host (10.0.75.2 is default for docker for windows, use 127.0.01 for local docker)
+* Set DOCKER_IP to IP of docker host (e.g. 10.0.75.2 docker for windows, 127.0.0.1 local docker)
 * In project root
 ```
 docker-compose up -d
 ```
 * Creates 3 masters and 2 agents 
-(each agent reports all host resources (means double your CPU count will be reported))
-
+* Each agent reports all host resources (means double your CPU count will be reported) 
+     * Only for testing purposes (multiple offers, agent disconnects, ...)
+     * For launching multiple tasks that actually utilize all resources start only 1 agent or modify per agent resources    
 
 ## Logging
 
@@ -69,7 +69,7 @@ make install-test-dependencies
 make test
 ```
  
-### Notice
+## Notice
 
 This project uses code from [mesos-go](https://github.com/mesos/mesos-go) licensed under the Apache Licence 2.0
 
