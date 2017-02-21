@@ -3,7 +3,8 @@ package main
 import "github.com/spf13/cobra"
 
 type config struct {
-	endpoints []string
+	endpoints   []string
+	metricsBind string
 
 	taskCpus  float64
 	taskMem   float64
@@ -31,6 +32,7 @@ func main() {
 	rootCmd.Flags().StringVar(&cfg.taskCmd, "cmd", "echo", "task cmd")
 	rootCmd.Flags().StringSliceVar(&cfg.taskArgs, "arg", []string{"hello"}, "task cmd argument")
 	rootCmd.Flags().IntVar(&cfg.numTasks, "tasks", 5, "total number of tasks to launch")
+	rootCmd.Flags().StringVar(&cfg.metricsBind, "metrics", "127.0.0.1:0", "metrics bind address (disabled when blank)")
 
 	rootCmd.Run = func(c *cobra.Command, args []string) {
 		run(cfg)

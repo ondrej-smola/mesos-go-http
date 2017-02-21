@@ -7,12 +7,18 @@ import (
 	"github.com/ondrej-smola/mesos-go-http/backoff"
 	"github.com/ondrej-smola/mesos-go-http/client"
 	"github.com/ondrej-smola/mesos-go-http/client/leader"
+	"github.com/ondrej-smola/mesos-go-http/examples/scheduler/metrics"
 	"github.com/ondrej-smola/mesos-go-http/flow"
 	"github.com/ondrej-smola/mesos-go-http/scheduler"
 	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/ack"
 	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/callopt"
 	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/fwid"
 	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/heartbeat"
+	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/monitor"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -30,6 +36,8 @@ func run(cfg *config) {
 	w := log.NewSyncWriter(os.Stderr)
 	logger := log.NewContext(log.NewLogfmtLogger(w)).With("ts", log.DefaultTimestampUTC)
 
+	metricsBackend := metrics.New()
+
 	sched := scheduler.Blueprint(
 		leader.New(
 			cfg.endpoints,
@@ -39,12 +47,15 @@ func run(cfg *config) {
 	)
 
 	blueprint := flow.BlueprintBuilder().
+		Append(monitor.Blueprint(metricsBackend)).
 		Append(callopt.Blueprint(scheduler.Filters(mesos.RefuseSecondsWithJitter(3*time.Second)))).
 		Append(heartbeat.Blueprint()).
 		Append(ack.Blueprint()).
 		Append(fwid.Blueprint()).
 		RunWith(sched, flow.WithLogger(log.NewContext(logger).With("src", "flow")))
 	//
+
+	go serveMetrics(metricsBackend, cfg.metricsBind, logger)
 
 	wants := mesos.Resources{
 		mesos.BuildResource().Name("cpus").Scalar(cfg.taskCpus).Build(),
@@ -95,6 +106,35 @@ func run(cfg *config) {
 
 		a.log.Log("event", "failed", "attempt", attempt, "err", err)
 		fl.Close()
+	}
+}
+func serveMetrics(metrics *metrics.PrometheusMetrics, endpoint string, log log.Logger) {
+	if endpoint == "" {
+		log.Log("event", "metrics_server_disable")
+		return
+	}
+
+	promRegistry := prometheus.NewRegistry()
+	metrics.MustRegister(promRegistry)
+
+	l, err := net.Listen("tcp", endpoint)
+	if err != nil {
+		log.Log("event", "http_listener", "err", err)
+		os.Exit(1)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.HandlerFor(promRegistry, promhttp.HandlerOpts{}))
+
+	srv := http.Server{
+		Addr:    endpoint,
+		Handler: mux,
+	}
+
+	log.Log("event", "metrics_server", "listening", l.Addr().String())
+	if err := srv.Serve(l); err != nil {
+		log.Log("event", "metrics_server", "err", err)
+		os.Exit(1)
 	}
 }
 

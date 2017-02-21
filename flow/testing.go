@@ -67,10 +67,15 @@ func WithDefaultMaxWait(w time.Duration) TestFlowOpt {
 	}
 }
 
-func NewTestFlow() *TestFlow {
+func NewTestFlow(bufferSize ...int) *TestFlow {
+	buffer := 0
+	if len(bufferSize) > 0 {
+		buffer = bufferSize[0]
+	}
+
 	return &TestFlow{
-		push:     make(chan chan *msg),
-		pull:     make(chan chan *msg),
+		push:     make(chan chan *msg, buffer),
+		pull:     make(chan chan *msg, buffer),
 		closeIn:  make(chan bool),
 		closeOut: make(chan error),
 		maxWait:  time.Second,
