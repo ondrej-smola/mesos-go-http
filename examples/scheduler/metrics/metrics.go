@@ -55,11 +55,11 @@ func New() *PrometheusMetrics {
 }
 
 func (t *PrometheusMetrics) Push(name string) {
-	t.pushPull.WithLabelValues("push", "name").Add(1)
+	t.pushPull.WithLabelValues("push", name).Add(1)
 }
 
 func (t *PrometheusMetrics) Pull(name string) {
-	t.pushPull.WithLabelValues("pull", "name").Add(1)
+	t.pushPull.WithLabelValues("pull", name).Add(1)
 }
 
 func (t *PrometheusMetrics) PushErr(err error) {
