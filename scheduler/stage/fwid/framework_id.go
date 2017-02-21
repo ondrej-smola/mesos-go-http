@@ -54,7 +54,7 @@ func (h *FwId) Push(ev flow.Message, ctx context.Context) error {
 				ops := e.Accept.Operations
 				for i, op := range ops {
 					if op.Type == mesos.Offer_Operation_LAUNCH_GROUP {
-						ops[i].LaunchGroup.Executor.FrameworkId = id
+						ops[i].LaunchGroup.Executor.FrameworkID = id
 					}
 				}
 			case scheduler.Call_SUBSCRIBE:

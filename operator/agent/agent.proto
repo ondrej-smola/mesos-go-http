@@ -14,7 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mesos.operator.agent;
+syntax = "proto2";
+package mesos.v1.agent;
 
 import "github.com/ondrej-smola/mesos-go-http/mesos.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
@@ -36,8 +37,7 @@ message Call {
    // If a call of type `Call::FOO` requires additional parameters they can be
    // included in the corresponding `Call::Foo` message. Similarly, if a call
    // receives a synchronous response it will be returned as a `Response`
-   // message of type `Response::FOO`; see `Call::LaunchNestedContainerSession`
-   // and `Call::AttachContainerOutput` for exceptions.
+   // message of type `Response::FOO`.
   enum Type {
     UNKNOWN = 0;
 

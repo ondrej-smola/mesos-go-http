@@ -14,7 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mesos.operator.quota;
+syntax = "proto2";
+package mesos.v1.quota;
 
 import "github.com/ondrej-smola/mesos-go-http/mesos.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";

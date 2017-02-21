@@ -18,9 +18,9 @@ package master
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import mesos "github.com/ondrej-smola/mesos-go-http"
-import mesos_operator_quota "github.com/ondrej-smola/mesos-go-http/operator/quota"
-import mesos_operator_maintenance "github.com/ondrej-smola/mesos-go-http/operator/maintenance"
+import mesos_v1 "github.com/ondrej-smola/mesos-go-http"
+import mesos_v1_quota "github.com/ondrej-smola/mesos-go-http/operator/quota"
+import mesos_v1_maintenance "github.com/ondrej-smola/mesos-go-http/operator/maintenance"
 import _ "github.com/gogo/protobuf/gogoproto"
 
 import bytes "bytes"
@@ -305,13 +305,13 @@ func (x *Event_Type) UnmarshalJSON(data []byte) error {
 func (Event_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMaster, []int{2, 0} }
 
 // *
-// Calls that can be sent to the master API.
+// Calls that can be sent to the v1 master API.
 //
 // A call is described using the standard protocol buffer "union"
 // trick, see
 // https://developers.google.com/protocol-buffers/docs/techniques#union.
 type Call struct {
-	Type                      Call_Type                       `protobuf:"varint,1,opt,name=type,enum=mesos.operator.master.Call_Type" json:"type"`
+	Type                      Call_Type                       `protobuf:"varint,1,opt,name=type,enum=mesos.v1.master.Call_Type" json:"type"`
 	GetMetrics                *Call_GetMetrics                `protobuf:"bytes,2,opt,name=get_metrics" json:"get_metrics,omitempty"`
 	SetLoggingLevel           *Call_SetLoggingLevel           `protobuf:"bytes,3,opt,name=set_logging_level" json:"set_logging_level,omitempty"`
 	ListFiles                 *Call_ListFiles                 `protobuf:"bytes,4,opt,name=list_files" json:"list_files,omitempty"`
@@ -442,14 +442,14 @@ type Call_GetMetrics struct {
 	// If set, `timeout` would be used to determines the maximum amount of time
 	// the API will take to respond. If the timeout is exceeded, some metrics
 	// may not be included in the response.
-	Timeout *mesos.DurationInfo `protobuf:"bytes,1,opt,name=timeout" json:"timeout,omitempty"`
+	Timeout *mesos_v1.DurationInfo `protobuf:"bytes,1,opt,name=timeout" json:"timeout,omitempty"`
 }
 
 func (m *Call_GetMetrics) Reset()                    { *m = Call_GetMetrics{} }
 func (*Call_GetMetrics) ProtoMessage()               {}
 func (*Call_GetMetrics) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 0} }
 
-func (m *Call_GetMetrics) GetTimeout() *mesos.DurationInfo {
+func (m *Call_GetMetrics) GetTimeout() *mesos_v1.DurationInfo {
 	if m != nil {
 		return m.Timeout
 	}
@@ -465,7 +465,7 @@ type Call_SetLoggingLevel struct {
 	Level uint32 `protobuf:"varint,1,req,name=level" json:"level"`
 	// The duration to keep verbosity level toggled. After this duration, the
 	// verbosity level of log would revert to the original level.
-	Duration *mesos.DurationInfo `protobuf:"bytes,2,req,name=duration" json:"duration,omitempty"`
+	Duration *mesos_v1.DurationInfo `protobuf:"bytes,2,req,name=duration" json:"duration,omitempty"`
 }
 
 func (m *Call_SetLoggingLevel) Reset()                    { *m = Call_SetLoggingLevel{} }
@@ -479,7 +479,7 @@ func (m *Call_SetLoggingLevel) GetLevel() uint32 {
 	return 0
 }
 
-func (m *Call_SetLoggingLevel) GetDuration() *mesos.DurationInfo {
+func (m *Call_SetLoggingLevel) GetDuration() *mesos_v1.DurationInfo {
 	if m != nil {
 		return m.Duration
 	}
@@ -539,14 +539,14 @@ func (m *Call_ReadFile) GetLength() uint64 {
 }
 
 type Call_UpdateWeights struct {
-	WeightInfos []mesos.WeightInfo `protobuf:"bytes,1,rep,name=weight_infos" json:"weight_infos"`
+	WeightInfos []*mesos_v1.WeightInfo `protobuf:"bytes,1,rep,name=weight_infos" json:"weight_infos,omitempty"`
 }
 
 func (m *Call_UpdateWeights) Reset()                    { *m = Call_UpdateWeights{} }
 func (*Call_UpdateWeights) ProtoMessage()               {}
 func (*Call_UpdateWeights) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 4} }
 
-func (m *Call_UpdateWeights) GetWeightInfos() []mesos.WeightInfo {
+func (m *Call_UpdateWeights) GetWeightInfos() []*mesos_v1.WeightInfo {
 	if m != nil {
 		return m.WeightInfos
 	}
@@ -555,22 +555,22 @@ func (m *Call_UpdateWeights) GetWeightInfos() []mesos.WeightInfo {
 
 // Reserve resources dynamically on a specific agent.
 type Call_ReserveResources struct {
-	AgentID   mesos.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
-	Resources []mesos.Resource `protobuf:"bytes,2,rep,name=resources" json:"resources"`
+	AgentID   mesos_v1.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
+	Resources []mesos_v1.Resource `protobuf:"bytes,2,rep,name=resources" json:"resources"`
 }
 
 func (m *Call_ReserveResources) Reset()                    { *m = Call_ReserveResources{} }
 func (*Call_ReserveResources) ProtoMessage()               {}
 func (*Call_ReserveResources) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 5} }
 
-func (m *Call_ReserveResources) GetAgentID() mesos.AgentID {
+func (m *Call_ReserveResources) GetAgentID() mesos_v1.AgentID {
 	if m != nil {
 		return m.AgentID
 	}
-	return mesos.AgentID{}
+	return mesos_v1.AgentID{}
 }
 
-func (m *Call_ReserveResources) GetResources() []mesos.Resource {
+func (m *Call_ReserveResources) GetResources() []mesos_v1.Resource {
 	if m != nil {
 		return m.Resources
 	}
@@ -579,22 +579,22 @@ func (m *Call_ReserveResources) GetResources() []mesos.Resource {
 
 // Unreserve resources dynamically on a specific agent.
 type Call_UnreserveResources struct {
-	AgentID   mesos.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
-	Resources []mesos.Resource `protobuf:"bytes,2,rep,name=resources" json:"resources"`
+	AgentID   mesos_v1.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
+	Resources []mesos_v1.Resource `protobuf:"bytes,2,rep,name=resources" json:"resources"`
 }
 
 func (m *Call_UnreserveResources) Reset()                    { *m = Call_UnreserveResources{} }
 func (*Call_UnreserveResources) ProtoMessage()               {}
 func (*Call_UnreserveResources) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 6} }
 
-func (m *Call_UnreserveResources) GetAgentID() mesos.AgentID {
+func (m *Call_UnreserveResources) GetAgentID() mesos_v1.AgentID {
 	if m != nil {
 		return m.AgentID
 	}
-	return mesos.AgentID{}
+	return mesos_v1.AgentID{}
 }
 
-func (m *Call_UnreserveResources) GetResources() []mesos.Resource {
+func (m *Call_UnreserveResources) GetResources() []mesos_v1.Resource {
 	if m != nil {
 		return m.Resources
 	}
@@ -607,22 +607,22 @@ func (m *Call_UnreserveResources) GetResources() []mesos.Resource {
 // the agent might fail. Volume creation can be verified by sending a
 // `GET_VOLUMES` call.
 type Call_CreateVolumes struct {
-	AgentID mesos.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
-	Volumes []mesos.Resource `protobuf:"bytes,2,rep,name=volumes" json:"volumes"`
+	AgentID mesos_v1.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
+	Volumes []mesos_v1.Resource `protobuf:"bytes,2,rep,name=volumes" json:"volumes"`
 }
 
 func (m *Call_CreateVolumes) Reset()                    { *m = Call_CreateVolumes{} }
 func (*Call_CreateVolumes) ProtoMessage()               {}
 func (*Call_CreateVolumes) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 7} }
 
-func (m *Call_CreateVolumes) GetAgentID() mesos.AgentID {
+func (m *Call_CreateVolumes) GetAgentID() mesos_v1.AgentID {
 	if m != nil {
 		return m.AgentID
 	}
-	return mesos.AgentID{}
+	return mesos_v1.AgentID{}
 }
 
-func (m *Call_CreateVolumes) GetVolumes() []mesos.Resource {
+func (m *Call_CreateVolumes) GetVolumes() []mesos_v1.Resource {
 	if m != nil {
 		return m.Volumes
 	}
@@ -634,22 +634,22 @@ func (m *Call_CreateVolumes) GetVolumes() []mesos.Resource {
 // message may not be delivered or destroying the volumes at the agent might
 // fail. Volume deletion can be verified by sending a `GET_VOLUMES` call.
 type Call_DestroyVolumes struct {
-	AgentID mesos.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
-	Volumes []mesos.Resource `protobuf:"bytes,2,rep,name=volumes" json:"volumes"`
+	AgentID mesos_v1.AgentID    `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
+	Volumes []mesos_v1.Resource `protobuf:"bytes,2,rep,name=volumes" json:"volumes"`
 }
 
 func (m *Call_DestroyVolumes) Reset()                    { *m = Call_DestroyVolumes{} }
 func (*Call_DestroyVolumes) ProtoMessage()               {}
 func (*Call_DestroyVolumes) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 8} }
 
-func (m *Call_DestroyVolumes) GetAgentID() mesos.AgentID {
+func (m *Call_DestroyVolumes) GetAgentID() mesos_v1.AgentID {
 	if m != nil {
 		return m.AgentID
 	}
-	return mesos.AgentID{}
+	return mesos_v1.AgentID{}
 }
 
-func (m *Call_DestroyVolumes) GetVolumes() []mesos.Resource {
+func (m *Call_DestroyVolumes) GetVolumes() []mesos_v1.Resource {
 	if m != nil {
 		return m.Volumes
 	}
@@ -658,7 +658,7 @@ func (m *Call_DestroyVolumes) GetVolumes() []mesos.Resource {
 
 // Updates the cluster's maintenance schedule.
 type Call_UpdateMaintenanceSchedule struct {
-	Schedule mesos_operator_maintenance.Schedule `protobuf:"bytes,1,req,name=schedule" json:"schedule"`
+	Schedule mesos_v1_maintenance.Schedule `protobuf:"bytes,1,req,name=schedule" json:"schedule"`
 }
 
 func (m *Call_UpdateMaintenanceSchedule) Reset()      { *m = Call_UpdateMaintenanceSchedule{} }
@@ -667,24 +667,24 @@ func (*Call_UpdateMaintenanceSchedule) Descriptor() ([]byte, []int) {
 	return fileDescriptorMaster, []int{0, 9}
 }
 
-func (m *Call_UpdateMaintenanceSchedule) GetSchedule() mesos_operator_maintenance.Schedule {
+func (m *Call_UpdateMaintenanceSchedule) GetSchedule() mesos_v1_maintenance.Schedule {
 	if m != nil {
 		return m.Schedule
 	}
-	return mesos_operator_maintenance.Schedule{}
+	return mesos_v1_maintenance.Schedule{}
 }
 
 // Starts the maintenance of the cluster, this would bring a set of machines
 // down.
 type Call_StartMaintenance struct {
-	Machines []mesos.MachineID `protobuf:"bytes,1,rep,name=machines" json:"machines"`
+	Machines []mesos_v1.MachineID `protobuf:"bytes,1,rep,name=machines" json:"machines"`
 }
 
 func (m *Call_StartMaintenance) Reset()                    { *m = Call_StartMaintenance{} }
 func (*Call_StartMaintenance) ProtoMessage()               {}
 func (*Call_StartMaintenance) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 10} }
 
-func (m *Call_StartMaintenance) GetMachines() []mesos.MachineID {
+func (m *Call_StartMaintenance) GetMachines() []mesos_v1.MachineID {
 	if m != nil {
 		return m.Machines
 	}
@@ -694,33 +694,34 @@ func (m *Call_StartMaintenance) GetMachines() []mesos.MachineID {
 // Stops the maintenance of the cluster, this would bring a set of machines
 // back up.
 type Call_StopMaintenance struct {
-	Machines []mesos.MachineID `protobuf:"bytes,1,rep,name=machines" json:"machines"`
+	Machines []mesos_v1.MachineID `protobuf:"bytes,1,rep,name=machines" json:"machines"`
 }
 
 func (m *Call_StopMaintenance) Reset()                    { *m = Call_StopMaintenance{} }
 func (*Call_StopMaintenance) ProtoMessage()               {}
 func (*Call_StopMaintenance) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 11} }
 
-func (m *Call_StopMaintenance) GetMachines() []mesos.MachineID {
+func (m *Call_StopMaintenance) GetMachines() []mesos_v1.MachineID {
 	if m != nil {
 		return m.Machines
 	}
 	return nil
 }
 
+// Sets the quota for resources to be used by a particular role.
 type Call_SetQuota struct {
-	QuotaRequest mesos_operator_quota.QuotaRequest `protobuf:"bytes,1,req,name=quota_request" json:"quota_request"`
+	QuotaRequest mesos_v1_quota.QuotaRequest `protobuf:"bytes,1,req,name=quota_request" json:"quota_request"`
 }
 
 func (m *Call_SetQuota) Reset()                    { *m = Call_SetQuota{} }
 func (*Call_SetQuota) ProtoMessage()               {}
 func (*Call_SetQuota) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 12} }
 
-func (m *Call_SetQuota) GetQuotaRequest() mesos_operator_quota.QuotaRequest {
+func (m *Call_SetQuota) GetQuotaRequest() mesos_v1_quota.QuotaRequest {
 	if m != nil {
 		return m.QuotaRequest
 	}
-	return mesos_operator_quota.QuotaRequest{}
+	return mesos_v1_quota.QuotaRequest{}
 }
 
 type Call_RemoveQuota struct {
@@ -740,9 +741,9 @@ func (m *Call_RemoveQuota) GetRole() string {
 
 // *
 // Synchronous responses for all calls (except Call::SUBSCRIBE) made to
-// the master API.
+// the v1 master API.
 type Response struct {
-	Type                   Response_Type                    `protobuf:"varint,1,opt,name=type,enum=mesos.operator.master.Response_Type" json:"type"`
+	Type                   Response_Type                    `protobuf:"varint,1,opt,name=type,enum=mesos.v1.master.Response_Type" json:"type"`
 	GetHealth              *Response_GetHealth              `protobuf:"bytes,2,opt,name=get_health" json:"get_health,omitempty"`
 	GetFlags               *Response_GetFlags               `protobuf:"bytes,3,opt,name=get_flags" json:"get_flags,omitempty"`
 	GetVersion             *Response_GetVersion             `protobuf:"bytes,4,opt,name=get_version" json:"get_version,omitempty"`
@@ -919,14 +920,14 @@ func (m *Response_GetHealth) GetHealthy() bool {
 
 // Contains the flag configuration of the master.
 type Response_GetFlags struct {
-	Flags []mesos.Flag `protobuf:"bytes,1,rep,name=flags" json:"flags"`
+	Flags []mesos_v1.Flag `protobuf:"bytes,1,rep,name=flags" json:"flags"`
 }
 
 func (m *Response_GetFlags) Reset()                    { *m = Response_GetFlags{} }
 func (*Response_GetFlags) ProtoMessage()               {}
 func (*Response_GetFlags) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 1} }
 
-func (m *Response_GetFlags) GetFlags() []mesos.Flag {
+func (m *Response_GetFlags) GetFlags() []mesos_v1.Flag {
 	if m != nil {
 		return m.Flags
 	}
@@ -935,30 +936,30 @@ func (m *Response_GetFlags) GetFlags() []mesos.Flag {
 
 // Contains the version information of the master.
 type Response_GetVersion struct {
-	VersionInfo mesos.VersionInfo `protobuf:"bytes,1,req,name=version_info" json:"version_info"`
+	VersionInfo mesos_v1.VersionInfo `protobuf:"bytes,1,req,name=version_info" json:"version_info"`
 }
 
 func (m *Response_GetVersion) Reset()                    { *m = Response_GetVersion{} }
 func (*Response_GetVersion) ProtoMessage()               {}
 func (*Response_GetVersion) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 2} }
 
-func (m *Response_GetVersion) GetVersionInfo() mesos.VersionInfo {
+func (m *Response_GetVersion) GetVersionInfo() mesos_v1.VersionInfo {
 	if m != nil {
 		return m.VersionInfo
 	}
-	return mesos.VersionInfo{}
+	return mesos_v1.VersionInfo{}
 }
 
 // Contains a snapshot of the current metrics.
 type Response_GetMetrics struct {
-	Metrics []mesos.Metric `protobuf:"bytes,1,rep,name=metrics" json:"metrics"`
+	Metrics []mesos_v1.Metric `protobuf:"bytes,1,rep,name=metrics" json:"metrics"`
 }
 
 func (m *Response_GetMetrics) Reset()                    { *m = Response_GetMetrics{} }
 func (*Response_GetMetrics) ProtoMessage()               {}
 func (*Response_GetMetrics) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 3} }
 
-func (m *Response_GetMetrics) GetMetrics() []mesos.Metric {
+func (m *Response_GetMetrics) GetMetrics() []mesos_v1.Metric {
 	if m != nil {
 		return m.Metrics
 	}
@@ -985,14 +986,14 @@ func (m *Response_GetLoggingLevel) GetLevel() uint32 {
 
 // Contains the file listing(similar to `ls -l`) for a directory.
 type Response_ListFiles struct {
-	FileInfos []mesos.FileInfo `protobuf:"bytes,1,rep,name=file_infos" json:"file_infos"`
+	FileInfos []mesos_v1.FileInfo `protobuf:"bytes,1,rep,name=file_infos" json:"file_infos"`
 }
 
 func (m *Response_ListFiles) Reset()                    { *m = Response_ListFiles{} }
 func (*Response_ListFiles) ProtoMessage()               {}
 func (*Response_ListFiles) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 5} }
 
-func (m *Response_ListFiles) GetFileInfos() []mesos.FileInfo {
+func (m *Response_ListFiles) GetFileInfos() []mesos_v1.FileInfo {
 	if m != nil {
 		return m.FileInfos
 	}
@@ -1082,17 +1083,17 @@ func (m *Response_GetAgents) GetAgents() []Response_GetAgents_Agent {
 }
 
 type Response_GetAgents_Agent struct {
-	AgentInfo        mesos.AgentInfo `protobuf:"bytes,1,req,name=agent_info" json:"agent_info"`
-	Active           bool            `protobuf:"varint,2,req,name=active" json:"active"`
-	Version          string          `protobuf:"bytes,3,req,name=version" json:"version"`
-	Pid              string          `protobuf:"bytes,4,opt,name=pid" json:"pid"`
-	RegisteredTime   *mesos.TimeInfo `protobuf:"bytes,5,opt,name=registered_time" json:"registered_time,omitempty"`
-	ReregisteredTime *mesos.TimeInfo `protobuf:"bytes,6,opt,name=reregistered_time" json:"reregistered_time,omitempty"`
+	AgentInfo        mesos_v1.AgentInfo `protobuf:"bytes,1,req,name=agent_info" json:"agent_info"`
+	Active           bool               `protobuf:"varint,2,req,name=active" json:"active"`
+	Version          string             `protobuf:"bytes,3,req,name=version" json:"version"`
+	Pid              string             `protobuf:"bytes,4,opt,name=pid" json:"pid"`
+	RegisteredTime   *mesos_v1.TimeInfo `protobuf:"bytes,5,opt,name=registered_time" json:"registered_time,omitempty"`
+	ReregisteredTime *mesos_v1.TimeInfo `protobuf:"bytes,6,opt,name=reregistered_time" json:"reregistered_time,omitempty"`
 	// Total resources (including oversubscribed resources) the agent
 	// provides.
-	TotalResources     []mesos.Resource `protobuf:"bytes,7,rep,name=total_resources" json:"total_resources"`
-	AllocatedResources []mesos.Resource `protobuf:"bytes,8,rep,name=allocated_resources" json:"allocated_resources"`
-	OfferedResources   []mesos.Resource `protobuf:"bytes,9,rep,name=offered_resources" json:"offered_resources"`
+	TotalResources     []mesos_v1.Resource `protobuf:"bytes,7,rep,name=total_resources" json:"total_resources"`
+	AllocatedResources []mesos_v1.Resource `protobuf:"bytes,8,rep,name=allocated_resources" json:"allocated_resources"`
+	OfferedResources   []mesos_v1.Resource `protobuf:"bytes,9,rep,name=offered_resources" json:"offered_resources"`
 }
 
 func (m *Response_GetAgents_Agent) Reset()      { *m = Response_GetAgents_Agent{} }
@@ -1101,11 +1102,11 @@ func (*Response_GetAgents_Agent) Descriptor() ([]byte, []int) {
 	return fileDescriptorMaster, []int{1, 8, 0}
 }
 
-func (m *Response_GetAgents_Agent) GetAgentInfo() mesos.AgentInfo {
+func (m *Response_GetAgents_Agent) GetAgentInfo() mesos_v1.AgentInfo {
 	if m != nil {
 		return m.AgentInfo
 	}
-	return mesos.AgentInfo{}
+	return mesos_v1.AgentInfo{}
 }
 
 func (m *Response_GetAgents_Agent) GetActive() bool {
@@ -1129,35 +1130,35 @@ func (m *Response_GetAgents_Agent) GetPid() string {
 	return ""
 }
 
-func (m *Response_GetAgents_Agent) GetRegisteredTime() *mesos.TimeInfo {
+func (m *Response_GetAgents_Agent) GetRegisteredTime() *mesos_v1.TimeInfo {
 	if m != nil {
 		return m.RegisteredTime
 	}
 	return nil
 }
 
-func (m *Response_GetAgents_Agent) GetReregisteredTime() *mesos.TimeInfo {
+func (m *Response_GetAgents_Agent) GetReregisteredTime() *mesos_v1.TimeInfo {
 	if m != nil {
 		return m.ReregisteredTime
 	}
 	return nil
 }
 
-func (m *Response_GetAgents_Agent) GetTotalResources() []mesos.Resource {
+func (m *Response_GetAgents_Agent) GetTotalResources() []mesos_v1.Resource {
 	if m != nil {
 		return m.TotalResources
 	}
 	return nil
 }
 
-func (m *Response_GetAgents_Agent) GetAllocatedResources() []mesos.Resource {
+func (m *Response_GetAgents_Agent) GetAllocatedResources() []mesos_v1.Resource {
 	if m != nil {
 		return m.AllocatedResources
 	}
 	return nil
 }
 
-func (m *Response_GetAgents_Agent) GetOfferedResources() []mesos.Resource {
+func (m *Response_GetAgents_Agent) GetOfferedResources() []mesos_v1.Resource {
 	if m != nil {
 		return m.OfferedResources
 	}
@@ -1175,7 +1176,7 @@ type Response_GetFrameworks struct {
 	CompletedFrameworks []Response_GetFrameworks_Framework `protobuf:"bytes,2,rep,name=completed_frameworks" json:"completed_frameworks"`
 	// Frameworks that have previously subscribed but haven't yet subscribed
 	// after a master failover.
-	RecoveredFrameworks []mesos.FrameworkInfo `protobuf:"bytes,3,rep,name=recovered_frameworks" json:"recovered_frameworks"`
+	RecoveredFrameworks []mesos_v1.FrameworkInfo `protobuf:"bytes,3,rep,name=recovered_frameworks" json:"recovered_frameworks"`
 }
 
 func (m *Response_GetFrameworks) Reset()                    { *m = Response_GetFrameworks{} }
@@ -1196,7 +1197,7 @@ func (m *Response_GetFrameworks) GetCompletedFrameworks() []Response_GetFramewor
 	return nil
 }
 
-func (m *Response_GetFrameworks) GetRecoveredFrameworks() []mesos.FrameworkInfo {
+func (m *Response_GetFrameworks) GetRecoveredFrameworks() []mesos_v1.FrameworkInfo {
 	if m != nil {
 		return m.RecoveredFrameworks
 	}
@@ -1204,16 +1205,16 @@ func (m *Response_GetFrameworks) GetRecoveredFrameworks() []mesos.FrameworkInfo 
 }
 
 type Response_GetFrameworks_Framework struct {
-	FrameworkInfo      mesos.FrameworkInfo  `protobuf:"bytes,1,req,name=framework_info" json:"framework_info"`
-	Active             bool                 `protobuf:"varint,2,req,name=active" json:"active"`
-	Connected          bool                 `protobuf:"varint,3,req,name=connected" json:"connected"`
-	RegisteredTime     *mesos.TimeInfo      `protobuf:"bytes,4,opt,name=registered_time" json:"registered_time,omitempty"`
-	ReregisteredTime   *mesos.TimeInfo      `protobuf:"bytes,5,opt,name=reregistered_time" json:"reregistered_time,omitempty"`
-	UnregisteredTime   *mesos.TimeInfo      `protobuf:"bytes,6,opt,name=unregistered_time" json:"unregistered_time,omitempty"`
-	Offers             []mesos.Offer        `protobuf:"bytes,7,rep,name=offers" json:"offers"`
-	InverseOffers      []mesos.InverseOffer `protobuf:"bytes,8,rep,name=inverse_offers" json:"inverse_offers"`
-	AllocatedResources []mesos.Resource     `protobuf:"bytes,9,rep,name=allocated_resources" json:"allocated_resources"`
-	OfferedResources   []mesos.Resource     `protobuf:"bytes,10,rep,name=offered_resources" json:"offered_resources"`
+	FrameworkInfo      mesos_v1.FrameworkInfo  `protobuf:"bytes,1,req,name=framework_info" json:"framework_info"`
+	Active             bool                    `protobuf:"varint,2,req,name=active" json:"active"`
+	Connected          bool                    `protobuf:"varint,3,req,name=connected" json:"connected"`
+	RegisteredTime     *mesos_v1.TimeInfo      `protobuf:"bytes,4,opt,name=registered_time" json:"registered_time,omitempty"`
+	ReregisteredTime   *mesos_v1.TimeInfo      `protobuf:"bytes,5,opt,name=reregistered_time" json:"reregistered_time,omitempty"`
+	UnregisteredTime   *mesos_v1.TimeInfo      `protobuf:"bytes,6,opt,name=unregistered_time" json:"unregistered_time,omitempty"`
+	Offers             []mesos_v1.Offer        `protobuf:"bytes,7,rep,name=offers" json:"offers"`
+	InverseOffers      []mesos_v1.InverseOffer `protobuf:"bytes,8,rep,name=inverse_offers" json:"inverse_offers"`
+	AllocatedResources []mesos_v1.Resource     `protobuf:"bytes,9,rep,name=allocated_resources" json:"allocated_resources"`
+	OfferedResources   []mesos_v1.Resource     `protobuf:"bytes,10,rep,name=offered_resources" json:"offered_resources"`
 }
 
 func (m *Response_GetFrameworks_Framework) Reset()      { *m = Response_GetFrameworks_Framework{} }
@@ -1222,11 +1223,11 @@ func (*Response_GetFrameworks_Framework) Descriptor() ([]byte, []int) {
 	return fileDescriptorMaster, []int{1, 9, 0}
 }
 
-func (m *Response_GetFrameworks_Framework) GetFrameworkInfo() mesos.FrameworkInfo {
+func (m *Response_GetFrameworks_Framework) GetFrameworkInfo() mesos_v1.FrameworkInfo {
 	if m != nil {
 		return m.FrameworkInfo
 	}
-	return mesos.FrameworkInfo{}
+	return mesos_v1.FrameworkInfo{}
 }
 
 func (m *Response_GetFrameworks_Framework) GetActive() bool {
@@ -1243,49 +1244,49 @@ func (m *Response_GetFrameworks_Framework) GetConnected() bool {
 	return false
 }
 
-func (m *Response_GetFrameworks_Framework) GetRegisteredTime() *mesos.TimeInfo {
+func (m *Response_GetFrameworks_Framework) GetRegisteredTime() *mesos_v1.TimeInfo {
 	if m != nil {
 		return m.RegisteredTime
 	}
 	return nil
 }
 
-func (m *Response_GetFrameworks_Framework) GetReregisteredTime() *mesos.TimeInfo {
+func (m *Response_GetFrameworks_Framework) GetReregisteredTime() *mesos_v1.TimeInfo {
 	if m != nil {
 		return m.ReregisteredTime
 	}
 	return nil
 }
 
-func (m *Response_GetFrameworks_Framework) GetUnregisteredTime() *mesos.TimeInfo {
+func (m *Response_GetFrameworks_Framework) GetUnregisteredTime() *mesos_v1.TimeInfo {
 	if m != nil {
 		return m.UnregisteredTime
 	}
 	return nil
 }
 
-func (m *Response_GetFrameworks_Framework) GetOffers() []mesos.Offer {
+func (m *Response_GetFrameworks_Framework) GetOffers() []mesos_v1.Offer {
 	if m != nil {
 		return m.Offers
 	}
 	return nil
 }
 
-func (m *Response_GetFrameworks_Framework) GetInverseOffers() []mesos.InverseOffer {
+func (m *Response_GetFrameworks_Framework) GetInverseOffers() []mesos_v1.InverseOffer {
 	if m != nil {
 		return m.InverseOffers
 	}
 	return nil
 }
 
-func (m *Response_GetFrameworks_Framework) GetAllocatedResources() []mesos.Resource {
+func (m *Response_GetFrameworks_Framework) GetAllocatedResources() []mesos_v1.Resource {
 	if m != nil {
 		return m.AllocatedResources
 	}
 	return nil
 }
 
-func (m *Response_GetFrameworks_Framework) GetOfferedResources() []mesos.Resource {
+func (m *Response_GetFrameworks_Framework) GetOfferedResources() []mesos_v1.Resource {
 	if m != nil {
 		return m.OfferedResources
 	}
@@ -1319,8 +1320,8 @@ func (m *Response_GetExecutors) GetOrphanExecutors() []Response_GetExecutors_Exe
 }
 
 type Response_GetExecutors_Executor struct {
-	ExecutorInfo mesos.ExecutorInfo `protobuf:"bytes,1,req,name=executor_info" json:"executor_info"`
-	AgentID      mesos.AgentID      `protobuf:"bytes,2,req,name=agent_id" json:"agent_id"`
+	ExecutorInfo mesos_v1.ExecutorInfo `protobuf:"bytes,1,req,name=executor_info" json:"executor_info"`
+	AgentID      mesos_v1.AgentID      `protobuf:"bytes,2,req,name=agent_id" json:"agent_id"`
 }
 
 func (m *Response_GetExecutors_Executor) Reset()      { *m = Response_GetExecutors_Executor{} }
@@ -1329,18 +1330,18 @@ func (*Response_GetExecutors_Executor) Descriptor() ([]byte, []int) {
 	return fileDescriptorMaster, []int{1, 10, 0}
 }
 
-func (m *Response_GetExecutors_Executor) GetExecutorInfo() mesos.ExecutorInfo {
+func (m *Response_GetExecutors_Executor) GetExecutorInfo() mesos_v1.ExecutorInfo {
 	if m != nil {
 		return m.ExecutorInfo
 	}
-	return mesos.ExecutorInfo{}
+	return mesos_v1.ExecutorInfo{}
 }
 
-func (m *Response_GetExecutors_Executor) GetAgentID() mesos.AgentID {
+func (m *Response_GetExecutors_Executor) GetAgentID() mesos_v1.AgentID {
 	if m != nil {
 		return m.AgentID
 	}
-	return mesos.AgentID{}
+	return mesos_v1.AgentID{}
 }
 
 // Lists information about all the tasks known to the master at the current
@@ -1349,44 +1350,44 @@ func (m *Response_GetExecutors_Executor) GetAgentID() mesos.AgentID {
 type Response_GetTasks struct {
 	// Tasks that are an enqueued on the master waiting (e.g., authorizing)
 	// to be launched.
-	PendingTasks []mesos.Task `protobuf:"bytes,1,rep,name=pending_tasks" json:"pending_tasks"`
+	PendingTasks []mesos_v1.Task `protobuf:"bytes,1,rep,name=pending_tasks" json:"pending_tasks"`
 	// Tasks that have been forwarded to the agent for launch. This includes
 	// tasks that are running and reached terminal state.
-	Tasks []mesos.Task `protobuf:"bytes,2,rep,name=tasks" json:"tasks"`
+	Tasks []mesos_v1.Task `protobuf:"bytes,2,rep,name=tasks" json:"tasks"`
 	// Tasks that have reached terminal state and have all their updates
 	// acknowledged by the scheduler.
-	CompletedTasks []mesos.Task `protobuf:"bytes,3,rep,name=completed_tasks" json:"completed_tasks"`
+	CompletedTasks []mesos_v1.Task `protobuf:"bytes,3,rep,name=completed_tasks" json:"completed_tasks"`
 	// Tasks belonging to frameworks that have not yet re-subscribed with
 	// master (e.g., immediately after master failover).
-	OrphanTasks []mesos.Task `protobuf:"bytes,4,rep,name=orphan_tasks" json:"orphan_tasks"`
+	OrphanTasks []mesos_v1.Task `protobuf:"bytes,4,rep,name=orphan_tasks" json:"orphan_tasks"`
 }
 
 func (m *Response_GetTasks) Reset()                    { *m = Response_GetTasks{} }
 func (*Response_GetTasks) ProtoMessage()               {}
 func (*Response_GetTasks) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 11} }
 
-func (m *Response_GetTasks) GetPendingTasks() []mesos.Task {
+func (m *Response_GetTasks) GetPendingTasks() []mesos_v1.Task {
 	if m != nil {
 		return m.PendingTasks
 	}
 	return nil
 }
 
-func (m *Response_GetTasks) GetTasks() []mesos.Task {
+func (m *Response_GetTasks) GetTasks() []mesos_v1.Task {
 	if m != nil {
 		return m.Tasks
 	}
 	return nil
 }
 
-func (m *Response_GetTasks) GetCompletedTasks() []mesos.Task {
+func (m *Response_GetTasks) GetCompletedTasks() []mesos_v1.Task {
 	if m != nil {
 		return m.CompletedTasks
 	}
 	return nil
 }
 
-func (m *Response_GetTasks) GetOrphanTasks() []mesos.Task {
+func (m *Response_GetTasks) GetOrphanTasks() []mesos_v1.Task {
 	if m != nil {
 		return m.OrphanTasks
 	}
@@ -1397,14 +1398,14 @@ func (m *Response_GetTasks) GetOrphanTasks() []mesos.Task {
 // enabled), has one or more registered frameworks or has a non-default weight
 // or quota.
 type Response_GetRoles struct {
-	Roles []mesos.Role `protobuf:"bytes,1,rep,name=roles" json:"roles"`
+	Roles []mesos_v1.Role `protobuf:"bytes,1,rep,name=roles" json:"roles"`
 }
 
 func (m *Response_GetRoles) Reset()                    { *m = Response_GetRoles{} }
 func (*Response_GetRoles) ProtoMessage()               {}
 func (*Response_GetRoles) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 12} }
 
-func (m *Response_GetRoles) GetRoles() []mesos.Role {
+func (m *Response_GetRoles) GetRoles() []mesos_v1.Role {
 	if m != nil {
 		return m.Roles
 	}
@@ -1413,14 +1414,14 @@ func (m *Response_GetRoles) GetRoles() []mesos.Role {
 
 // Provides the weight information about every role.
 type Response_GetWeights struct {
-	WeightInfos []mesos.WeightInfo `protobuf:"bytes,1,rep,name=weight_infos" json:"weight_infos"`
+	WeightInfos []mesos_v1.WeightInfo `protobuf:"bytes,1,rep,name=weight_infos" json:"weight_infos"`
 }
 
 func (m *Response_GetWeights) Reset()                    { *m = Response_GetWeights{} }
 func (*Response_GetWeights) ProtoMessage()               {}
 func (*Response_GetWeights) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 13} }
 
-func (m *Response_GetWeights) GetWeightInfos() []mesos.WeightInfo {
+func (m *Response_GetWeights) GetWeightInfos() []mesos_v1.WeightInfo {
 	if m != nil {
 		return m.WeightInfos
 	}
@@ -1429,23 +1430,23 @@ func (m *Response_GetWeights) GetWeightInfos() []mesos.WeightInfo {
 
 // Contains the master's information.
 type Response_GetMaster struct {
-	MasterInfo mesos.MasterInfo `protobuf:"bytes,1,opt,name=master_info" json:"master_info"`
+	MasterInfo mesos_v1.MasterInfo `protobuf:"bytes,1,opt,name=master_info" json:"master_info"`
 }
 
 func (m *Response_GetMaster) Reset()                    { *m = Response_GetMaster{} }
 func (*Response_GetMaster) ProtoMessage()               {}
 func (*Response_GetMaster) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 14} }
 
-func (m *Response_GetMaster) GetMasterInfo() mesos.MasterInfo {
+func (m *Response_GetMaster) GetMasterInfo() mesos_v1.MasterInfo {
 	if m != nil {
 		return m.MasterInfo
 	}
-	return mesos.MasterInfo{}
+	return mesos_v1.MasterInfo{}
 }
 
 // Contains the cluster's maintenance status.
 type Response_GetMaintenanceStatus struct {
-	Status mesos_operator_maintenance.ClusterStatus `protobuf:"bytes,1,req,name=status" json:"status"`
+	Status mesos_v1_maintenance.ClusterStatus `protobuf:"bytes,1,req,name=status" json:"status"`
 }
 
 func (m *Response_GetMaintenanceStatus) Reset()      { *m = Response_GetMaintenanceStatus{} }
@@ -1454,16 +1455,16 @@ func (*Response_GetMaintenanceStatus) Descriptor() ([]byte, []int) {
 	return fileDescriptorMaster, []int{1, 15}
 }
 
-func (m *Response_GetMaintenanceStatus) GetStatus() mesos_operator_maintenance.ClusterStatus {
+func (m *Response_GetMaintenanceStatus) GetStatus() mesos_v1_maintenance.ClusterStatus {
 	if m != nil {
 		return m.Status
 	}
-	return mesos_operator_maintenance.ClusterStatus{}
+	return mesos_v1_maintenance.ClusterStatus{}
 }
 
 // Contains the cluster's maintenance schedule.
 type Response_GetMaintenanceSchedule struct {
-	Schedule mesos_operator_maintenance.Schedule `protobuf:"bytes,1,req,name=schedule" json:"schedule"`
+	Schedule mesos_v1_maintenance.Schedule `protobuf:"bytes,1,req,name=schedule" json:"schedule"`
 }
 
 func (m *Response_GetMaintenanceSchedule) Reset()      { *m = Response_GetMaintenanceSchedule{} }
@@ -1472,33 +1473,33 @@ func (*Response_GetMaintenanceSchedule) Descriptor() ([]byte, []int) {
 	return fileDescriptorMaster, []int{1, 16}
 }
 
-func (m *Response_GetMaintenanceSchedule) GetSchedule() mesos_operator_maintenance.Schedule {
+func (m *Response_GetMaintenanceSchedule) GetSchedule() mesos_v1_maintenance.Schedule {
 	if m != nil {
 		return m.Schedule
 	}
-	return mesos_operator_maintenance.Schedule{}
+	return mesos_v1_maintenance.Schedule{}
 }
 
 // Contains the cluster's configured quotas.
 type Response_GetQuota struct {
-	Status mesos_operator_quota.QuotaStatus `protobuf:"bytes,1,req,name=status" json:"status"`
+	Status mesos_v1_quota.QuotaStatus `protobuf:"bytes,1,req,name=status" json:"status"`
 }
 
 func (m *Response_GetQuota) Reset()                    { *m = Response_GetQuota{} }
 func (*Response_GetQuota) ProtoMessage()               {}
 func (*Response_GetQuota) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{1, 17} }
 
-func (m *Response_GetQuota) GetStatus() mesos_operator_quota.QuotaStatus {
+func (m *Response_GetQuota) GetStatus() mesos_v1_quota.QuotaStatus {
 	if m != nil {
 		return m.Status
 	}
-	return mesos_operator_quota.QuotaStatus{}
+	return mesos_v1_quota.QuotaStatus{}
 }
 
 // *
 // Streaming response to `Call::SUBSCRIBE` made to the master.
 type Event struct {
-	Type         Event_Type          `protobuf:"varint,1,opt,name=type,enum=mesos.operator.master.Event_Type" json:"type"`
+	Type         Event_Type          `protobuf:"varint,1,opt,name=type,enum=mesos.v1.master.Event_Type" json:"type"`
 	Subscribed   *Event_Subscribed   `protobuf:"bytes,2,opt,name=subscribed" json:"subscribed,omitempty"`
 	TaskAdded    *Event_TaskAdded    `protobuf:"bytes,3,opt,name=task_added" json:"task_added,omitempty"`
 	TaskUpdated  *Event_TaskUpdated  `protobuf:"bytes,4,opt,name=task_updated" json:"task_updated,omitempty"`
@@ -1574,53 +1575,53 @@ func (m *Event_Subscribed) GetGetState() *Response_GetState {
 // when a new task is launched by the scheduler or when the task becomes
 // known to the master upon an agent (re-)registration after a failover.
 type Event_TaskAdded struct {
-	Task mesos.Task `protobuf:"bytes,1,req,name=task" json:"task"`
+	Task mesos_v1.Task `protobuf:"bytes,1,req,name=task" json:"task"`
 }
 
 func (m *Event_TaskAdded) Reset()                    { *m = Event_TaskAdded{} }
 func (*Event_TaskAdded) ProtoMessage()               {}
 func (*Event_TaskAdded) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{2, 1} }
 
-func (m *Event_TaskAdded) GetTask() mesos.Task {
+func (m *Event_TaskAdded) GetTask() mesos_v1.Task {
 	if m != nil {
 		return m.Task
 	}
-	return mesos.Task{}
+	return mesos_v1.Task{}
 }
 
 // Forwarded by the master when an existing task transitions to a new state.
 type Event_TaskUpdated struct {
-	FrameworkID mesos.FrameworkID `protobuf:"bytes,1,req,name=framework_id" json:"framework_id"`
+	FrameworkID mesos_v1.FrameworkID `protobuf:"bytes,1,req,name=framework_id" json:"framework_id"`
 	// This is the status of the task corresponding to the last
 	// status update acknowledged by the scheduler.
-	Status mesos.TaskStatus `protobuf:"bytes,2,req,name=status" json:"status"`
+	Status mesos_v1.TaskStatus `protobuf:"bytes,2,req,name=status" json:"status"`
 	// This is the latest state of the task according to the agent.
-	State *mesos.TaskState `protobuf:"varint,3,req,name=state,enum=mesos.TaskState" json:"state,omitempty"`
+	State *mesos_v1.TaskState `protobuf:"varint,3,req,name=state,enum=mesos.v1.TaskState" json:"state,omitempty"`
 }
 
 func (m *Event_TaskUpdated) Reset()                    { *m = Event_TaskUpdated{} }
 func (*Event_TaskUpdated) ProtoMessage()               {}
 func (*Event_TaskUpdated) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{2, 2} }
 
-func (m *Event_TaskUpdated) GetFrameworkID() mesos.FrameworkID {
+func (m *Event_TaskUpdated) GetFrameworkID() mesos_v1.FrameworkID {
 	if m != nil {
 		return m.FrameworkID
 	}
-	return mesos.FrameworkID{}
+	return mesos_v1.FrameworkID{}
 }
 
-func (m *Event_TaskUpdated) GetStatus() mesos.TaskStatus {
+func (m *Event_TaskUpdated) GetStatus() mesos_v1.TaskStatus {
 	if m != nil {
 		return m.Status
 	}
-	return mesos.TaskStatus{}
+	return mesos_v1.TaskStatus{}
 }
 
-func (m *Event_TaskUpdated) GetState() mesos.TaskState {
+func (m *Event_TaskUpdated) GetState() mesos_v1.TaskState {
 	if m != nil && m.State != nil {
 		return *m.State
 	}
-	return mesos.TaskState_TASK_STAGING
+	return mesos_v1.TaskState_TASK_STAGING
 }
 
 // Forwarded by the master when an agent becomes known to it.
@@ -1651,67 +1652,67 @@ func (m *Event_AgentAdded) GetAgent() Response_GetAgents_Agent {
 // has gc'ed its list of known "dead" agents.
 // See MESOS-5965 for context.
 type Event_AgentRemoved struct {
-	AgentID mesos.AgentID `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
+	AgentID mesos_v1.AgentID `protobuf:"bytes,1,req,name=agent_id" json:"agent_id"`
 }
 
 func (m *Event_AgentRemoved) Reset()                    { *m = Event_AgentRemoved{} }
 func (*Event_AgentRemoved) ProtoMessage()               {}
 func (*Event_AgentRemoved) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{2, 4} }
 
-func (m *Event_AgentRemoved) GetAgentID() mesos.AgentID {
+func (m *Event_AgentRemoved) GetAgentID() mesos_v1.AgentID {
 	if m != nil {
 		return m.AgentID
 	}
-	return mesos.AgentID{}
+	return mesos_v1.AgentID{}
 }
 
 func init() {
-	proto.RegisterType((*Call)(nil), "mesos.operator.master.Call")
-	proto.RegisterType((*Call_GetMetrics)(nil), "mesos.operator.master.Call.GetMetrics")
-	proto.RegisterType((*Call_SetLoggingLevel)(nil), "mesos.operator.master.Call.SetLoggingLevel")
-	proto.RegisterType((*Call_ListFiles)(nil), "mesos.operator.master.Call.ListFiles")
-	proto.RegisterType((*Call_ReadFile)(nil), "mesos.operator.master.Call.ReadFile")
-	proto.RegisterType((*Call_UpdateWeights)(nil), "mesos.operator.master.Call.UpdateWeights")
-	proto.RegisterType((*Call_ReserveResources)(nil), "mesos.operator.master.Call.ReserveResources")
-	proto.RegisterType((*Call_UnreserveResources)(nil), "mesos.operator.master.Call.UnreserveResources")
-	proto.RegisterType((*Call_CreateVolumes)(nil), "mesos.operator.master.Call.CreateVolumes")
-	proto.RegisterType((*Call_DestroyVolumes)(nil), "mesos.operator.master.Call.DestroyVolumes")
-	proto.RegisterType((*Call_UpdateMaintenanceSchedule)(nil), "mesos.operator.master.Call.UpdateMaintenanceSchedule")
-	proto.RegisterType((*Call_StartMaintenance)(nil), "mesos.operator.master.Call.StartMaintenance")
-	proto.RegisterType((*Call_StopMaintenance)(nil), "mesos.operator.master.Call.StopMaintenance")
-	proto.RegisterType((*Call_SetQuota)(nil), "mesos.operator.master.Call.SetQuota")
-	proto.RegisterType((*Call_RemoveQuota)(nil), "mesos.operator.master.Call.RemoveQuota")
-	proto.RegisterType((*Response)(nil), "mesos.operator.master.Response")
-	proto.RegisterType((*Response_GetHealth)(nil), "mesos.operator.master.Response.GetHealth")
-	proto.RegisterType((*Response_GetFlags)(nil), "mesos.operator.master.Response.GetFlags")
-	proto.RegisterType((*Response_GetVersion)(nil), "mesos.operator.master.Response.GetVersion")
-	proto.RegisterType((*Response_GetMetrics)(nil), "mesos.operator.master.Response.GetMetrics")
-	proto.RegisterType((*Response_GetLoggingLevel)(nil), "mesos.operator.master.Response.GetLoggingLevel")
-	proto.RegisterType((*Response_ListFiles)(nil), "mesos.operator.master.Response.ListFiles")
-	proto.RegisterType((*Response_ReadFile)(nil), "mesos.operator.master.Response.ReadFile")
-	proto.RegisterType((*Response_GetState)(nil), "mesos.operator.master.Response.GetState")
-	proto.RegisterType((*Response_GetAgents)(nil), "mesos.operator.master.Response.GetAgents")
-	proto.RegisterType((*Response_GetAgents_Agent)(nil), "mesos.operator.master.Response.GetAgents.Agent")
-	proto.RegisterType((*Response_GetFrameworks)(nil), "mesos.operator.master.Response.GetFrameworks")
-	proto.RegisterType((*Response_GetFrameworks_Framework)(nil), "mesos.operator.master.Response.GetFrameworks.Framework")
-	proto.RegisterType((*Response_GetExecutors)(nil), "mesos.operator.master.Response.GetExecutors")
-	proto.RegisterType((*Response_GetExecutors_Executor)(nil), "mesos.operator.master.Response.GetExecutors.Executor")
-	proto.RegisterType((*Response_GetTasks)(nil), "mesos.operator.master.Response.GetTasks")
-	proto.RegisterType((*Response_GetRoles)(nil), "mesos.operator.master.Response.GetRoles")
-	proto.RegisterType((*Response_GetWeights)(nil), "mesos.operator.master.Response.GetWeights")
-	proto.RegisterType((*Response_GetMaster)(nil), "mesos.operator.master.Response.GetMaster")
-	proto.RegisterType((*Response_GetMaintenanceStatus)(nil), "mesos.operator.master.Response.GetMaintenanceStatus")
-	proto.RegisterType((*Response_GetMaintenanceSchedule)(nil), "mesos.operator.master.Response.GetMaintenanceSchedule")
-	proto.RegisterType((*Response_GetQuota)(nil), "mesos.operator.master.Response.GetQuota")
-	proto.RegisterType((*Event)(nil), "mesos.operator.master.Event")
-	proto.RegisterType((*Event_Subscribed)(nil), "mesos.operator.master.Event.Subscribed")
-	proto.RegisterType((*Event_TaskAdded)(nil), "mesos.operator.master.Event.TaskAdded")
-	proto.RegisterType((*Event_TaskUpdated)(nil), "mesos.operator.master.Event.TaskUpdated")
-	proto.RegisterType((*Event_AgentAdded)(nil), "mesos.operator.master.Event.AgentAdded")
-	proto.RegisterType((*Event_AgentRemoved)(nil), "mesos.operator.master.Event.AgentRemoved")
-	proto.RegisterEnum("mesos.operator.master.Call_Type", Call_Type_name, Call_Type_value)
-	proto.RegisterEnum("mesos.operator.master.Response_Type", Response_Type_name, Response_Type_value)
-	proto.RegisterEnum("mesos.operator.master.Event_Type", Event_Type_name, Event_Type_value)
+	proto.RegisterType((*Call)(nil), "mesos.v1.master.Call")
+	proto.RegisterType((*Call_GetMetrics)(nil), "mesos.v1.master.Call.GetMetrics")
+	proto.RegisterType((*Call_SetLoggingLevel)(nil), "mesos.v1.master.Call.SetLoggingLevel")
+	proto.RegisterType((*Call_ListFiles)(nil), "mesos.v1.master.Call.ListFiles")
+	proto.RegisterType((*Call_ReadFile)(nil), "mesos.v1.master.Call.ReadFile")
+	proto.RegisterType((*Call_UpdateWeights)(nil), "mesos.v1.master.Call.UpdateWeights")
+	proto.RegisterType((*Call_ReserveResources)(nil), "mesos.v1.master.Call.ReserveResources")
+	proto.RegisterType((*Call_UnreserveResources)(nil), "mesos.v1.master.Call.UnreserveResources")
+	proto.RegisterType((*Call_CreateVolumes)(nil), "mesos.v1.master.Call.CreateVolumes")
+	proto.RegisterType((*Call_DestroyVolumes)(nil), "mesos.v1.master.Call.DestroyVolumes")
+	proto.RegisterType((*Call_UpdateMaintenanceSchedule)(nil), "mesos.v1.master.Call.UpdateMaintenanceSchedule")
+	proto.RegisterType((*Call_StartMaintenance)(nil), "mesos.v1.master.Call.StartMaintenance")
+	proto.RegisterType((*Call_StopMaintenance)(nil), "mesos.v1.master.Call.StopMaintenance")
+	proto.RegisterType((*Call_SetQuota)(nil), "mesos.v1.master.Call.SetQuota")
+	proto.RegisterType((*Call_RemoveQuota)(nil), "mesos.v1.master.Call.RemoveQuota")
+	proto.RegisterType((*Response)(nil), "mesos.v1.master.Response")
+	proto.RegisterType((*Response_GetHealth)(nil), "mesos.v1.master.Response.GetHealth")
+	proto.RegisterType((*Response_GetFlags)(nil), "mesos.v1.master.Response.GetFlags")
+	proto.RegisterType((*Response_GetVersion)(nil), "mesos.v1.master.Response.GetVersion")
+	proto.RegisterType((*Response_GetMetrics)(nil), "mesos.v1.master.Response.GetMetrics")
+	proto.RegisterType((*Response_GetLoggingLevel)(nil), "mesos.v1.master.Response.GetLoggingLevel")
+	proto.RegisterType((*Response_ListFiles)(nil), "mesos.v1.master.Response.ListFiles")
+	proto.RegisterType((*Response_ReadFile)(nil), "mesos.v1.master.Response.ReadFile")
+	proto.RegisterType((*Response_GetState)(nil), "mesos.v1.master.Response.GetState")
+	proto.RegisterType((*Response_GetAgents)(nil), "mesos.v1.master.Response.GetAgents")
+	proto.RegisterType((*Response_GetAgents_Agent)(nil), "mesos.v1.master.Response.GetAgents.Agent")
+	proto.RegisterType((*Response_GetFrameworks)(nil), "mesos.v1.master.Response.GetFrameworks")
+	proto.RegisterType((*Response_GetFrameworks_Framework)(nil), "mesos.v1.master.Response.GetFrameworks.Framework")
+	proto.RegisterType((*Response_GetExecutors)(nil), "mesos.v1.master.Response.GetExecutors")
+	proto.RegisterType((*Response_GetExecutors_Executor)(nil), "mesos.v1.master.Response.GetExecutors.Executor")
+	proto.RegisterType((*Response_GetTasks)(nil), "mesos.v1.master.Response.GetTasks")
+	proto.RegisterType((*Response_GetRoles)(nil), "mesos.v1.master.Response.GetRoles")
+	proto.RegisterType((*Response_GetWeights)(nil), "mesos.v1.master.Response.GetWeights")
+	proto.RegisterType((*Response_GetMaster)(nil), "mesos.v1.master.Response.GetMaster")
+	proto.RegisterType((*Response_GetMaintenanceStatus)(nil), "mesos.v1.master.Response.GetMaintenanceStatus")
+	proto.RegisterType((*Response_GetMaintenanceSchedule)(nil), "mesos.v1.master.Response.GetMaintenanceSchedule")
+	proto.RegisterType((*Response_GetQuota)(nil), "mesos.v1.master.Response.GetQuota")
+	proto.RegisterType((*Event)(nil), "mesos.v1.master.Event")
+	proto.RegisterType((*Event_Subscribed)(nil), "mesos.v1.master.Event.Subscribed")
+	proto.RegisterType((*Event_TaskAdded)(nil), "mesos.v1.master.Event.TaskAdded")
+	proto.RegisterType((*Event_TaskUpdated)(nil), "mesos.v1.master.Event.TaskUpdated")
+	proto.RegisterType((*Event_AgentAdded)(nil), "mesos.v1.master.Event.AgentAdded")
+	proto.RegisterType((*Event_AgentRemoved)(nil), "mesos.v1.master.Event.AgentRemoved")
+	proto.RegisterEnum("mesos.v1.master.Call_Type", Call_Type_name, Call_Type_value)
+	proto.RegisterEnum("mesos.v1.master.Response_Type", Response_Type_name, Response_Type_value)
+	proto.RegisterEnum("mesos.v1.master.Event_Type", Event_Type_name, Event_Type_value)
 }
 func (this *Call) Equal(that interface{}) bool {
 	if that == nil {
@@ -1943,7 +1944,7 @@ func (this *Call_UpdateWeights) Equal(that interface{}) bool {
 		return false
 	}
 	for i := range this.WeightInfos {
-		if !this.WeightInfos[i].Equal(&that1.WeightInfos[i]) {
+		if !this.WeightInfos[i].Equal(that1.WeightInfos[i]) {
 			return false
 		}
 	}
@@ -4015,7 +4016,7 @@ func (this *Event_TaskUpdated) GoString() string {
 	s = append(s, "FrameworkID: "+strings.Replace(this.FrameworkID.GoString(), `&`, ``, 1)+",\n")
 	s = append(s, "Status: "+strings.Replace(this.Status.GoString(), `&`, ``, 1)+",\n")
 	if this.State != nil {
-		s = append(s, "State: "+valueToGoStringMaster(this.State, "master.mesos.TaskState")+",\n")
+		s = append(s, "State: "+valueToGoStringMaster(this.State, "master.mesos_v1.TaskState")+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -6687,7 +6688,7 @@ func (this *Call_GetMetrics) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_GetMetrics{`,
-		`Timeout:` + strings.Replace(fmt.Sprintf("%v", this.Timeout), "DurationInfo", "mesos.DurationInfo", 1) + `,`,
+		`Timeout:` + strings.Replace(fmt.Sprintf("%v", this.Timeout), "DurationInfo", "mesos_v1.DurationInfo", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6698,7 +6699,7 @@ func (this *Call_SetLoggingLevel) String() string {
 	}
 	s := strings.Join([]string{`&Call_SetLoggingLevel{`,
 		`Level:` + fmt.Sprintf("%v", this.Level) + `,`,
-		`Duration:` + strings.Replace(fmt.Sprintf("%v", this.Duration), "DurationInfo", "mesos.DurationInfo", 1) + `,`,
+		`Duration:` + strings.Replace(fmt.Sprintf("%v", this.Duration), "DurationInfo", "mesos_v1.DurationInfo", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6730,7 +6731,7 @@ func (this *Call_UpdateWeights) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_UpdateWeights{`,
-		`WeightInfos:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.WeightInfos), "WeightInfo", "mesos.WeightInfo", 1), `&`, ``, 1) + `,`,
+		`WeightInfos:` + strings.Replace(fmt.Sprintf("%v", this.WeightInfos), "WeightInfo", "mesos_v1.WeightInfo", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6740,8 +6741,8 @@ func (this *Call_ReserveResources) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_ReserveResources{`,
-		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos.AgentID", 1), `&`, ``, 1) + `,`,
-		`Resources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Resources), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
+		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
+		`Resources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Resources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6751,8 +6752,8 @@ func (this *Call_UnreserveResources) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_UnreserveResources{`,
-		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos.AgentID", 1), `&`, ``, 1) + `,`,
-		`Resources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Resources), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
+		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
+		`Resources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Resources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6762,8 +6763,8 @@ func (this *Call_CreateVolumes) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_CreateVolumes{`,
-		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos.AgentID", 1), `&`, ``, 1) + `,`,
-		`Volumes:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Volumes), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
+		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
+		`Volumes:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Volumes), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6773,8 +6774,8 @@ func (this *Call_DestroyVolumes) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_DestroyVolumes{`,
-		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos.AgentID", 1), `&`, ``, 1) + `,`,
-		`Volumes:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Volumes), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
+		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
+		`Volumes:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Volumes), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6784,7 +6785,7 @@ func (this *Call_UpdateMaintenanceSchedule) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_UpdateMaintenanceSchedule{`,
-		`Schedule:` + strings.Replace(strings.Replace(this.Schedule.String(), "Schedule", "mesos_operator_maintenance.Schedule", 1), `&`, ``, 1) + `,`,
+		`Schedule:` + strings.Replace(strings.Replace(this.Schedule.String(), "Schedule", "mesos_v1_maintenance.Schedule", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6794,7 +6795,7 @@ func (this *Call_StartMaintenance) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_StartMaintenance{`,
-		`Machines:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Machines), "MachineID", "mesos.MachineID", 1), `&`, ``, 1) + `,`,
+		`Machines:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Machines), "MachineID", "mesos_v1.MachineID", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6804,7 +6805,7 @@ func (this *Call_StopMaintenance) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_StopMaintenance{`,
-		`Machines:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Machines), "MachineID", "mesos.MachineID", 1), `&`, ``, 1) + `,`,
+		`Machines:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Machines), "MachineID", "mesos_v1.MachineID", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6814,7 +6815,7 @@ func (this *Call_SetQuota) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_SetQuota{`,
-		`QuotaRequest:` + strings.Replace(strings.Replace(this.QuotaRequest.String(), "QuotaRequest", "mesos_operator_quota.QuotaRequest", 1), `&`, ``, 1) + `,`,
+		`QuotaRequest:` + strings.Replace(strings.Replace(this.QuotaRequest.String(), "QuotaRequest", "mesos_v1_quota.QuotaRequest", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6872,7 +6873,7 @@ func (this *Response_GetFlags) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetFlags{`,
-		`Flags:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Flags), "Flag", "mesos.Flag", 1), `&`, ``, 1) + `,`,
+		`Flags:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Flags), "Flag", "mesos_v1.Flag", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6882,7 +6883,7 @@ func (this *Response_GetVersion) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetVersion{`,
-		`VersionInfo:` + strings.Replace(strings.Replace(this.VersionInfo.String(), "VersionInfo", "mesos.VersionInfo", 1), `&`, ``, 1) + `,`,
+		`VersionInfo:` + strings.Replace(strings.Replace(this.VersionInfo.String(), "VersionInfo", "mesos_v1.VersionInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6892,7 +6893,7 @@ func (this *Response_GetMetrics) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetMetrics{`,
-		`Metrics:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Metrics), "Metric", "mesos.Metric", 1), `&`, ``, 1) + `,`,
+		`Metrics:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Metrics), "Metric", "mesos_v1.Metric", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6912,7 +6913,7 @@ func (this *Response_ListFiles) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_ListFiles{`,
-		`FileInfos:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.FileInfos), "FileInfo", "mesos.FileInfo", 1), `&`, ``, 1) + `,`,
+		`FileInfos:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.FileInfos), "FileInfo", "mesos_v1.FileInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6956,15 +6957,15 @@ func (this *Response_GetAgents_Agent) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetAgents_Agent{`,
-		`AgentInfo:` + strings.Replace(strings.Replace(this.AgentInfo.String(), "AgentInfo", "mesos.AgentInfo", 1), `&`, ``, 1) + `,`,
+		`AgentInfo:` + strings.Replace(strings.Replace(this.AgentInfo.String(), "AgentInfo", "mesos_v1.AgentInfo", 1), `&`, ``, 1) + `,`,
 		`Active:` + fmt.Sprintf("%v", this.Active) + `,`,
 		`Version:` + fmt.Sprintf("%v", this.Version) + `,`,
 		`Pid:` + fmt.Sprintf("%v", this.Pid) + `,`,
-		`RegisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.RegisteredTime), "TimeInfo", "mesos.TimeInfo", 1) + `,`,
-		`ReregisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.ReregisteredTime), "TimeInfo", "mesos.TimeInfo", 1) + `,`,
-		`TotalResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.TotalResources), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
-		`AllocatedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.AllocatedResources), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
-		`OfferedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OfferedResources), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
+		`RegisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.RegisteredTime), "TimeInfo", "mesos_v1.TimeInfo", 1) + `,`,
+		`ReregisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.ReregisteredTime), "TimeInfo", "mesos_v1.TimeInfo", 1) + `,`,
+		`TotalResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.TotalResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
+		`AllocatedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.AllocatedResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
+		`OfferedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OfferedResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6976,7 +6977,7 @@ func (this *Response_GetFrameworks) String() string {
 	s := strings.Join([]string{`&Response_GetFrameworks{`,
 		`Frameworks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Frameworks), "Response_GetFrameworks_Framework", "Response_GetFrameworks_Framework", 1), `&`, ``, 1) + `,`,
 		`CompletedFrameworks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.CompletedFrameworks), "Response_GetFrameworks_Framework", "Response_GetFrameworks_Framework", 1), `&`, ``, 1) + `,`,
-		`RecoveredFrameworks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.RecoveredFrameworks), "FrameworkInfo", "mesos.FrameworkInfo", 1), `&`, ``, 1) + `,`,
+		`RecoveredFrameworks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.RecoveredFrameworks), "FrameworkInfo", "mesos_v1.FrameworkInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6986,16 +6987,16 @@ func (this *Response_GetFrameworks_Framework) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetFrameworks_Framework{`,
-		`FrameworkInfo:` + strings.Replace(strings.Replace(this.FrameworkInfo.String(), "FrameworkInfo", "mesos.FrameworkInfo", 1), `&`, ``, 1) + `,`,
+		`FrameworkInfo:` + strings.Replace(strings.Replace(this.FrameworkInfo.String(), "FrameworkInfo", "mesos_v1.FrameworkInfo", 1), `&`, ``, 1) + `,`,
 		`Active:` + fmt.Sprintf("%v", this.Active) + `,`,
 		`Connected:` + fmt.Sprintf("%v", this.Connected) + `,`,
-		`RegisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.RegisteredTime), "TimeInfo", "mesos.TimeInfo", 1) + `,`,
-		`ReregisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.ReregisteredTime), "TimeInfo", "mesos.TimeInfo", 1) + `,`,
-		`UnregisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.UnregisteredTime), "TimeInfo", "mesos.TimeInfo", 1) + `,`,
-		`Offers:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Offers), "Offer", "mesos.Offer", 1), `&`, ``, 1) + `,`,
-		`InverseOffers:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.InverseOffers), "InverseOffer", "mesos.InverseOffer", 1), `&`, ``, 1) + `,`,
-		`AllocatedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.AllocatedResources), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
-		`OfferedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OfferedResources), "Resource", "mesos.Resource", 1), `&`, ``, 1) + `,`,
+		`RegisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.RegisteredTime), "TimeInfo", "mesos_v1.TimeInfo", 1) + `,`,
+		`ReregisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.ReregisteredTime), "TimeInfo", "mesos_v1.TimeInfo", 1) + `,`,
+		`UnregisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.UnregisteredTime), "TimeInfo", "mesos_v1.TimeInfo", 1) + `,`,
+		`Offers:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Offers), "Offer", "mesos_v1.Offer", 1), `&`, ``, 1) + `,`,
+		`InverseOffers:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.InverseOffers), "InverseOffer", "mesos_v1.InverseOffer", 1), `&`, ``, 1) + `,`,
+		`AllocatedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.AllocatedResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
+		`OfferedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OfferedResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7016,8 +7017,8 @@ func (this *Response_GetExecutors_Executor) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetExecutors_Executor{`,
-		`ExecutorInfo:` + strings.Replace(strings.Replace(this.ExecutorInfo.String(), "ExecutorInfo", "mesos.ExecutorInfo", 1), `&`, ``, 1) + `,`,
-		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos.AgentID", 1), `&`, ``, 1) + `,`,
+		`ExecutorInfo:` + strings.Replace(strings.Replace(this.ExecutorInfo.String(), "ExecutorInfo", "mesos_v1.ExecutorInfo", 1), `&`, ``, 1) + `,`,
+		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7027,10 +7028,10 @@ func (this *Response_GetTasks) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetTasks{`,
-		`PendingTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.PendingTasks), "Task", "mesos.Task", 1), `&`, ``, 1) + `,`,
-		`Tasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Tasks), "Task", "mesos.Task", 1), `&`, ``, 1) + `,`,
-		`CompletedTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.CompletedTasks), "Task", "mesos.Task", 1), `&`, ``, 1) + `,`,
-		`OrphanTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OrphanTasks), "Task", "mesos.Task", 1), `&`, ``, 1) + `,`,
+		`PendingTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.PendingTasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
+		`Tasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Tasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
+		`CompletedTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.CompletedTasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
+		`OrphanTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OrphanTasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7040,7 +7041,7 @@ func (this *Response_GetRoles) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetRoles{`,
-		`Roles:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Roles), "Role", "mesos.Role", 1), `&`, ``, 1) + `,`,
+		`Roles:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Roles), "Role", "mesos_v1.Role", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7050,7 +7051,7 @@ func (this *Response_GetWeights) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetWeights{`,
-		`WeightInfos:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.WeightInfos), "WeightInfo", "mesos.WeightInfo", 1), `&`, ``, 1) + `,`,
+		`WeightInfos:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.WeightInfos), "WeightInfo", "mesos_v1.WeightInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7060,7 +7061,7 @@ func (this *Response_GetMaster) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetMaster{`,
-		`MasterInfo:` + strings.Replace(strings.Replace(this.MasterInfo.String(), "MasterInfo", "mesos.MasterInfo", 1), `&`, ``, 1) + `,`,
+		`MasterInfo:` + strings.Replace(strings.Replace(this.MasterInfo.String(), "MasterInfo", "mesos_v1.MasterInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7070,7 +7071,7 @@ func (this *Response_GetMaintenanceStatus) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetMaintenanceStatus{`,
-		`Status:` + strings.Replace(strings.Replace(this.Status.String(), "ClusterStatus", "mesos_operator_maintenance.ClusterStatus", 1), `&`, ``, 1) + `,`,
+		`Status:` + strings.Replace(strings.Replace(this.Status.String(), "ClusterStatus", "mesos_v1_maintenance.ClusterStatus", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7080,7 +7081,7 @@ func (this *Response_GetMaintenanceSchedule) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetMaintenanceSchedule{`,
-		`Schedule:` + strings.Replace(strings.Replace(this.Schedule.String(), "Schedule", "mesos_operator_maintenance.Schedule", 1), `&`, ``, 1) + `,`,
+		`Schedule:` + strings.Replace(strings.Replace(this.Schedule.String(), "Schedule", "mesos_v1_maintenance.Schedule", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7090,7 +7091,7 @@ func (this *Response_GetQuota) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_GetQuota{`,
-		`Status:` + strings.Replace(strings.Replace(this.Status.String(), "QuotaStatus", "mesos_operator_quota.QuotaStatus", 1), `&`, ``, 1) + `,`,
+		`Status:` + strings.Replace(strings.Replace(this.Status.String(), "QuotaStatus", "mesos_v1_quota.QuotaStatus", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7125,7 +7126,7 @@ func (this *Event_TaskAdded) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Event_TaskAdded{`,
-		`Task:` + strings.Replace(strings.Replace(this.Task.String(), "Task", "mesos.Task", 1), `&`, ``, 1) + `,`,
+		`Task:` + strings.Replace(strings.Replace(this.Task.String(), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7135,8 +7136,8 @@ func (this *Event_TaskUpdated) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Event_TaskUpdated{`,
-		`FrameworkID:` + strings.Replace(strings.Replace(this.FrameworkID.String(), "FrameworkID", "mesos.FrameworkID", 1), `&`, ``, 1) + `,`,
-		`Status:` + strings.Replace(strings.Replace(this.Status.String(), "TaskStatus", "mesos.TaskStatus", 1), `&`, ``, 1) + `,`,
+		`FrameworkID:` + strings.Replace(strings.Replace(this.FrameworkID.String(), "FrameworkID", "mesos_v1.FrameworkID", 1), `&`, ``, 1) + `,`,
+		`Status:` + strings.Replace(strings.Replace(this.Status.String(), "TaskStatus", "mesos_v1.TaskStatus", 1), `&`, ``, 1) + `,`,
 		`State:` + valueToStringMaster(this.State) + `,`,
 		`}`,
 	}, "")
@@ -7157,7 +7158,7 @@ func (this *Event_AgentRemoved) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Event_AgentRemoved{`,
-		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos.AgentID", 1), `&`, ``, 1) + `,`,
+		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7757,7 +7758,7 @@ func (m *Call_GetMetrics) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Timeout == nil {
-				m.Timeout = &mesos.DurationInfo{}
+				m.Timeout = &mesos_v1.DurationInfo{}
 			}
 			if err := m.Timeout.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -7861,7 +7862,7 @@ func (m *Call_SetLoggingLevel) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Duration == nil {
-				m.Duration = &mesos.DurationInfo{}
+				m.Duration = &mesos_v1.DurationInfo{}
 			}
 			if err := m.Duration.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -8160,7 +8161,7 @@ func (m *Call_UpdateWeights) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.WeightInfos = append(m.WeightInfos, mesos.WeightInfo{})
+			m.WeightInfos = append(m.WeightInfos, &mesos_v1.WeightInfo{})
 			if err := m.WeightInfos[len(m.WeightInfos)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8273,7 +8274,7 @@ func (m *Call_ReserveResources) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Resources = append(m.Resources, mesos.Resource{})
+			m.Resources = append(m.Resources, mesos_v1.Resource{})
 			if err := m.Resources[len(m.Resources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8389,7 +8390,7 @@ func (m *Call_UnreserveResources) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Resources = append(m.Resources, mesos.Resource{})
+			m.Resources = append(m.Resources, mesos_v1.Resource{})
 			if err := m.Resources[len(m.Resources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8505,7 +8506,7 @@ func (m *Call_CreateVolumes) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Volumes = append(m.Volumes, mesos.Resource{})
+			m.Volumes = append(m.Volumes, mesos_v1.Resource{})
 			if err := m.Volumes[len(m.Volumes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8621,7 +8622,7 @@ func (m *Call_DestroyVolumes) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Volumes = append(m.Volumes, mesos.Resource{})
+			m.Volumes = append(m.Volumes, mesos_v1.Resource{})
 			if err := m.Volumes[len(m.Volumes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8790,7 +8791,7 @@ func (m *Call_StartMaintenance) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Machines = append(m.Machines, mesos.MachineID{})
+			m.Machines = append(m.Machines, mesos_v1.MachineID{})
 			if err := m.Machines[len(m.Machines)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8871,7 +8872,7 @@ func (m *Call_StopMaintenance) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Machines = append(m.Machines, mesos.MachineID{})
+			m.Machines = append(m.Machines, mesos_v1.MachineID{})
 			if err := m.Machines[len(m.Machines)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -9859,7 +9860,7 @@ func (m *Response_GetFlags) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Flags = append(m.Flags, mesos.Flag{})
+			m.Flags = append(m.Flags, mesos_v1.Flag{})
 			if err := m.Flags[len(m.Flags)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10025,7 +10026,7 @@ func (m *Response_GetMetrics) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Metrics = append(m.Metrics, mesos.Metric{})
+			m.Metrics = append(m.Metrics, mesos_v1.Metric{})
 			if err := m.Metrics[len(m.Metrics)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10180,7 +10181,7 @@ func (m *Response_ListFiles) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.FileInfos = append(m.FileInfos, mesos.FileInfo{})
+			m.FileInfos = append(m.FileInfos, mesos_v1.FileInfo{})
 			if err := m.FileInfos[len(m.FileInfos)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10746,7 +10747,7 @@ func (m *Response_GetAgents_Agent) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.RegisteredTime == nil {
-				m.RegisteredTime = &mesos.TimeInfo{}
+				m.RegisteredTime = &mesos_v1.TimeInfo{}
 			}
 			if err := m.RegisteredTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -10779,7 +10780,7 @@ func (m *Response_GetAgents_Agent) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ReregisteredTime == nil {
-				m.ReregisteredTime = &mesos.TimeInfo{}
+				m.ReregisteredTime = &mesos_v1.TimeInfo{}
 			}
 			if err := m.ReregisteredTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -10811,7 +10812,7 @@ func (m *Response_GetAgents_Agent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.TotalResources = append(m.TotalResources, mesos.Resource{})
+			m.TotalResources = append(m.TotalResources, mesos_v1.Resource{})
 			if err := m.TotalResources[len(m.TotalResources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10842,7 +10843,7 @@ func (m *Response_GetAgents_Agent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.AllocatedResources = append(m.AllocatedResources, mesos.Resource{})
+			m.AllocatedResources = append(m.AllocatedResources, mesos_v1.Resource{})
 			if err := m.AllocatedResources[len(m.AllocatedResources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10873,7 +10874,7 @@ func (m *Response_GetAgents_Agent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.OfferedResources = append(m.OfferedResources, mesos.Resource{})
+			m.OfferedResources = append(m.OfferedResources, mesos_v1.Resource{})
 			if err := m.OfferedResources[len(m.OfferedResources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11025,7 +11026,7 @@ func (m *Response_GetFrameworks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.RecoveredFrameworks = append(m.RecoveredFrameworks, mesos.FrameworkInfo{})
+			m.RecoveredFrameworks = append(m.RecoveredFrameworks, mesos_v1.FrameworkInfo{})
 			if err := m.RecoveredFrameworks[len(m.RecoveredFrameworks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11181,7 +11182,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.RegisteredTime == nil {
-				m.RegisteredTime = &mesos.TimeInfo{}
+				m.RegisteredTime = &mesos_v1.TimeInfo{}
 			}
 			if err := m.RegisteredTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -11214,7 +11215,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ReregisteredTime == nil {
-				m.ReregisteredTime = &mesos.TimeInfo{}
+				m.ReregisteredTime = &mesos_v1.TimeInfo{}
 			}
 			if err := m.ReregisteredTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -11247,7 +11248,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.UnregisteredTime == nil {
-				m.UnregisteredTime = &mesos.TimeInfo{}
+				m.UnregisteredTime = &mesos_v1.TimeInfo{}
 			}
 			if err := m.UnregisteredTime.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -11279,7 +11280,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Offers = append(m.Offers, mesos.Offer{})
+			m.Offers = append(m.Offers, mesos_v1.Offer{})
 			if err := m.Offers[len(m.Offers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11310,7 +11311,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.InverseOffers = append(m.InverseOffers, mesos.InverseOffer{})
+			m.InverseOffers = append(m.InverseOffers, mesos_v1.InverseOffer{})
 			if err := m.InverseOffers[len(m.InverseOffers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11341,7 +11342,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.AllocatedResources = append(m.AllocatedResources, mesos.Resource{})
+			m.AllocatedResources = append(m.AllocatedResources, mesos_v1.Resource{})
 			if err := m.AllocatedResources[len(m.AllocatedResources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11372,7 +11373,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.OfferedResources = append(m.OfferedResources, mesos.Resource{})
+			m.OfferedResources = append(m.OfferedResources, mesos_v1.Resource{})
 			if err := m.OfferedResources[len(m.OfferedResources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11693,7 +11694,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PendingTasks = append(m.PendingTasks, mesos.Task{})
+			m.PendingTasks = append(m.PendingTasks, mesos_v1.Task{})
 			if err := m.PendingTasks[len(m.PendingTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11724,7 +11725,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Tasks = append(m.Tasks, mesos.Task{})
+			m.Tasks = append(m.Tasks, mesos_v1.Task{})
 			if err := m.Tasks[len(m.Tasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11755,7 +11756,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CompletedTasks = append(m.CompletedTasks, mesos.Task{})
+			m.CompletedTasks = append(m.CompletedTasks, mesos_v1.Task{})
 			if err := m.CompletedTasks[len(m.CompletedTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11786,7 +11787,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.OrphanTasks = append(m.OrphanTasks, mesos.Task{})
+			m.OrphanTasks = append(m.OrphanTasks, mesos_v1.Task{})
 			if err := m.OrphanTasks[len(m.OrphanTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11867,7 +11868,7 @@ func (m *Response_GetRoles) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Roles = append(m.Roles, mesos.Role{})
+			m.Roles = append(m.Roles, mesos_v1.Role{})
 			if err := m.Roles[len(m.Roles)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -11948,7 +11949,7 @@ func (m *Response_GetWeights) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.WeightInfos = append(m.WeightInfos, mesos.WeightInfo{})
+			m.WeightInfos = append(m.WeightInfos, mesos_v1.WeightInfo{})
 			if err := m.WeightInfos[len(m.WeightInfos)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -12807,7 +12808,7 @@ func (m *Event_TaskUpdated) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
 			}
-			var v mesos.TaskState
+			var v mesos_v1.TaskState
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMaster
@@ -12817,7 +12818,7 @@ func (m *Event_TaskUpdated) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (mesos.TaskState(b) & 0x7F) << shift
+				v |= (mesos_v1.TaskState(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -13132,177 +13133,178 @@ var (
 func init() { proto.RegisterFile("operator/master/master.proto", fileDescriptorMaster) }
 
 var fileDescriptorMaster = []byte{
-	// 2751 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xbc, 0x59, 0x49, 0x73, 0x1b, 0xd7,
-	0x11, 0x16, 0x40, 0x80, 0x24, 0x1a, 0xdb, 0xe0, 0x91, 0x92, 0xe0, 0x91, 0x4d, 0xd0, 0x2c, 0xdb,
-	0xa2, 0x13, 0x8b, 0x2c, 0xb3, 0xbc, 0x55, 0x2c, 0x57, 0x8c, 0x65, 0x44, 0x22, 0x02, 0x09, 0x7b,
-	0x06, 0x20, 0xbd, 0x54, 0x0a, 0x35, 0x02, 0x1e, 0x41, 0x58, 0x00, 0x06, 0x9e, 0x19, 0xd0, 0x51,
-	0x2e, 0xc9, 0x4f, 0xc8, 0x0f, 0xc8, 0x3d, 0xf9, 0x0b, 0x39, 0xe4, 0x94, 0x8b, 0x73, 0x73, 0xa5,
-	0x72, 0x70, 0xa5, 0x52, 0xa8, 0x08, 0xbe, 0xe4, 0xe8, 0x9f, 0x90, 0x7a, 0xdb, 0xcc, 0x1b, 0x6c,
-	0x04, 0x4d, 0x3b, 0x17, 0x89, 0xaf, 0xa7, 0xfb, 0xeb, 0xb7, 0xf5, 0xf7, 0xba, 0x1b, 0xf0, 0xa2,
-	0x35, 0xc0, 0xb6, 0xe9, 0x5a, 0xf6, 0x7e, 0xcf, 0x74, 0x5c, 0x2c, 0xfe, 0xdb, 0x1b, 0xd8, 0x96,
-	0x6b, 0xa1, 0xdb, 0x3d, 0xec, 0x58, 0xce, 0x9e, 0xd0, 0xd9, 0x63, 0x1f, 0xd5, 0x37, 0xdb, 0x1d,
-	0xf7, 0x62, 0xf8, 0x64, 0xaf, 0x69, 0xf5, 0xf6, 0xad, 0x7e, 0xcb, 0xc6, 0x5f, 0x3c, 0x70, 0x7a,
-	0x56, 0xd7, 0xdc, 0xa7, 0xea, 0x0f, 0xda, 0xd6, 0x83, 0x0b, 0xd7, 0x1d, 0xb0, 0x11, 0x43, 0x52,
-	0x3f, 0x5c, 0xce, 0xc4, 0x9b, 0xcd, 0x97, 0x43, 0xcb, 0x35, 0xd9, 0xbf, 0x1c, 0xa1, 0x72, 0x4d,
-	0x84, 0x9e, 0xd9, 0xe9, 0xbb, 0xb8, 0x6f, 0xf6, 0x9b, 0x58, 0xfe, 0x9b, 0xa3, 0x3d, 0x90, 0xd0,
-	0xda, 0x56, 0xdb, 0xda, 0xa7, 0xe2, 0x27, 0xc3, 0x73, 0x3a, 0xa2, 0x03, 0xfa, 0x17, 0x53, 0xdf,
-	0xf9, 0xeb, 0x5d, 0x88, 0x14, 0xcd, 0x6e, 0x17, 0xbd, 0x05, 0x11, 0xf7, 0xd9, 0x00, 0x67, 0x43,
-	0xdb, 0xa1, 0xdd, 0xd4, 0xc1, 0xf6, 0xde, 0xcc, 0x0d, 0xda, 0x23, 0xaa, 0x7b, 0xb5, 0x67, 0x03,
-	0x5c, 0x88, 0x7c, 0x3d, 0xca, 0xdd, 0x42, 0x8f, 0x21, 0xde, 0xc6, 0x6e, 0xa3, 0x87, 0x5d, 0xbb,
-	0xd3, 0x74, 0xb2, 0xe1, 0xed, 0xd0, 0x6e, 0xfc, 0xe0, 0xb5, 0x45, 0xc6, 0x87, 0xd8, 0x3d, 0x66,
-	0xda, 0x85, 0xd4, 0x78, 0x94, 0x03, 0x7f, 0x8c, 0x3e, 0x87, 0x8c, 0x83, 0xdd, 0x46, 0xd7, 0x6a,
-	0xb7, 0x3b, 0xfd, 0x76, 0xa3, 0x8b, 0x2f, 0x71, 0x37, 0xbb, 0x42, 0x21, 0x7f, 0xbe, 0x08, 0xd2,
-	0xc0, 0x6e, 0x85, 0xd9, 0x54, 0x88, 0x49, 0x61, 0x63, 0x3c, 0xca, 0xa5, 0x27, 0x84, 0xe8, 0x08,
-	0xa0, 0xdb, 0x71, 0xdc, 0xc6, 0x79, 0xa7, 0x8b, 0x9d, 0x6c, 0x84, 0xa2, 0xbe, 0xba, 0x08, 0xb5,
-	0xd2, 0x71, 0xdc, 0x47, 0x44, 0xb9, 0x90, 0x1c, 0x8f, 0x72, 0x31, 0x6f, 0x88, 0x34, 0x88, 0xd9,
-	0xd8, 0x6c, 0x51, 0xa4, 0x6c, 0x94, 0x02, 0xbd, 0xb2, 0x08, 0x48, 0xc7, 0x66, 0x8b, 0x58, 0x16,
-	0x12, 0xe3, 0x51, 0x6e, 0x5d, 0x8c, 0x50, 0x0d, 0x52, 0xc3, 0x41, 0xcb, 0x74, 0x71, 0xe3, 0x2b,
-	0xdc, 0x69, 0x5f, 0xb8, 0x4e, 0x76, 0x95, 0x62, 0xbd, 0xbe, 0x08, 0xab, 0x4e, 0x2d, 0xce, 0x98,
-	0x41, 0x21, 0x33, 0x1e, 0xe5, 0x92, 0x01, 0x11, 0xfa, 0x35, 0x64, 0x6c, 0xec, 0x60, 0xfb, 0x12,
-	0x37, 0x6c, 0xec, 0x58, 0x43, 0xbb, 0x89, 0x9d, 0xec, 0x1a, 0x05, 0x7e, 0x63, 0xf1, 0x24, 0xa9,
-	0x91, 0x2e, 0x6c, 0x0a, 0x9b, 0xe3, 0x51, 0x4e, 0x99, 0x94, 0xa2, 0x16, 0x6c, 0x0c, 0xfb, 0xd3,
-	0x0e, 0xd6, 0xa9, 0x83, 0xbd, 0x85, 0x33, 0x17, 0x66, 0xbe, 0x8b, 0xbb, 0xe3, 0x51, 0x6e, 0xc3,
-	0x93, 0xdb, 0xbe, 0x97, 0x1a, 0xa4, 0x9a, 0x36, 0x26, 0x5b, 0x73, 0x69, 0x75, 0x87, 0x3d, 0xec,
-	0x64, 0x63, 0x57, 0x6f, 0x4d, 0x91, 0x5a, 0x9c, 0x32, 0x03, 0xb6, 0x35, 0x01, 0x11, 0x3a, 0x83,
-	0x74, 0x0b, 0x3b, 0xae, 0x6d, 0x3d, 0xf3, 0x60, 0x81, 0xc2, 0xfe, 0x6c, 0x11, 0x6c, 0x89, 0x99,
-	0x08, 0x5c, 0x34, 0x1e, 0xe5, 0x52, 0x41, 0x19, 0x7a, 0x06, 0xf7, 0xf8, 0x49, 0x4a, 0xe1, 0xd8,
-	0x70, 0x9a, 0x17, 0xb8, 0x35, 0xec, 0xe2, 0x6c, 0x9c, 0x3a, 0x79, 0xfb, 0xea, 0x63, 0x3d, 0xf6,
-	0xad, 0x0d, 0x6e, 0x5c, 0x78, 0x69, 0x3c, 0xca, 0xbd, 0x30, 0xf7, 0x33, 0x39, 0x6e, 0xc7, 0x35,
-	0x6d, 0x57, 0xf6, 0x9c, 0x4d, 0x5c, 0x7d, 0xdc, 0x06, 0x31, 0x92, 0x00, 0xd9, 0x71, 0x4f, 0x4a,
-	0xd1, 0x67, 0xa0, 0x38, 0xae, 0x35, 0x08, 0xa0, 0x27, 0x97, 0x08, 0x48, 0xd7, 0x1a, 0xc8, 0xe0,
-	0x2c, 0x20, 0x83, 0x42, 0x12, 0x46, 0x24, 0xda, 0x29, 0x13, 0x66, 0x53, 0x57, 0x87, 0x91, 0x81,
-	0xdd, 0x8f, 0x89, 0x2e, 0x0b, 0x23, 0x31, 0x42, 0x27, 0x90, 0xb0, 0x71, 0xcf, 0xba, 0xc4, 0x1c,
-	0x29, 0x4d, 0x91, 0xee, 0x2f, 0xbe, 0xeb, 0x44, 0x9f, 0x81, 0xa5, 0xc7, 0xa3, 0x5c, 0x5c, 0x12,
-	0xa8, 0x07, 0x20, 0x53, 0xd2, 0x2b, 0xb0, 0xe6, 0x76, 0x7a, 0xd8, 0x1a, 0xba, 0x94, 0x18, 0xe3,
-	0x07, 0x1b, 0x1c, 0xb8, 0x34, 0xb4, 0x4d, 0xb7, 0x63, 0xf5, 0xcb, 0xfd, 0x73, 0x4b, 0x3d, 0x86,
-	0x29, 0xba, 0xd9, 0x80, 0x28, 0xe3, 0xaf, 0xd0, 0x76, 0x78, 0x37, 0xc9, 0xd9, 0xf2, 0x55, 0x58,
-	0x6f, 0x71, 0xbb, 0x6c, 0x78, 0x3b, 0x3c, 0x0f, 0x2e, 0x07, 0x12, 0xdb, 0x20, 0x88, 0x0c, 0x4c,
-	0xf7, 0x82, 0xe2, 0xc4, 0x18, 0x8e, 0xfa, 0x2b, 0xf0, 0x69, 0x64, 0xc6, 0x77, 0xb4, 0x09, 0xab,
-	0xd6, 0xf9, 0xb9, 0x83, 0x5d, 0xea, 0x25, 0xe2, 0x4b, 0xbb, 0xb8, 0xdf, 0x76, 0x2f, 0x28, 0xa7,
-	0x72, 0xa9, 0x7a, 0x0c, 0x13, 0x0c, 0xf2, 0x10, 0x12, 0x8c, 0x90, 0x1a, 0x9d, 0xfe, 0xb9, 0xe5,
-	0x64, 0x43, 0xdb, 0x2b, 0xbb, 0xf1, 0x83, 0x0c, 0x9f, 0x28, 0xd3, 0x22, 0xd3, 0x2c, 0x6c, 0x10,
-	0x7b, 0xb2, 0x7d, 0xbe, 0xcc, 0x51, 0x2d, 0x98, 0x26, 0x8d, 0x37, 0x61, 0xdd, 0x6c, 0xe3, 0xbe,
-	0xdb, 0xe8, 0xb4, 0xe8, 0x34, 0xe3, 0x07, 0x29, 0x8e, 0x96, 0x27, 0xe2, 0x72, 0xa9, 0x90, 0xe6,
-	0x50, 0x6b, 0x5c, 0x80, 0x76, 0x09, 0xc7, 0x0a, 0x76, 0x09, 0xd3, 0x19, 0xa4, 0xb9, 0x8d, 0xc0,
-	0xe5, 0xf3, 0xff, 0x12, 0xd0, 0x34, 0xb5, 0xfc, 0xb4, 0x2e, 0xbf, 0x80, 0x09, 0x66, 0xf9, 0x01,
-	0xde, 0x5e, 0x83, 0x35, 0x41, 0x42, 0x0b, 0x7d, 0x3d, 0x85, 0x49, 0xb6, 0xf9, 0x09, 0x9d, 0x7d,
-	0x0a, 0x0b, 0xa8, 0xe6, 0x21, 0xac, 0x7b, 0x94, 0xc6, 0xfc, 0xce, 0x08, 0x57, 0x3f, 0x1b, 0xf1,
-	0x18, 0x8c, 0x41, 0x3f, 0x84, 0x69, 0x76, 0xd9, 0x85, 0xf5, 0x9e, 0xd9, 0xbc, 0xe8, 0xf4, 0xb1,
-	0xb8, 0x65, 0x0a, 0x47, 0x3c, 0x66, 0xe2, 0x72, 0x89, 0x5b, 0xbf, 0x0f, 0x53, 0xf4, 0xb1, 0xbc,
-	0xf1, 0xe7, 0xe0, 0xb3, 0x45, 0x15, 0x92, 0x94, 0x26, 0x1a, 0x36, 0xfe, 0x72, 0x88, 0x1d, 0x97,
-	0xaf, 0x64, 0x67, 0x72, 0x25, 0x2c, 0x3f, 0xa3, 0x36, 0x3a, 0xd3, 0x2c, 0x6c, 0xf2, 0x5d, 0x4d,
-	0xc8, 0x52, 0xf5, 0x65, 0x90, 0xd9, 0x83, 0x44, 0xa3, 0x6d, 0xf1, 0x0d, 0xe2, 0xd1, 0xb8, 0xf3,
-	0xaf, 0x08, 0x44, 0x48, 0xca, 0x84, 0xe2, 0xb0, 0x56, 0x3f, 0x79, 0x7c, 0x52, 0x3d, 0x3b, 0x51,
-	0x6e, 0xa1, 0x14, 0xc0, 0xa1, 0x56, 0x6b, 0x1c, 0x69, 0xf9, 0x4a, 0xed, 0x48, 0x09, 0xa1, 0x24,
-	0xc4, 0xc8, 0xf8, 0x51, 0x25, 0x7f, 0x68, 0x28, 0x61, 0x94, 0x86, 0x38, 0x19, 0x9e, 0x6a, 0xba,
-	0x51, 0xae, 0x9e, 0x28, 0x2b, 0x42, 0x70, 0xac, 0xd5, 0xf4, 0x72, 0xd1, 0x50, 0x22, 0xe8, 0x36,
-	0x64, 0x88, 0xa0, 0x52, 0x3d, 0x3c, 0x2c, 0x9f, 0x1c, 0x36, 0x2a, 0xda, 0xa9, 0x56, 0x51, 0xa2,
-	0x44, 0x6c, 0x4c, 0x89, 0x57, 0x89, 0xbb, 0x4a, 0xd9, 0xa8, 0x35, 0x1e, 0x95, 0x2b, 0x9a, 0xa1,
-	0xac, 0x11, 0x77, 0xba, 0x96, 0x2f, 0xd1, 0xb1, 0xb2, 0x2e, 0xbc, 0x1b, 0xb5, 0x7c, 0x4d, 0x53,
-	0x62, 0x62, 0x72, 0xf9, 0x43, 0xed, 0xa4, 0x66, 0x28, 0x80, 0x10, 0xa4, 0xe8, 0xe4, 0xf4, 0xfc,
-	0xb1, 0x76, 0x56, 0xd5, 0x1f, 0x1b, 0x4a, 0x1c, 0x65, 0x20, 0x49, 0x64, 0xda, 0x27, 0x5a, 0xb1,
-	0x5e, 0xab, 0xea, 0x86, 0x92, 0x10, 0x28, 0xb5, 0xbc, 0xf1, 0xd8, 0x50, 0x92, 0x62, 0xa8, 0x57,
-	0x89, 0xcb, 0x94, 0x58, 0xc1, 0x99, 0x56, 0x3e, 0x3c, 0xaa, 0x19, 0x4a, 0x9a, 0xa0, 0xd6, 0x3f,
-	0x2a, 0xe5, 0x6b, 0x9a, 0x27, 0x53, 0x84, 0xe7, 0xe3, 0xbc, 0x51, 0xd3, 0x74, 0x25, 0x43, 0x30,
-	0x8c, 0x7a, 0xc1, 0x28, 0xea, 0xe5, 0x82, 0xa6, 0x20, 0xb2, 0x3a, 0x5d, 0x33, 0x34, 0xfd, 0x54,
-	0x6b, 0xe8, 0x9a, 0x51, 0xad, 0xeb, 0x45, 0xcd, 0x50, 0x36, 0xd0, 0x5d, 0xd8, 0xa8, 0x9f, 0x4c,
-	0x7f, 0xd8, 0x24, 0x2e, 0x8a, 0xba, 0x46, 0x5c, 0x9c, 0x56, 0x2b, 0xf5, 0x63, 0xcd, 0x50, 0x6e,
-	0xa3, 0x0d, 0x48, 0x97, 0x34, 0xa3, 0xa6, 0x57, 0x3f, 0xf5, 0x84, 0x77, 0x90, 0x0a, 0x77, 0x98,
-	0xdf, 0xf2, 0x49, 0x4d, 0x3b, 0xc9, 0x9f, 0x14, 0x35, 0xba, 0x19, 0x75, 0x43, 0xb9, 0x8b, 0x5e,
-	0x84, 0xec, 0xd4, 0xb7, 0xe2, 0x91, 0x56, 0xaa, 0x57, 0x34, 0x25, 0x8b, 0x72, 0x70, 0x8f, 0xaf,
-	0x62, 0xa6, 0xc2, 0x0b, 0xf4, 0x44, 0x6a, 0x79, 0x3d, 0x00, 0xa0, 0xa8, 0x68, 0x13, 0x14, 0xa3,
-	0x56, 0xfd, 0x28, 0x20, 0xbd, 0x27, 0xf6, 0xec, 0xe3, 0x7a, 0xb5, 0x96, 0x57, 0x5e, 0xa4, 0xcb,
-	0xf7, 0x86, 0x2f, 0x21, 0x05, 0x12, 0xba, 0x76, 0x5c, 0x3d, 0xd5, 0xb8, 0x64, 0x6b, 0xe7, 0x6f,
-	0xf7, 0xc9, 0x5b, 0xe0, 0x0c, 0xac, 0xbe, 0x83, 0xd1, 0x7b, 0x81, 0x1c, 0x7e, 0xde, 0x6b, 0x2a,
-	0xd4, 0xe5, 0x3c, 0xbe, 0x02, 0x40, 0xf2, 0xf8, 0x0b, 0x6c, 0x76, 0xdd, 0x0b, 0x9e, 0xc6, 0xbf,
-	0x7e, 0x95, 0xfd, 0x21, 0x76, 0x8f, 0xa8, 0x01, 0xcb, 0x90, 0xbd, 0x21, 0x2a, 0x43, 0x8c, 0xa0,
-	0x9d, 0x77, 0xcd, 0xb6, 0xc3, 0x13, 0xf8, 0xdd, 0x25, 0xc0, 0x1e, 0x11, 0x7d, 0xf6, 0xbc, 0x8b,
-	0x11, 0xaa, 0xb2, 0x02, 0xe3, 0x12, 0xdb, 0x0e, 0x79, 0x35, 0x23, 0x0b, 0x13, 0x36, 0x19, 0xec,
-	0x94, 0x59, 0x78, 0x45, 0x06, 0x1f, 0x0b, 0x40, 0x51, 0xb1, 0x44, 0x97, 0x06, 0x9c, 0x57, 0xb5,
-	0x34, 0x20, 0xd3, 0x9e, 0xaa, 0x5a, 0x58, 0x2a, 0xbf, 0xbf, 0x04, 0xec, 0x74, 0xe5, 0x32, 0x21,
-	0x24, 0x67, 0x23, 0x55, 0x2e, 0x6b, 0xcb, 0x9d, 0xcd, 0xdc, 0xea, 0xa5, 0x2c, 0x57, 0x2f, 0xeb,
-	0xcb, 0x9d, 0xcd, 0x9c, 0x0a, 0x86, 0x1f, 0xb3, 0xe3, 0x9a, 0x2e, 0xe6, 0x19, 0xfa, 0x32, 0xc7,
-	0x6c, 0x10, 0x7d, 0xef, 0x98, 0xe9, 0x48, 0xdc, 0x3f, 0xfa, 0xb0, 0x89, 0xb4, 0x7c, 0x99, 0xfb,
-	0x47, 0x5f, 0x38, 0xc7, 0xbb, 0x7f, 0x6c, 0x88, 0x3e, 0x81, 0x14, 0xbd, 0x7f, 0xb6, 0xd9, 0xc3,
-	0x5f, 0x59, 0xf6, 0x53, 0x87, 0xe7, 0xe0, 0x0f, 0x96, 0xb9, 0x84, 0x9e, 0x11, 0xab, 0x21, 0x02,
-	0x22, 0x54, 0x87, 0x24, 0x41, 0xc6, 0xbf, 0xc1, 0xcd, 0xa1, 0x6b, 0xd9, 0xce, 0x15, 0xb9, 0xb6,
-	0x0c, 0xac, 0x09, 0x9b, 0x82, 0x42, 0x5e, 0x11, 0x59, 0x22, 0x76, 0xd2, 0x35, 0x9d, 0xa7, 0x0e,
-	0x4f, 0xb0, 0x97, 0xd9, 0xc9, 0x1a, 0xd1, 0xf7, 0x76, 0x92, 0x8e, 0x04, 0x14, 0x79, 0x85, 0x1c,
-	0x9e, 0x56, 0x2f, 0x03, 0xa5, 0x13, 0x7d, 0x0f, 0x8a, 0x8e, 0x44, 0xa8, 0x88, 0xf2, 0x34, 0xbd,
-	0x74, 0xa8, 0x88, 0xfa, 0x54, 0x84, 0x8a, 0x48, 0x2d, 0xf9, 0x29, 0x33, 0x8b, 0xac, 0xb2, 0xf4,
-	0x29, 0x1f, 0x53, 0x91, 0x77, 0xca, 0x6c, 0x88, 0xfa, 0x70, 0x87, 0xa1, 0x49, 0x35, 0x97, 0x6b,
-	0xba, 0x43, 0x27, 0x9b, 0xa1, 0xc8, 0x6f, 0x2d, 0x85, 0xec, 0x27, 0x3a, 0xd4, 0xb6, 0x90, 0x1d,
-	0x8f, 0x72, 0x9b, 0xb3, 0xbe, 0x20, 0x17, 0xb2, 0x53, 0xfe, 0x44, 0x42, 0x84, 0xa8, 0xc7, 0x77,
-	0xae, 0xe9, 0x51, 0xa4, 0x48, 0xea, 0x78, 0x94, 0xbb, 0x33, 0xfb, 0x9b, 0x38, 0x4f, 0x56, 0xdc,
-	0x6c, 0x2c, 0x7d, 0x9e, 0x52, 0xa9, 0x24, 0x46, 0xea, 0x0e, 0x48, 0x1c, 0x7d, 0x1b, 0xd6, 0x18,
-	0xdb, 0x3f, 0xa3, 0xc9, 0xca, 0x3a, 0x4f, 0x96, 0xde, 0x00, 0x9f, 0x7b, 0xb7, 0x21, 0xca, 0x28,
-	0x9c, 0xe5, 0x57, 0x71, 0xee, 0x96, 0x7c, 0xe4, 0xda, 0x8f, 0x41, 0xa6, 0xd6, 0x0f, 0x20, 0xc1,
-	0x79, 0x9a, 0x96, 0x0e, 0x3c, 0xb7, 0x42, 0xdc, 0x8c, 0x6b, 0x05, 0x4b, 0x07, 0x49, 0x38, 0x5d,
-	0x79, 0x09, 0x8e, 0x66, 0xee, 0x93, 0x22, 0xbd, 0xa3, 0x52, 0x3e, 0x81, 0xd7, 0x60, 0x8a, 0x2e,
-	0x67, 0x55, 0x5e, 0x6a, 0x51, 0x2e, 0xa9, 0xde, 0x01, 0x20, 0xec, 0x17, 0xa8, 0x6f, 0x44, 0x46,
-	0x4c, 0x34, 0xe8, 0x14, 0x33, 0x7c, 0x8a, 0x31, 0x21, 0x71, 0xd4, 0x83, 0x60, 0xd9, 0xe5, 0x74,
-	0x7e, 0xcb, 0x12, 0x3d, 0x51, 0x60, 0x21, 0x88, 0xb4, 0x4c, 0xd7, 0xa4, 0x45, 0x57, 0x82, 0xca,
-	0x42, 0xea, 0x3f, 0xc3, 0xe0, 0xb3, 0x5c, 0x20, 0xcc, 0x43, 0x37, 0x0a, 0xf3, 0x29, 0x22, 0x0a,
-	0xff, 0x28, 0x44, 0x34, 0xcd, 0x9c, 0x2b, 0x3f, 0x12, 0x73, 0x06, 0x19, 0x3e, 0x72, 0x33, 0x86,
-	0x57, 0xff, 0x14, 0x01, 0x89, 0xef, 0x35, 0x58, 0xe5, 0xb8, 0xec, 0x30, 0xf7, 0x97, 0xc6, 0x65,
-	0x35, 0x13, 0xbf, 0x24, 0xff, 0x58, 0x81, 0x28, 0x1d, 0xa3, 0x77, 0x01, 0x78, 0x8d, 0xe5, 0xdf,
-	0x63, 0x25, 0x50, 0x65, 0x05, 0xae, 0x88, 0x27, 0x22, 0x35, 0xb6, 0xd9, 0x74, 0x3b, 0x97, 0x98,
-	0x5e, 0x02, 0x1e, 0x54, 0x24, 0xd6, 0x44, 0x02, 0xb3, 0x22, 0x95, 0xe9, 0x19, 0x58, 0x19, 0x74,
-	0x5a, 0x74, 0x2f, 0x84, 0xe8, 0x21, 0xa4, 0x6d, 0xdc, 0xee, 0x90, 0xd9, 0xe2, 0x56, 0xc3, 0xed,
-	0xf4, 0x44, 0x87, 0x51, 0xdc, 0xcf, 0x5a, 0xa7, 0xc7, 0xee, 0x27, 0x6d, 0x44, 0xe9, 0x9e, 0x2e,
-	0x91, 0xa3, 0x0f, 0x21, 0x63, 0xe3, 0x49, 0xfb, 0xd5, 0xd9, 0xf6, 0xbc, 0xbf, 0x67, 0x4f, 0x22,
-	0xa4, 0x5d, 0xcb, 0x35, 0xbb, 0x81, 0xe6, 0xe1, 0xcc, 0x8a, 0xf1, 0x0e, 0x5f, 0x7c, 0xaa, 0x46,
-	0xf4, 0xfd, 0xca, 0xfb, 0x08, 0x36, 0xcc, 0x6e, 0xd7, 0x6a, 0x9a, 0x2e, 0x6e, 0x05, 0x3a, 0x84,
-	0x33, 0x51, 0x54, 0x8e, 0x82, 0xf2, 0xc2, 0xc6, 0x47, 0x2a, 0x41, 0xc6, 0x3a, 0x3f, 0xa7, 0x0b,
-	0xf1, 0x71, 0x62, 0xb3, 0x71, 0xb2, 0x1c, 0x47, 0xa9, 0x32, 0x0b, 0x0f, 0x45, 0xfd, 0x6e, 0x15,
-	0x26, 0x6e, 0xe2, 0xc7, 0x00, 0xd2, 0xfd, 0x66, 0x37, 0xe6, 0xdd, 0x6b, 0xdd, 0xef, 0x3d, 0xef,
-	0x4f, 0x7e, 0x6c, 0x36, 0x6c, 0x36, 0xad, 0xde, 0xa0, 0x8b, 0xc9, 0xa2, 0x25, 0xf0, 0xf0, 0xcd,
-	0xc0, 0xef, 0xf1, 0x55, 0x6d, 0x14, 0x05, 0xb8, 0xb4, 0x8c, 0x2a, 0x6c, 0xda, 0xb8, 0x69, 0x5d,
-	0xd2, 0x0d, 0x0a, 0x04, 0x2c, 0xf1, 0xb9, 0x29, 0xf8, 0x4c, 0x7c, 0xa0, 0x87, 0xee, 0x01, 0xea,
-	0xc2, 0xd2, 0x07, 0x54, 0xff, 0x12, 0x81, 0x98, 0x37, 0x44, 0x45, 0x48, 0x79, 0xa0, 0x72, 0x18,
-	0xcc, 0x06, 0xbe, 0xcd, 0x81, 0x93, 0x01, 0xf1, 0x9c, 0x70, 0xb8, 0x0b, 0xb1, 0xa6, 0xd5, 0xef,
-	0xe3, 0xa6, 0x8b, 0x5b, 0x34, 0x20, 0xd6, 0xe7, 0xdf, 0xfe, 0xc8, 0x0d, 0x6f, 0x7f, 0xf4, 0x7a,
-	0xb7, 0x3f, 0x33, 0xec, 0x5f, 0x27, 0x7e, 0xea, 0xfd, 0x09, 0x84, 0x1d, 0xda, 0x79, 0xc3, 0xb6,
-	0x08, 0x9b, 0x04, 0x37, 0xa3, 0xd7, 0x92, 0xaf, 0xb2, 0x00, 0xa9, 0x4e, 0x9f, 0xf0, 0x01, 0x6e,
-	0x70, 0x5d, 0x16, 0x1c, 0xa2, 0x17, 0x58, 0x66, 0x1f, 0x99, 0x89, 0xb7, 0xb1, 0xb2, 0x74, 0x6e,
-	0x94, 0xc5, 0x7e, 0xa4, 0x28, 0x83, 0xeb, 0x46, 0xd9, 0xdf, 0xc3, 0x10, 0x7c, 0x48, 0x4e, 0x20,
-	0xe6, 0xbf, 0x4d, 0x2c, 0xc6, 0xde, 0xbe, 0xce, 0xdb, 0xb4, 0x27, 0xfe, 0xe2, 0x9b, 0x76, 0x01,
-	0x8a, 0x65, 0x0f, 0x2e, 0xcc, 0x7e, 0xe0, 0xc9, 0xbb, 0x01, 0xec, 0x5d, 0xbe, 0x96, 0x74, 0x95,
-	0xc2, 0x7a, 0x1a, 0xea, 0xef, 0x60, 0x5d, 0x0c, 0xd0, 0x87, 0x90, 0x14, 0xee, 0xe4, 0x18, 0x10,
-	0x27, 0x25, 0xf4, 0xd8, 0x85, 0x10, 0xfd, 0x21, 0x59, 0x1a, 0xe8, 0xd6, 0x85, 0x97, 0xea, 0xd6,
-	0xa9, 0xff, 0x0e, 0x81, 0xff, 0xce, 0xbf, 0x07, 0xc9, 0x01, 0xee, 0xb7, 0x48, 0x65, 0x29, 0xd2,
-	0x06, 0x39, 0x17, 0x23, 0x4a, 0xbe, 0xe7, 0x8f, 0x98, 0x26, 0xb3, 0xdc, 0x86, 0x28, 0xb3, 0x08,
-	0x4f, 0x5b, 0x78, 0xe1, 0xe6, 0xb3, 0x16, 0xd3, 0x5d, 0x99, 0xd6, 0xf5, 0x88, 0xde, 0x23, 0x21,
-	0x86, 0xff, 0x0e, 0x24, 0xf8, 0x89, 0x30, 0xd3, 0xc8, 0xb4, 0xa9, 0x97, 0xe6, 0xb1, 0x3d, 0xa6,
-	0x76, 0x3c, 0xc3, 0x64, 0x15, 0xc6, 0x36, 0x44, 0x59, 0xa1, 0x12, 0x5c, 0x15, 0xf9, 0xe8, 0xb5,
-	0xba, 0xe5, 0x02, 0xe2, 0x66, 0xbd, 0xe9, 0x43, 0x90, 0xaa, 0x87, 0x5f, 0x40, 0x9c, 0x5d, 0x14,
-	0x71, 0xb0, 0x21, 0x09, 0x89, 0xe9, 0x30, 0xa6, 0xe1, 0x48, 0xe0, 0xcb, 0xd4, 0x33, 0x98, 0x5d,
-	0x21, 0xfc, 0x12, 0x56, 0x79, 0x05, 0xc2, 0xee, 0xc9, 0xeb, 0x8b, 0x1a, 0xa4, 0xc5, 0xee, 0x90,
-	0x00, 0xf2, 0xb2, 0x83, 0xad, 0xf6, 0x14, 0xe6, 0x95, 0x01, 0x37, 0xeb, 0xbe, 0x16, 0xc1, 0xab,
-	0x02, 0xd0, 0xbb, 0x13, 0x93, 0x7c, 0x79, 0x41, 0xef, 0x53, 0x9e, 0xdc, 0xce, 0xb7, 0xe1, 0xff,
-	0x67, 0x1f, 0x33, 0xd8, 0xb0, 0x5c, 0x0d, 0x36, 0x2c, 0xd7, 0x82, 0x0d, 0xcb, 0xf5, 0x89, 0x86,
-	0x65, 0x6c, 0x46, 0xc3, 0x12, 0xa6, 0x1b, 0x96, 0xf1, 0x60, 0xc3, 0x32, 0x11, 0x6c, 0x58, 0x26,
-	0x27, 0x1b, 0x96, 0xa9, 0x89, 0xe6, 0x64, 0x7a, 0x41, 0xd3, 0x50, 0x59, 0xd8, 0x34, 0xcc, 0x04,
-	0xdb, 0x7c, 0x68, 0xe7, 0xf9, 0x1a, 0x44, 0xb5, 0x4b, 0x92, 0x79, 0xbe, 0x1d, 0x68, 0xe1, 0xbd,
-	0x3c, 0x87, 0xdb, 0xa8, 0xae, 0xdc, 0xbf, 0x7b, 0x1f, 0xc0, 0x19, 0x3e, 0x71, 0x9a, 0x76, 0xe7,
-	0x09, 0x6e, 0xf1, 0x5a, 0xe0, 0xfe, 0x42, 0x63, 0xc3, 0x53, 0x47, 0x65, 0x00, 0x12, 0xc2, 0x0d,
-	0xb3, 0xd5, 0xa2, 0x0f, 0xf2, 0xa2, 0xdf, 0xf0, 0xb9, 0x67, 0xd3, 0x79, 0x9a, 0x27, 0xda, 0x2c,
-	0x2f, 0xf7, 0x86, 0xa8, 0x0a, 0x09, 0x0a, 0xc5, 0x7e, 0x0f, 0x6d, 0xf1, 0xe7, 0x7b, 0xf7, 0x4a,
-	0x30, 0xf6, 0xb3, 0x43, 0x8b, 0xfd, 0x1c, 0x27, 0x09, 0x50, 0x05, 0xe2, 0x8c, 0x3f, 0xd9, 0xe4,
-	0xa2, 0x4b, 0xac, 0x8c, 0xf2, 0x28, 0x9b, 0x1d, 0x6d, 0x40, 0xf8, 0x63, 0xa4, 0x43, 0x92, 0xa1,
-	0xb1, 0x9f, 0x0c, 0x5b, 0x57, 0xfc, 0xe4, 0x2e, 0xe1, 0xb1, 0x26, 0x7f, 0x8b, 0x95, 0x4c, 0xb2,
-	0x44, 0x3d, 0x03, 0x08, 0xec, 0xa5, 0xd4, 0x13, 0x0b, 0xdd, 0xa4, 0x27, 0xa6, 0xbe, 0x01, 0xd2,
-	0xc6, 0xe6, 0x20, 0x42, 0x36, 0x96, 0xc7, 0xec, 0x34, 0x99, 0xab, 0x7f, 0x0c, 0x41, 0x60, 0xe3,
-	0x3e, 0x80, 0x84, 0x94, 0xbf, 0xb5, 0x26, 0x8a, 0x71, 0x3f, 0x4d, 0x2b, 0xf9, 0x5c, 0x29, 0x09,
-	0xd1, 0x7d, 0x8f, 0x25, 0xd8, 0xab, 0x95, 0x91, 0x3c, 0xca, 0xac, 0x80, 0x5e, 0x85, 0x28, 0x5b,
-	0x2c, 0x49, 0xe4, 0x52, 0x5e, 0x95, 0x24, 0xf4, 0x30, 0xaf, 0x83, 0x75, 0x90, 0xcf, 0xa1, 0x04,
-	0x51, 0x7a, 0x0e, 0x7c, 0x56, 0x3f, 0xb0, 0x5e, 0xcb, 0x43, 0xe0, 0x24, 0x7e, 0xc0, 0x2f, 0x63,
-	0x3b, 0x9d, 0x39, 0x94, 0xe6, 0xfd, 0xe6, 0x50, 0x52, 0x42, 0x64, 0x4c, 0x18, 0xa2, 0x91, 0x2f,
-	0x95, 0xb4, 0x92, 0x12, 0x46, 0x0a, 0x24, 0xe8, 0x98, 0xb5, 0xfd, 0x4b, 0x8c, 0xd4, 0x28, 0xf5,
-	0x70, 0x95, 0x08, 0xe1, 0x1a, 0x26, 0x60, 0xed, 0xfa, 0x92, 0x12, 0x2d, 0xbc, 0xf5, 0xcd, 0xf3,
-	0xad, 0xd0, 0xb7, 0xcf, 0xb7, 0x6e, 0x7d, 0xff, 0x7c, 0x2b, 0xf4, 0xfb, 0xf1, 0x56, 0xe8, 0xcf,
-	0xe3, 0xad, 0xd0, 0xd7, 0xe3, 0xad, 0xd0, 0x37, 0xe3, 0xad, 0xd0, 0x7f, 0xc6, 0x5b, 0xa1, 0xff,
-	0x8e, 0xb7, 0x42, 0xdf, 0x8f, 0xb7, 0x6e, 0xfd, 0xe1, 0xbb, 0xad, 0x5b, 0x9f, 0xad, 0xb2, 0x2d,
-	0xf8, 0x5f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x59, 0x27, 0x87, 0x93, 0xc7, 0x24, 0x00, 0x00,
+	// 2757 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xbc, 0x59, 0x4b, 0x73, 0x1b, 0xc7,
+	0xf1, 0x17, 0x40, 0x80, 0x24, 0x1a, 0xaf, 0xc5, 0x90, 0xa2, 0xe0, 0x95, 0x0c, 0xc8, 0xd4, 0xdf,
+	0x36, 0x6d, 0x97, 0xc8, 0xbf, 0x58, 0x76, 0xaa, 0x1c, 0x97, 0x2d, 0xe3, 0xb1, 0x24, 0x61, 0x81,
+	0x80, 0xb4, 0x0b, 0x50, 0x71, 0x0e, 0x41, 0xad, 0x80, 0x21, 0x88, 0x18, 0xc0, 0xc2, 0xbb, 0x0b,
+	0x3a, 0xca, 0x29, 0x97, 0xdc, 0xf3, 0x25, 0x52, 0x95, 0x7b, 0xae, 0x39, 0xe4, 0x90, 0x83, 0x8f,
+	0xce, 0xcd, 0x95, 0x03, 0x2a, 0x46, 0x72, 0x70, 0x6e, 0xae, 0x7c, 0x82, 0xd4, 0xbc, 0x76, 0x67,
+	0xf1, 0x12, 0x45, 0x25, 0xbe, 0x48, 0x9c, 0x9e, 0xee, 0x5f, 0xcf, 0xce, 0x4c, 0xff, 0xa6, 0xbb,
+	0x01, 0x77, 0xac, 0x11, 0xb6, 0x4d, 0xd7, 0xb2, 0x0f, 0x06, 0xa6, 0xe3, 0x62, 0xf1, 0xdf, 0xfe,
+	0xc8, 0xb6, 0x5c, 0x0b, 0xa5, 0x07, 0xd8, 0xb1, 0x9c, 0xfd, 0xcb, 0x07, 0xfb, 0x4c, 0xac, 0x3e,
+	0xe8, 0xf6, 0xdc, 0x8b, 0xf1, 0xb3, 0xfd, 0xb6, 0x35, 0x38, 0xb0, 0x86, 0x1d, 0x1b, 0xff, 0xf2,
+	0xbe, 0x33, 0xb0, 0xfa, 0xe6, 0x01, 0x55, 0xbc, 0xdf, 0xb5, 0xee, 0x5f, 0xb8, 0xee, 0x88, 0x8d,
+	0x18, 0x86, 0xfa, 0xe9, 0xd5, 0x4c, 0xbc, 0x75, 0x7c, 0x39, 0xb6, 0x5c, 0x93, 0xfd, 0xcb, 0x11,
+	0xaa, 0x2f, 0x89, 0x30, 0x30, 0x7b, 0x43, 0x17, 0x0f, 0xcd, 0x61, 0x1b, 0xcb, 0x7f, 0x73, 0xb4,
+	0xfb, 0x12, 0x5a, 0xd7, 0xea, 0x5a, 0x07, 0x54, 0xfc, 0x6c, 0x7c, 0x4e, 0x47, 0x74, 0x40, 0xff,
+	0x62, 0xea, 0xbb, 0xff, 0xda, 0x81, 0x48, 0xc9, 0xec, 0xf7, 0xd1, 0x3e, 0x44, 0xdc, 0xe7, 0x23,
+	0x9c, 0x0d, 0xdd, 0x0d, 0xed, 0xa5, 0x0e, 0xd5, 0xfd, 0x99, 0xad, 0xd9, 0x27, 0x4a, 0xfb, 0x8d,
+	0xe7, 0x23, 0x5c, 0x8c, 0x7c, 0x3d, 0xc9, 0xdf, 0x40, 0x1a, 0xc4, 0xbb, 0xd8, 0x6d, 0x0d, 0xb0,
+	0x6b, 0xf7, 0xda, 0x4e, 0x36, 0x7c, 0x37, 0xb4, 0x17, 0x3f, 0xbc, 0xbb, 0xd8, 0xec, 0x18, 0xbb,
+	0xa7, 0x4c, 0xaf, 0x98, 0x9a, 0x4e, 0xf2, 0xe0, 0x8f, 0x51, 0x13, 0x32, 0x0e, 0x76, 0x5b, 0x7d,
+	0xab, 0xdb, 0xed, 0x0d, 0xbb, 0xad, 0x3e, 0xbe, 0xc4, 0xfd, 0xec, 0x1a, 0x05, 0x7b, 0x73, 0x31,
+	0x98, 0x81, 0xdd, 0x2a, 0xd3, 0xae, 0x12, 0xe5, 0xe2, 0xd6, 0x74, 0x92, 0x4f, 0xcf, 0x08, 0x51,
+	0x11, 0xa0, 0xdf, 0x73, 0xdc, 0xd6, 0x79, 0xaf, 0x8f, 0x9d, 0x6c, 0x84, 0xe2, 0xe5, 0x17, 0xe3,
+	0x55, 0x7b, 0x8e, 0x7b, 0x44, 0xd4, 0x8a, 0xc9, 0xe9, 0x24, 0x1f, 0xf3, 0x86, 0xe8, 0x21, 0xc4,
+	0x6c, 0x6c, 0x76, 0x28, 0x46, 0x36, 0x4a, 0x21, 0x72, 0x8b, 0x21, 0x74, 0x6c, 0x76, 0x88, 0x4d,
+	0x31, 0x31, 0x9d, 0xe4, 0x37, 0xc5, 0x08, 0xd5, 0x20, 0x35, 0x1e, 0x75, 0x4c, 0x17, 0xb7, 0xbe,
+	0xc2, 0xbd, 0xee, 0x85, 0xeb, 0x64, 0xd7, 0x29, 0xca, 0xbd, 0xc5, 0x28, 0x4d, 0xaa, 0xfb, 0x94,
+	0xa9, 0x16, 0x33, 0xd3, 0x49, 0x3e, 0x19, 0x10, 0xa1, 0xa7, 0x90, 0xb1, 0xb1, 0x83, 0xed, 0x4b,
+	0xdc, 0xb2, 0xb1, 0x63, 0x8d, 0xed, 0x36, 0x76, 0xb2, 0x1b, 0x14, 0xf2, 0xad, 0x65, 0x0b, 0xa3,
+	0xea, 0xba, 0xd0, 0x2e, 0x6e, 0x4f, 0x27, 0x79, 0x65, 0x56, 0x8a, 0x7e, 0x01, 0x5b, 0xe3, 0xe1,
+	0x3c, 0xf4, 0x26, 0x85, 0xde, 0x5b, 0xb2, 0x5a, 0x61, 0xe0, 0x83, 0xdf, 0x9a, 0x4e, 0xf2, 0x5b,
+	0x9e, 0xdc, 0xf6, 0xf1, 0x6b, 0x90, 0x6a, 0xdb, 0x98, 0x6c, 0xc4, 0xa5, 0xd5, 0x1f, 0x0f, 0xb0,
+	0x93, 0x8d, 0xad, 0xda, 0x88, 0x12, 0xd5, 0x3d, 0x63, 0xaa, 0x6c, 0x23, 0x02, 0x22, 0xf4, 0x04,
+	0xd2, 0x1d, 0xec, 0xb8, 0xb6, 0xf5, 0xdc, 0x03, 0x04, 0x0a, 0xf8, 0x7f, 0x8b, 0x01, 0xcb, 0x4c,
+	0x59, 0x20, 0xa2, 0xe9, 0x24, 0x9f, 0x0a, 0xca, 0x90, 0x03, 0xb7, 0xf9, 0x59, 0x49, 0x21, 0xd5,
+	0x72, 0xda, 0x17, 0xb8, 0x33, 0xee, 0xe3, 0x6c, 0x9c, 0xc2, 0x1f, 0xac, 0x3a, 0xb8, 0x53, 0xdf,
+	0xce, 0xe0, 0x66, 0xc5, 0xd7, 0xa7, 0x93, 0xfc, 0x6b, 0x4b, 0xa7, 0xc9, 0x81, 0x3a, 0xae, 0x69,
+	0xbb, 0xb2, 0xcf, 0x6c, 0x62, 0xd5, 0x81, 0x1a, 0x44, 0x5d, 0x82, 0x62, 0x07, 0x3a, 0x2b, 0x45,
+	0x0d, 0x50, 0x1c, 0xd7, 0x1a, 0x05, 0x70, 0x93, 0x2b, 0x83, 0xca, 0xb5, 0x46, 0x32, 0x2c, 0x0b,
+	0xaa, 0xa0, 0x90, 0x04, 0x04, 0x89, 0x55, 0xca, 0x5d, 0xd9, 0xd4, 0xaa, 0x80, 0x30, 0xb0, 0xfb,
+	0x84, 0x68, 0xb1, 0x80, 0x10, 0x23, 0x74, 0x02, 0x09, 0x1b, 0x0f, 0xac, 0x4b, 0xcc, 0x31, 0xd2,
+	0x14, 0xe3, 0x8d, 0x65, 0x77, 0x97, 0x68, 0x32, 0x98, 0xf4, 0x74, 0x92, 0x8f, 0x4b, 0x02, 0xf5,
+	0x03, 0x90, 0x49, 0xe4, 0x6d, 0xd8, 0x70, 0x7b, 0x03, 0x6c, 0x8d, 0x5d, 0x4a, 0x5f, 0xf1, 0xc3,
+	0x1d, 0x1f, 0xb2, 0x3c, 0xb6, 0x4d, 0xb7, 0x67, 0x0d, 0x2b, 0xc3, 0x73, 0x4b, 0x7d, 0x0c, 0x73,
+	0x4c, 0xb1, 0x05, 0x51, 0x46, 0x3a, 0xa1, 0xbb, 0xe1, 0xbd, 0x24, 0x27, 0xb7, 0x3d, 0xd8, 0xec,
+	0x70, 0xbb, 0x6c, 0xf8, 0x6e, 0x78, 0x05, 0x62, 0x1e, 0x24, 0xc6, 0x40, 0x10, 0x19, 0x99, 0xee,
+	0x05, 0x85, 0x8a, 0x31, 0x28, 0xf5, 0x33, 0xf0, 0x09, 0x61, 0xc1, 0x3c, 0xda, 0x86, 0x75, 0xeb,
+	0xfc, 0xdc, 0xc1, 0x2e, 0x75, 0x14, 0xf1, 0xa5, 0x7d, 0x3c, 0xec, 0xba, 0x17, 0x94, 0x0b, 0xb9,
+	0x54, 0xfd, 0x08, 0x66, 0x18, 0xe1, 0x5d, 0x48, 0x30, 0x6a, 0x69, 0xf5, 0x86, 0xe7, 0x96, 0x93,
+	0x0d, 0xdd, 0x5d, 0xdb, 0x8b, 0x1f, 0x6e, 0xfb, 0x6b, 0x65, 0x8a, 0x74, 0xa5, 0x63, 0x98, 0x0f,
+	0xfc, 0xf7, 0x61, 0xd3, 0xec, 0xe2, 0xa1, 0xdb, 0xea, 0x75, 0xe8, 0xa2, 0xe2, 0x87, 0x19, 0xdf,
+	0xb6, 0x40, 0x66, 0x2a, 0xe5, 0x62, 0x9a, 0xf8, 0x9e, 0x4e, 0xf2, 0x1b, 0x5c, 0x80, 0xde, 0x23,
+	0xc4, 0x28, 0x48, 0x22, 0x4c, 0x5d, 0x22, 0xdf, 0x4c, 0xa0, 0xf3, 0x35, 0x7f, 0x05, 0x68, 0x9e,
+	0x2a, 0x7e, 0x0c, 0xc7, 0x23, 0x98, 0x61, 0x8d, 0xeb, 0xf9, 0x7c, 0x07, 0x36, 0x04, 0xc7, 0xbc,
+	0xc8, 0xe3, 0x97, 0x30, 0xcb, 0x2a, 0xff, 0x73, 0x97, 0x06, 0xac, 0xa0, 0x97, 0x9f, 0xc0, 0xa6,
+	0x47, 0x60, 0xcc, 0x7b, 0x20, 0x5c, 0xfd, 0xcc, 0xc1, 0xe3, 0x2b, 0x06, 0xfa, 0x10, 0xe6, 0x19,
+	0xe5, 0x3d, 0xd8, 0x1c, 0x98, 0xed, 0x8b, 0xde, 0x10, 0x8b, 0x5b, 0xb6, 0xe5, 0x63, 0x9d, 0xb2,
+	0x99, 0x4a, 0x99, 0x03, 0x7c, 0x02, 0x73, 0xdc, 0xf1, 0x52, 0xf6, 0x4d, 0xf0, 0x39, 0xa3, 0x02,
+	0x49, 0x4a, 0x16, 0x2d, 0x1b, 0x7f, 0x39, 0xc6, 0x8e, 0xcb, 0xbf, 0xe4, 0x8e, 0x6f, 0xcd, 0x72,
+	0x29, 0xaa, 0xad, 0x33, 0x9d, 0xe2, 0x36, 0xdf, 0xd2, 0x84, 0x2c, 0x55, 0xdf, 0x00, 0x99, 0x43,
+	0x48, 0x34, 0xda, 0x16, 0xdf, 0x1a, 0x1e, 0x8d, 0xbb, 0x7f, 0x8b, 0x40, 0x84, 0x24, 0x39, 0x28,
+	0x0e, 0x1b, 0xcd, 0xda, 0xa3, 0x5a, 0xfd, 0x69, 0x4d, 0xb9, 0x81, 0x52, 0x00, 0xc7, 0x5a, 0xa3,
+	0x75, 0xa2, 0x15, 0xaa, 0x8d, 0x13, 0x25, 0x84, 0x92, 0x10, 0x23, 0xe3, 0xa3, 0x6a, 0xe1, 0xd8,
+	0x50, 0xc2, 0x28, 0x0d, 0x71, 0x32, 0x3c, 0xd3, 0x74, 0xa3, 0x52, 0xaf, 0x29, 0x6b, 0x42, 0x70,
+	0xaa, 0x35, 0xf4, 0x4a, 0xc9, 0x50, 0x22, 0xe8, 0x26, 0x64, 0x88, 0xa0, 0x5a, 0x3f, 0x3e, 0xae,
+	0xd4, 0x8e, 0x5b, 0x55, 0xed, 0x4c, 0xab, 0x2a, 0x51, 0x22, 0x36, 0xe6, 0xc4, 0xeb, 0xc4, 0x5d,
+	0xb5, 0x62, 0x34, 0x5a, 0x47, 0x95, 0xaa, 0x66, 0x28, 0x1b, 0xc4, 0x9d, 0xae, 0x15, 0xca, 0x74,
+	0xac, 0x6c, 0x0a, 0xef, 0x46, 0xa3, 0xd0, 0xd0, 0x94, 0x98, 0x58, 0x5c, 0xe1, 0x58, 0xab, 0x35,
+	0x0c, 0x05, 0x10, 0x82, 0x14, 0x5d, 0x9c, 0x5e, 0x38, 0xd5, 0x9e, 0xd6, 0xf5, 0x47, 0x86, 0x12,
+	0x47, 0x19, 0x48, 0x12, 0x99, 0xf6, 0x33, 0xad, 0xd4, 0x6c, 0xd4, 0x75, 0x43, 0x49, 0x08, 0x94,
+	0x46, 0xc1, 0x78, 0x64, 0x28, 0x49, 0x31, 0xd4, 0xeb, 0xc4, 0x65, 0x4a, 0x7c, 0xc1, 0x53, 0xad,
+	0x72, 0x7c, 0xd2, 0x30, 0x94, 0x34, 0x41, 0x6d, 0x3e, 0x2e, 0x17, 0x1a, 0x9a, 0x27, 0x53, 0x84,
+	0xe7, 0xd3, 0x82, 0xd1, 0xd0, 0x74, 0x25, 0x43, 0x30, 0x8c, 0x66, 0xd1, 0x28, 0xe9, 0x95, 0xa2,
+	0xa6, 0x20, 0xf2, 0x75, 0xba, 0x66, 0x68, 0xfa, 0x99, 0xd6, 0xd2, 0x35, 0xa3, 0xde, 0xd4, 0x4b,
+	0x9a, 0xa1, 0x6c, 0xa1, 0x5b, 0xb0, 0xd5, 0xac, 0xcd, 0x4f, 0x6c, 0x13, 0x17, 0x25, 0x5d, 0x23,
+	0x2e, 0xce, 0xea, 0xd5, 0xe6, 0xa9, 0x66, 0x28, 0x37, 0xd1, 0x16, 0xa4, 0xcb, 0x9a, 0xd1, 0xd0,
+	0xeb, 0x9f, 0x7b, 0xc2, 0x1d, 0xa4, 0xc2, 0x0e, 0xf3, 0x5b, 0xa9, 0x35, 0xb4, 0x5a, 0xa1, 0x56,
+	0xd2, 0xe8, 0x66, 0x34, 0x0d, 0xe5, 0x16, 0xba, 0x03, 0xd9, 0xb9, 0xb9, 0xd2, 0x89, 0x56, 0x6e,
+	0x56, 0x35, 0x25, 0x8b, 0xf2, 0x70, 0x9b, 0x7f, 0xc5, 0x42, 0x85, 0xd7, 0xe8, 0x89, 0x34, 0x0a,
+	0x7a, 0x00, 0x40, 0x51, 0xd1, 0x36, 0x28, 0x46, 0xa3, 0xfe, 0x38, 0x20, 0xbd, 0x2d, 0xf6, 0xec,
+	0x49, 0xb3, 0xde, 0x28, 0x28, 0x77, 0xe8, 0xe7, 0x7b, 0xc3, 0xd7, 0x91, 0x02, 0x09, 0x5d, 0x3b,
+	0xad, 0x9f, 0x69, 0x5c, 0x92, 0xdb, 0x9d, 0xbc, 0x45, 0xde, 0x02, 0x67, 0x64, 0x0d, 0x1d, 0x8c,
+	0x0e, 0x03, 0xf9, 0xf6, 0xfc, 0x3b, 0x2a, 0x14, 0xe5, 0x9c, 0xfb, 0x08, 0x80, 0xe4, 0xdc, 0x17,
+	0xd8, 0xec, 0xbb, 0x17, 0x3c, 0xe5, 0xbe, 0xb7, 0xdc, 0xf2, 0x18, 0xbb, 0x27, 0x54, 0x95, 0x65,
+	0xb6, 0xde, 0x10, 0x95, 0x20, 0x46, 0x70, 0xce, 0xfb, 0x66, 0xd7, 0xe1, 0xc9, 0xf6, 0xee, 0x4a,
+	0x98, 0x23, 0xa2, 0xc9, 0x1e, 0x73, 0x31, 0x42, 0x15, 0x56, 0x00, 0x5c, 0x62, 0xdb, 0x21, 0xcf,
+	0x64, 0x64, 0x49, 0x02, 0x26, 0xc3, 0x9c, 0x31, 0x5d, 0xaf, 0x08, 0xe0, 0x63, 0x01, 0x25, 0x6a,
+	0x89, 0xe8, 0x15, 0xa0, 0x96, 0xd5, 0x13, 0x9f, 0x43, 0xa6, 0x3b, 0x57, 0x4f, 0xb0, 0xb4, 0xfb,
+	0x9d, 0x95, 0x80, 0xf3, 0x35, 0xc5, 0x8c, 0x90, 0xec, 0xbe, 0x54, 0x53, 0x6c, 0xbc, 0x68, 0xf7,
+	0x97, 0xd6, 0x15, 0x25, 0xb9, 0xae, 0xd8, 0x7c, 0xd1, 0xee, 0x2f, 0xa9, 0x2d, 0xf8, 0x11, 0x3a,
+	0xae, 0xe9, 0x62, 0x9e, 0x4d, 0xaf, 0x3e, 0x42, 0x83, 0x68, 0x7a, 0x47, 0x48, 0x47, 0xe2, 0x3e,
+	0xd1, 0x27, 0x4a, 0xa4, 0xd0, 0xab, 0xef, 0x13, 0x7d, 0xa2, 0x1c, 0xef, 0x3e, 0xb1, 0x21, 0xd2,
+	0x21, 0x45, 0xef, 0x93, 0x6d, 0x0e, 0xf0, 0x57, 0x96, 0xfd, 0x85, 0xc3, 0xf3, 0xe5, 0xb7, 0x57,
+	0x5f, 0x2a, 0x4f, 0x9d, 0xe5, 0xf8, 0x01, 0x11, 0xaa, 0x43, 0x92, 0x60, 0xe2, 0x5f, 0xe1, 0xf6,
+	0xd8, 0xb5, 0x6c, 0x67, 0x69, 0x5e, 0x2c, 0x43, 0x6a, 0x42, 0xbb, 0xa8, 0x10, 0xf6, 0x97, 0x25,
+	0x62, 0xc7, 0x5c, 0xd3, 0xf9, 0xc2, 0xe1, 0xc9, 0xf0, 0xea, 0x1d, 0x6b, 0x10, 0x4d, 0x6f, 0xc7,
+	0xe8, 0x48, 0x80, 0x90, 0x77, 0xc3, 0xe1, 0x29, 0xf0, 0x6a, 0x10, 0x9d, 0x68, 0x7a, 0x20, 0x74,
+	0x24, 0xae, 0xbb, 0x28, 0x0a, 0xd3, 0x57, 0xb8, 0xee, 0xa2, 0x2a, 0x14, 0xd7, 0x5d, 0x24, 0x80,
+	0xfc, 0x04, 0x99, 0x45, 0x56, 0xb9, 0xc2, 0x09, 0x9e, 0x52, 0x91, 0x77, 0x82, 0x6c, 0x88, 0x2e,
+	0x60, 0x87, 0xe1, 0x48, 0xb5, 0x8f, 0x6b, 0xba, 0x63, 0x27, 0x9b, 0xa1, 0x98, 0xfb, 0x2f, 0xc0,
+	0xf4, 0x93, 0x0f, 0x6a, 0x55, 0xcc, 0x4e, 0x27, 0xf9, 0xed, 0x45, 0x33, 0x68, 0x08, 0xd9, 0x39,
+	0x4f, 0x22, 0x49, 0x41, 0xd4, 0xd7, 0xff, 0x5f, 0xd9, 0x97, 0x48, 0x5b, 0xd4, 0xe9, 0x24, 0xbf,
+	0xb3, 0x78, 0x4e, 0x9c, 0x18, 0x2b, 0x38, 0xb6, 0xae, 0x70, 0x62, 0x52, 0xe1, 0x22, 0x46, 0xea,
+	0x2e, 0x48, 0xec, 0x79, 0x13, 0x36, 0x18, 0x03, 0x3f, 0xa7, 0xa9, 0xc3, 0x26, 0x4f, 0x5a, 0x0e,
+	0xc0, 0xe7, 0xc6, 0x7b, 0x10, 0x65, 0xe4, 0xca, 0x52, 0x9d, 0x94, 0xef, 0x90, 0xcc, 0x73, 0x83,
+	0x1a, 0xc8, 0x1c, 0xf8, 0x29, 0x24, 0x38, 0x95, 0xd2, 0x5c, 0x9e, 0xa7, 0x39, 0x37, 0x7d, 0x4b,
+	0xae, 0x48, 0x72, 0xf9, 0xe2, 0x16, 0xcf, 0x6f, 0xe2, 0x92, 0x70, 0xbe, 0x26, 0x12, 0x7c, 0xca,
+	0x16, 0xa1, 0x48, 0xf9, 0x16, 0x9d, 0xe0, 0xcb, 0x78, 0x0b, 0xe6, 0x98, 0x6e, 0x51, 0x4d, 0xa4,
+	0x1e, 0xc9, 0x95, 0xce, 0x87, 0x00, 0x84, 0xbe, 0x02, 0x65, 0x87, 0x94, 0xa5, 0x12, 0x25, 0xba,
+	0xd0, 0x0c, 0x5f, 0x68, 0x4c, 0x48, 0x1c, 0xf5, 0x30, 0x58, 0x10, 0x39, 0xbd, 0x5f, 0xb3, 0x14,
+	0x4c, 0x94, 0x3e, 0x08, 0x22, 0x1d, 0xd3, 0x35, 0x69, 0x39, 0x94, 0xa0, 0xb2, 0x90, 0xfa, 0xa7,
+	0x30, 0xf8, 0xac, 0x15, 0x08, 0xe4, 0xd0, 0x35, 0x03, 0x79, 0x8e, 0x5e, 0xc2, 0xaf, 0x48, 0x2f,
+	0xf3, 0x1c, 0xb8, 0xf6, 0xca, 0x1c, 0x18, 0xe4, 0xe7, 0xc8, 0x75, 0xf9, 0x59, 0xfd, 0x63, 0x04,
+	0x24, 0xb6, 0x7e, 0x08, 0xeb, 0x1c, 0x91, 0x9d, 0xdb, 0x3b, 0x57, 0x40, 0x64, 0xc5, 0x0a, 0xbf,
+	0x09, 0xff, 0x5c, 0x83, 0x28, 0x1d, 0xa3, 0x9f, 0x02, 0xf0, 0xfa, 0xc6, 0xbf, 0xb2, 0x5b, 0xb3,
+	0x15, 0x4e, 0xe0, 0x1e, 0x78, 0x22, 0x52, 0xe2, 0x9a, 0x6d, 0xb7, 0x77, 0x89, 0xe9, 0x49, 0xf3,
+	0x28, 0x22, 0xc1, 0x25, 0x32, 0x8a, 0x35, 0xa9, 0x4a, 0xce, 0xc0, 0xda, 0xa8, 0xd7, 0xa1, 0x5b,
+	0x20, 0x44, 0x0f, 0x21, 0x6d, 0xe3, 0x6e, 0x8f, 0x2c, 0x18, 0x77, 0x5a, 0xa4, 0xfe, 0xe7, 0x89,
+	0x83, 0x74, 0x0f, 0x1b, 0xbd, 0x01, 0xbb, 0x87, 0xb4, 0xe5, 0xa3, 0x7b, 0xea, 0x44, 0x8e, 0x4a,
+	0x90, 0xb1, 0xf1, 0x2c, 0xc4, 0xfa, 0x52, 0x08, 0xde, 0x3a, 0xb3, 0x67, 0x41, 0xd2, 0xae, 0xe5,
+	0x9a, 0xfd, 0x40, 0x47, 0x6e, 0x59, 0xcd, 0xb6, 0xc3, 0x77, 0x21, 0xd5, 0x20, 0x26, 0x7e, 0x35,
+	0xfc, 0x08, 0xb6, 0xcc, 0x7e, 0xdf, 0x6a, 0x9b, 0x2e, 0xee, 0x04, 0xfa, 0x6f, 0xcb, 0x80, 0x54,
+	0x0e, 0x84, 0x0a, 0xc2, 0xcc, 0x07, 0x3b, 0x86, 0x8c, 0x75, 0x7e, 0x4e, 0xbf, 0xc8, 0x87, 0x8a,
+	0x2d, 0x85, 0xca, 0x72, 0x28, 0xa5, 0xce, 0x8c, 0x3c, 0x20, 0xf5, 0xdf, 0xeb, 0x30, 0x73, 0x1f,
+	0x1f, 0x01, 0x48, 0xf7, 0x9b, 0xdd, 0x9e, 0x07, 0x57, 0xbc, 0xdf, 0xfb, 0xde, 0x9f, 0xfc, 0xfc,
+	0xfa, 0xb0, 0xdd, 0xb6, 0x06, 0xa3, 0x3e, 0x26, 0x1f, 0x2d, 0xc1, 0x86, 0xaf, 0x0b, 0x7b, 0x9b,
+	0x7f, 0xc9, 0x56, 0x49, 0xc0, 0x4a, 0x4b, 0xd7, 0x61, 0xdb, 0xc6, 0x6d, 0xeb, 0x92, 0xee, 0x4b,
+	0x20, 0x48, 0x89, 0xb7, 0x5b, 0x12, 0x75, 0x89, 0x39, 0x7a, 0xe8, 0x1e, 0xa6, 0x2e, 0x8c, 0x7d,
+	0x4c, 0xf5, 0xaf, 0x11, 0x88, 0x79, 0x43, 0x74, 0x04, 0x29, 0x0f, 0x57, 0x8e, 0x87, 0xa5, 0xd8,
+	0x37, 0x39, 0x76, 0x32, 0x20, 0x5e, 0x12, 0x17, 0xb7, 0x20, 0xd6, 0xb6, 0x86, 0x43, 0xdc, 0x76,
+	0x71, 0x87, 0x46, 0xc6, 0xe6, 0xf2, 0x30, 0x88, 0xbc, 0x7a, 0x18, 0x44, 0x5f, 0x3a, 0x0c, 0x32,
+	0xe3, 0xe1, 0x4b, 0xc6, 0x52, 0x73, 0x38, 0x03, 0xf2, 0x26, 0x6d, 0x85, 0x61, 0x5b, 0x84, 0x50,
+	0xda, 0xb7, 0xa4, 0x97, 0xd3, 0xfb, 0xe5, 0x21, 0xd5, 0x1b, 0x12, 0x92, 0xc0, 0x2d, 0xae, 0xce,
+	0x02, 0x45, 0x6a, 0xd1, 0x55, 0xd8, 0x3c, 0xb3, 0xf2, 0xf6, 0x59, 0x96, 0x2e, 0x0d, 0xba, 0xd8,
+	0x7f, 0x2f, 0xe8, 0xe0, 0x1a, 0x41, 0xf7, 0x97, 0x30, 0x04, 0xdf, 0x95, 0x13, 0x88, 0xf9, 0x8f,
+	0x14, 0x0b, 0xb9, 0x83, 0xab, 0x3d, 0x52, 0xfb, 0xe2, 0x2f, 0xbe, 0x6f, 0xcf, 0x40, 0xb1, 0xec,
+	0xd1, 0x85, 0x39, 0x0c, 0xbc, 0x7a, 0xd7, 0x02, 0xbc, 0xc5, 0xd7, 0x9f, 0xae, 0x53, 0x40, 0x4f,
+	0x43, 0xfd, 0x6d, 0x08, 0x36, 0xc5, 0x08, 0x95, 0x20, 0x29, 0x3c, 0xc9, 0x01, 0x21, 0x9d, 0x93,
+	0x50, 0x65, 0x97, 0x42, 0x34, 0x6d, 0x64, 0x69, 0xa0, 0x85, 0x16, 0xbe, 0x6a, 0x0b, 0x4d, 0xfd,
+	0x3e, 0x04, 0xfe, 0x5b, 0xff, 0x11, 0x24, 0x47, 0x78, 0xd8, 0x21, 0xf5, 0xa0, 0x48, 0x1a, 0x66,
+	0xb2, 0x32, 0xa2, 0xe7, 0xfb, 0x7f, 0xcc, 0x94, 0x99, 0xf1, 0x3d, 0x88, 0x32, 0xa3, 0xf0, 0x42,
+	0x23, 0x2f, 0x08, 0x7d, 0x2e, 0x63, 0xea, 0x6b, 0x0b, 0xd5, 0xbd, 0x17, 0xc0, 0xe3, 0x28, 0xe6,
+	0xe5, 0x43, 0x48, 0xf0, 0xb3, 0x61, 0xd6, 0x91, 0x85, 0xd6, 0x5e, 0xda, 0xc7, 0xb6, 0x9d, 0x9a,
+	0xf2, 0xbc, 0x93, 0x55, 0x16, 0xf7, 0x20, 0xca, 0x4a, 0x93, 0xb9, 0x2f, 0x24, 0xf3, 0xfc, 0xf9,
+	0x3e, 0x05, 0xb9, 0x82, 0x78, 0x78, 0xf5, 0x16, 0xb2, 0xef, 0xdf, 0x97, 0x39, 0xea, 0x67, 0x20,
+	0xd5, 0x11, 0x1f, 0x43, 0x9c, 0xdd, 0x20, 0x71, 0xe0, 0xa1, 0x20, 0x18, 0x53, 0x63, 0x5c, 0xc4,
+	0xc1, 0xc0, 0x97, 0xa9, 0x4f, 0x60, 0x71, 0xd1, 0xf0, 0x21, 0xac, 0xf3, 0x72, 0x84, 0x5d, 0xa1,
+	0x7b, 0x8b, 0xfb, 0x98, 0xa5, 0xfe, 0x98, 0x40, 0xf1, 0x1a, 0x84, 0x7d, 0xed, 0x63, 0x58, 0x56,
+	0x19, 0x5c, 0xb7, 0x3d, 0xfa, 0x31, 0x78, 0x85, 0x01, 0x7a, 0x30, 0xb3, 0xb0, 0xdb, 0x0b, 0xdb,
+	0x92, 0xf2, 0x82, 0x76, 0xbf, 0x0d, 0xff, 0x98, 0x2d, 0xc6, 0x60, 0x2f, 0x71, 0x3d, 0xd8, 0x4b,
+	0xdc, 0x08, 0xf6, 0x12, 0x37, 0x67, 0x7a, 0x89, 0xb1, 0x05, 0xbd, 0x44, 0x98, 0xef, 0x25, 0xc6,
+	0x83, 0xbd, 0xc4, 0x44, 0xb0, 0x97, 0x98, 0x9c, 0xed, 0x25, 0xa6, 0x66, 0xfa, 0x86, 0xe9, 0x15,
+	0xfd, 0x3c, 0x65, 0x65, 0x3f, 0x2f, 0x13, 0xec, 0xc0, 0xa1, 0xdd, 0x3f, 0x6f, 0x40, 0x54, 0xbb,
+	0x24, 0x89, 0xe9, 0x41, 0xa0, 0xbb, 0x76, 0x7b, 0x8e, 0xdf, 0xa8, 0x96, 0xdc, 0x5a, 0xfb, 0x00,
+	0xc0, 0x19, 0x3f, 0x73, 0xda, 0x76, 0xef, 0x19, 0xee, 0xf0, 0x62, 0xe0, 0x8d, 0x25, 0x66, 0x86,
+	0xa7, 0x88, 0x4a, 0x00, 0x24, 0x60, 0x5b, 0x66, 0xa7, 0x43, 0xdf, 0xe5, 0xc5, 0x3f, 0x82, 0x73,
+	0x6f, 0xa6, 0xf3, 0x45, 0x81, 0xe8, 0xb1, 0xf4, 0xdc, 0x1b, 0xa2, 0x0a, 0x24, 0x28, 0x08, 0xfb,
+	0x01, 0xb2, 0xc3, 0xdf, 0xef, 0xdd, 0x15, 0x30, 0xac, 0xe7, 0xdf, 0x61, 0xbf, 0x8b, 0x49, 0x02,
+	0x74, 0x04, 0x71, 0xc6, 0x96, 0x6c, 0x41, 0xd1, 0x95, 0xdf, 0x41, 0xc9, 0x92, 0xad, 0x88, 0xf6,
+	0x15, 0xfc, 0x31, 0xaa, 0x42, 0x92, 0xe1, 0xb0, 0xdf, 0xeb, 0x3a, 0x4b, 0x7f, 0xb9, 0x96, 0x90,
+	0x58, 0x6f, 0xbd, 0xc3, 0x6a, 0x23, 0x59, 0xa2, 0x3e, 0x01, 0x08, 0xec, 0x99, 0xd4, 0xba, 0x0a,
+	0x5d, 0xaf, 0x75, 0xa5, 0x1e, 0x80, 0xb4, 0x81, 0xbb, 0x10, 0x21, 0x1b, 0xc8, 0x63, 0x70, 0x21,
+	0x45, 0xab, 0xbf, 0x0f, 0x41, 0x60, 0xa7, 0x3e, 0x85, 0x84, 0x94, 0xae, 0x75, 0xe6, 0xeb, 0x6d,
+	0x3f, 0x2b, 0x2b, 0xfb, 0xc4, 0x27, 0x09, 0xd1, 0xbb, 0x5e, 0xec, 0xb3, 0x77, 0x69, 0x3b, 0xe8,
+	0x57, 0x0e, 0x7a, 0xb4, 0x07, 0x51, 0xf6, 0xbd, 0x24, 0x75, 0x4b, 0xc9, 0x35, 0x92, 0x50, 0xc5,
+	0xbc, 0xd4, 0xad, 0x82, 0x7c, 0x0e, 0x9f, 0x40, 0x94, 0x9e, 0x03, 0x5f, 0xde, 0x4b, 0x97, 0x6a,
+	0x65, 0x08, 0x9c, 0xc4, 0xf5, 0x7e, 0x90, 0xda, 0xed, 0x2d, 0x61, 0x2c, 0xaf, 0xdb, 0x5f, 0x56,
+	0x42, 0x64, 0x4c, 0x08, 0xa0, 0x55, 0x28, 0x97, 0xb5, 0xb2, 0x12, 0x46, 0x0a, 0x24, 0xe8, 0x98,
+	0x35, 0xdc, 0xcb, 0x8c, 0xb3, 0x28, 0xb3, 0x70, 0x95, 0x08, 0xa1, 0x12, 0x26, 0x60, 0x8d, 0xf2,
+	0xb2, 0x12, 0x2d, 0xbe, 0xff, 0xcd, 0x77, 0xb9, 0xd0, 0xb7, 0xdf, 0xe5, 0x6e, 0xfc, 0xf0, 0x5d,
+	0x2e, 0xf4, 0x9b, 0x69, 0x2e, 0xf4, 0x87, 0x69, 0x2e, 0xf4, 0xf5, 0x34, 0x17, 0xfa, 0x66, 0x9a,
+	0x0b, 0xfd, 0x7d, 0x9a, 0x0b, 0x7d, 0x3f, 0xcd, 0x85, 0x7e, 0x98, 0xe6, 0x6e, 0xfc, 0xee, 0x1f,
+	0xb9, 0x1b, 0x3f, 0x5f, 0x67, 0xbb, 0xf0, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xa8, 0x57, 0x0c,
+	0x89, 0xe7, 0x23, 0x00, 0x00,
 }

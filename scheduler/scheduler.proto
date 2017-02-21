@@ -14,7 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mesos.scheduler;
+syntax = "proto2";
+
+package mesos.v1.scheduler;
 
 import "github.com/ondrej-smola/mesos-go-http/mesos.proto";
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
@@ -222,15 +224,6 @@ message Call {
     // See the comments below on 'framework_id' on the semantics for
     // 'framework_info.id'.
     required FrameworkInfo framework_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "FrameworkInfo"];
-
-    // NOTE: 'force' field is not present in v1/scheduler.proto because it is
-    // only used by the scheduler driver. The driver sets it to true when the
-    // scheduler re-registers for the first time after a failover. Once
-    // re-registered all subsequent re-registration attempts (e.g., due to ZK
-    // blip) will have 'force' set to false. This is important because master
-    // uses this field to know when it needs to send FrameworkRegisteredMessage
-    // vs FrameworkReregisteredMessage.
-    optional bool force = 2 [(gogoproto.nullable) = true];
   }
 
   // Accepts an offer, performing the specified operations
@@ -250,11 +243,10 @@ message Call {
   //     ]
   //   }
   //
-  // NOTE: Any of the offer’s resources not used in the `Accept` call
-  // (e.g., to launch a task) are considered unused and might be
-  // reoffered to other frameworks. In other words, the same `OfferID`
-  // cannot be used in more than one `Accept` call.
-  // NOTE: All offers must belong to the same agent.
+  // Note that any of the offer’s resources not used in the 'Accept'
+  // call (e.g., to launch a task) are considered unused and might be
+  // reoffered to other frameworks. In other words, the same OfferID
+  // cannot be used in more than one 'Accept' call.
   message Accept {
     repeated OfferID offer_ids = 1 [(gogoproto.nullable) = false,(gogoproto.customname) = "OfferIDs"];
     repeated Offer.Operation operations = 2  [(gogoproto.nullable) = false];
@@ -286,12 +278,19 @@ message Call {
     optional Filters filters = 2;
   }
 
+  // Revive offers for a specified role. If role is unset, the
+  // `REVIVE` call will revive offers for all of the roles the
+  // framework is subscribed to.
+  message Revive {
+    optional string role = 1;
+  }
+
   // Kills a specific task. If the scheduler has a custom executor,
   // the kill is forwarded to the executor and it is up to the
   // executor to kill the task and send a TASK_KILLED (or TASK_FAILED)
   // update. Note that Mesos releases the resources for a task once it
-  // receives a terminal update (See TaskState in mesos.proto) for it.
-  // If the task is unknown to the master, a TASK_LOST update is
+  // receives a terminal update (See TaskState in v1/mesos.proto) for
+  // it. If the task is unknown to the master, a TASK_LOST update is
   // generated.
   //
   // If a task within a task group is killed before the group is
@@ -336,9 +335,9 @@ message Call {
   // Allows the scheduler to query the status for non-terminal tasks.
   // This causes the master to send back the latest task status for
   // each task in 'tasks', if possible. Tasks that are no longer known
-  // will result in a TASK_LOST update. If 'statuses' is empty, then
-  // the master will send the latest status for each task currently
-  // known.
+  // will result in a TASK_LOST, TASK_UNKNOWN, or TASK_UNREACHABLE update.
+  // If 'tasks' is empty, then the master will send the latest status
+  // for each task currently known.
   message Reconcile {
    // TODO(vinod): Support arbitrary queries than just state of tasks.
     message Task {
@@ -365,7 +364,14 @@ message Call {
   // NOTE: The built-in hierarchical allocator doesn't have support
   // for this call and hence simply ignores it.
   message Request {
-    repeated mesos.Request requests = 1 [(gogoproto.nullable) = false];
+    repeated mesos.v1.Request requests = 1 [(gogoproto.nullable) = false];
+  }
+
+  // Suppress offers for a specified role. If role is unset, the
+  // `SUPPRESS` call will suppress offers for all of the roles the
+  // framework is subscribed to.
+  message Suppress {
+    optional string role = 1;
   }
 
   // Identifies who generated this call. Master assigns a framework id

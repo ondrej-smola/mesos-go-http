@@ -14,7 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package mesos;
+package mesos.v1;
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 option go_package = "mesos";
@@ -160,7 +160,7 @@ message Unavailability {
 /**
  * Represents a single machine, which may hold one or more agents.
  *
- * NOTE: In order to match a agent to a machine, both the `hostname` and
+ * NOTE: In order to match an agent to a machine, both the `hostname` and
  * `ip` must match the values advertised by the agent to the master.
  * Hostname is not case-sensitive.
  */
@@ -321,7 +321,6 @@ message FrameworkInfo {
       // Mesos when the agent reregisters (unless the master has
       // failed over).
       PARTITION_AWARE = 5;
-
     }
 
     // Enum fields should be optional, see: MESOS-4997.
@@ -404,19 +403,19 @@ message HealthCheck {
   // encapsulates all the details in a single string field.
 
   // Amount of time to wait until starting the health checks.
-  optional double delay_seconds = 2 [default = 15.0];
+  optional double delay_seconds = 2 [default = 15.0, (gogoproto.customname) = "DelaySeconds"];
 
   // Interval between health checks.
-  optional double interval_seconds = 3 [default = 10.0];
+  optional double interval_seconds = 3 [default = 10.0, (gogoproto.customname) = "IntervalSeconds"];
 
   // Amount of time to wait for the health check to complete.
-  optional double timeout_seconds = 4 [default = 20.0];
+  optional double timeout_seconds = 4 [default = 20.0, (gogoproto.customname) = "TimeoutSeconds"];
 
   // Number of consecutive failures until signaling kill task.
-  optional uint32 consecutive_failures = 5 [default = 3];
+  optional uint32 consecutive_failures = 5 [default = 3, (gogoproto.customname) = "ConsecutiveFailures"];
 
   // Amount of time to allow failed health checks since launch.
-  optional double grace_period_seconds = 6 [default = 10.0];
+  optional double grace_period_seconds = 6 [default = 10.0, (gogoproto.customname) = "GracePeriodSeconds"];
 
   // TODO(alexr): Add an optional `KillPolicy` that should be used
   // if the task is killed because of a health check failure.
@@ -461,7 +460,7 @@ message KillPolicy {
   // the full grace period. For example, the executor may be
   // shutdown more quickly by the agent, or failures / forcible
   // terminations may occur.
-  optional DurationInfo grace_period = 1;
+  optional DurationInfo grace_period = 1 [(gogoproto.customname) = "GracePeriod"];
 }
 
 
@@ -503,7 +502,7 @@ message CommandInfo {
     // named with its value instead. If there is a directory component (which
     // must be a relative path), the local copy will be stored in that
     // subdirectory inside the sandbox.
-    optional string output_file = 5;
+    optional string output_file = 5 [(gogoproto.customname) = "OutputFile"];
   }
 
   repeated URI uris = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "URIs"];
@@ -567,8 +566,8 @@ message ExecutorInfo {
   // in `LAUNCH` offer operation.
   optional Type type = 15;
 
-  required ExecutorID executor_id = 1 [(gogoproto.nullable) = false];
-  optional FrameworkID framework_id = 8; // TODO(benh): Make this required.
+  required ExecutorID executor_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ExecutorID"];
+  optional FrameworkID framework_id = 8 [(gogoproto.customname) = "FrameworkID"]; // TODO(benh): Make this required.
   optional CommandInfo command = 7;
 
   // Executor provided with a container will launch the container
@@ -606,7 +605,7 @@ message ExecutorInfo {
   // must not assume that it will always be allotted the full
   // grace period, as the agent may decide to allot a shorter
   // period and failures / forcible terminations may occur.
-  optional DurationInfo shutdown_grace_period = 13;
+  optional DurationInfo shutdown_grace_period = 13 [(gogoproto.customname) = "ShutdownGracePeriod"];
 
   // Labels are free-form key value pairs which are exposed through
   // master and agent endpoints. Labels will not be interpreted or
@@ -658,9 +657,9 @@ message MasterInfo {
 
 
 /**
- * Describes a agent. Note that the 'id' field is only available after
- * a agent is registered with the master, and is made available here
- * to facilitate re-registration.
+ * Describes an agent. Note that the 'id' field is only available
+ * after an agent is registered with the master, and is made available
+ * here to facilitate re-registration.
  */
 message AgentInfo {
   required string hostname = 1 [(gogoproto.nullable) = false];
@@ -668,12 +667,6 @@ message AgentInfo {
   repeated Resource resources = 3 [(gogoproto.nullable) = false];
   repeated Attribute attributes = 5 [(gogoproto.nullable) = false];
   optional AgentID id = 6 [(gogoproto.customname) = "ID"];
-
-  // Agent checkpointing is always enabled in recent Mesos versions;
-  // the value of this field is ignored.
-  // TODO(joerg84): Remove checkpoint field after deprecation cycle starting
-  // with 0.27 (MESOS-2317).
-  optional bool checkpoint = 7 [default = false];
 }
 
 
@@ -817,6 +810,11 @@ message Resource {
       // framework that created this volume. It is used in conjunction
       // with the "destroy" ACL to determine whether an entity
       // attempting to destroy the volume is permitted to do so.
+      //
+      // NOTE: This field is optional, while the `principal` found in
+      // `ReservationInfo` is required. This field is optional to
+      // allow for the possibility of volume creation without a
+      // principal, though currently it must be provided.
       //
       // NOTE: This field should match the FrameworkInfo.principal of
       // the framework that created the volume.
@@ -1015,10 +1013,10 @@ message UdpStatistics {
 
 
 message SNMPStatistics {
-  optional IpStatistics ip_stats = 1;
-  optional IcmpStatistics icmp_stats = 2;
-  optional TcpStatistics tcp_stats = 3;
-  optional UdpStatistics udp_stats = 4;
+  optional IpStatistics ip_stats = 1 [(gogoproto.customname) = "IpStats"];
+  optional IcmpStatistics icmp_stats = 2 [(gogoproto.customname) = "IcmpStats"];
+  optional TcpStatistics tcp_stats = 3 [(gogoproto.customname) = "TcpStats"];
+  optional UdpStatistics udp_stats = 4 [(gogoproto.customname) = "UdpStats"];
 }
 
 
@@ -1254,7 +1252,7 @@ message Request {
 
 
 /**
- * Describes some resources available on a agent. An offer only
+ * Describes some resources available on an agent. An offer only
  * contains resources from a single agent.
  */
 message Offer {
@@ -1296,7 +1294,7 @@ message Offer {
 
     // TODO(vinod): Deprecate this in favor of `LaunchGroup` below.
     message Launch {
-      repeated TaskInfo task_infos = 1 [(gogoproto.nullable) = false];
+      repeated TaskInfo task_infos = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "TaskInfos"];
     }
 
     // Unlike `Launch` above, all the tasks in a `task_group` are
@@ -1309,7 +1307,7 @@ message Offer {
     // task by explicitly setting `Volume.source` in its resources.
     message LaunchGroup {
       required ExecutorInfo executor = 1 [(gogoproto.nullable) = false];
-      required TaskGroupInfo task_group = 2 [(gogoproto.nullable) = false,(gogoproto.customname) = "TaskGroup"];
+      required TaskGroupInfo task_group = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TaskGroup"];
     }
 
     message Reserve {
@@ -1330,7 +1328,7 @@ message Offer {
 
     optional Type type = 1 [(gogoproto.nullable) = false];
     optional Launch launch = 2;
-    optional LaunchGroup launch_group = 7;
+    optional LaunchGroup launch_group = 7 [(gogoproto.customname) = "LaunchGroup"];
     optional Reserve reserve = 3;
     optional Unreserve unreserve = 4;
     optional Create create = 5;
@@ -1674,7 +1672,7 @@ message Filters {
   // SchedulerDriver::launchTasks. You MUST pass Filters with this
   // field set to change this behavior (i.e., get another offer which
   // includes unused resources sooner or later than the default).
-  optional double refuse_seconds = 1 [default = 5.0];
+  optional double refuse_seconds = 1 [default = 5.0,(gogoproto.customname) = "RefuseSeconds"];
 }
 
 
@@ -2162,7 +2160,7 @@ message ContainerStatus {
   // Information about Linux control group (cgroup).
   optional CgroupInfo cgroup_info = 2 [(gogoproto.customname) = "CgroupInfo"];
 
-  //Information about Executor PID.
+  // Information about Executor PID.
   optional uint32 executor_pid = 3 [(gogoproto.customname) = "ExecutorPID"];
 }
 
