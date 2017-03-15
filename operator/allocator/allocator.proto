@@ -22,9 +22,17 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "allocator";
 
-option (gogoproto.enum_stringer_all) = false;
-option (gogoproto.goproto_enum_prefix_all) = true;
-option (gogoproto.goproto_enum_stringer_all) = true;
+option (gogoproto.enum_stringer_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.goproto_enum_stringer_all) = false;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.gostring_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.verbose_equal_all) = true;
 
 /**
  * Describes the status of an inverse offer.
@@ -40,7 +48,7 @@ message InverseOfferStatus {
     // The framework is ok with the inverse offer. This means it will not
     // violate any SLAs and will attempt to evacuate any tasks running on the
     // agent. If the tasks are not evacuated by the framework, the operator can
-    // manually shut down the agent knowing that the framework will not have
+    // manually shut down the slave knowing that the framework will not have
     // violated its SLAs.
     ACCEPT = 2;
     // The framework wants to block the maintenance operation from happening. An

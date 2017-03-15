@@ -14,14 +14,13 @@ type (
 
 	Heartbeats struct {
 		maxMissed         int64
-		heartbeatDeadline time.Duration
+		heartbeatDeadline *time.Duration
 
 		via flow.Flow
 		log log.Logger
 	}
 )
 
-const INITIAL_DEADLINE = 15 * time.Second
 const DEFAULT_MAX_MISSED = 1
 
 func WithMaxMissedHeartbeats(max uint64) Opt {
@@ -42,7 +41,7 @@ func WithHeartbeatDeadline(d time.Duration) Opt {
 	}
 
 	return func(c *Heartbeats) {
-		c.heartbeatDeadline = d
+		c.heartbeatDeadline = &d
 	}
 }
 
@@ -70,8 +69,6 @@ func New(opts ...Opt) *Heartbeats {
 		o(h)
 	}
 
-	h.heartbeatDeadline = h.heartbeatDeadline * time.Duration(h.maxMissed+1)
-
 	return h
 }
 
@@ -82,28 +79,30 @@ func (h *Heartbeats) Push(ev flow.Message, ctx context.Context) error {
 }
 
 func (h *Heartbeats) Pull(ctx context.Context) (flow.Message, error) {
-	deadlineSet := true
-	deadline := h.heartbeatDeadline
 
-	if deadline == 0 {
-		deadlineSet = false
-		deadline = INITIAL_DEADLINE
+	var deadlineCtx context.Context
+
+	if h.heartbeatDeadline != nil {
+		c, cancel := context.WithTimeout(ctx, *h.heartbeatDeadline)
+		deadlineCtx = c
+		defer cancel()
+	} else {
+		deadlineCtx = ctx
 	}
 
-	deadlinedCtx, cancel := context.WithTimeout(ctx, deadline)
-	defer cancel()
-
-	ev, err := h.via.Pull(deadlinedCtx)
+	ev, err := h.via.Pull(deadlineCtx)
 
 	if err == nil {
 		switch e := ev.(type) {
 		case *scheduler.Event:
-			if scheduler.IsSubscribed(e) && !deadlineSet {
-				// use precision up to milliseconds
-				tmp := int64(e.Subscribed.HeartbeatIntervalSeconds*1000) * (h.maxMissed + 1)
-				deadline := time.Duration(tmp) * time.Millisecond
-				h.log.Log("event", "heartbeat_set", "deadline", deadline)
-				h.heartbeatDeadline = deadline
+			if scheduler.IsSubscribed(e) {
+				if e.Subscribed.HeartbeatIntervalSeconds != nil {
+					// use precision up to milliseconds
+					tmp := int64(e.Subscribed.GetHeartbeatIntervalSeconds()*1000) * (h.maxMissed + 1)
+					deadline := time.Duration(tmp) * time.Millisecond
+					h.log.Log("event", "heartbeat_set", "deadline", deadline)
+					h.heartbeatDeadline = &deadline
+				}
 			}
 		}
 	}

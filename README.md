@@ -11,7 +11,7 @@ Users of this library are encouraged to vendor it. API stability isn't guarantee
 
 ### Mesos proto versions
 
-* (MASTER) 1.1.0+ (v1)
+* (MASTER) 1.2.0
 
 ### Features
 

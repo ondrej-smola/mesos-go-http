@@ -11,6 +11,7 @@
 	It has these top-level messages:
 		Call
 		Response
+		ProcessIO
 */
 package agent
 
@@ -19,6 +20,8 @@ import fmt "fmt"
 import math "math"
 import mesos_v1 "github.com/ondrej-smola/mesos-go-http"
 import _ "github.com/gogo/protobuf/gogoproto"
+
+import strconv "strconv"
 
 import bytes "bytes"
 
@@ -43,7 +46,8 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 // If a call of type `Call::FOO` requires additional parameters they can be
 // included in the corresponding `Call::Foo` message. Similarly, if a call
 // receives a synchronous response it will be returned as a `Response`
-// message of type `Response::FOO`.
+// message of type `Response::FOO`; see `Call::LaunchNestedContainerSession`
+// and `Call::AttachContainerOutput` for exceptions.
 type Call_Type int32
 
 const (
@@ -65,6 +69,10 @@ const (
 	Call_LAUNCH_NESTED_CONTAINER Call_Type = 14
 	Call_WAIT_NESTED_CONTAINER   Call_Type = 15
 	Call_KILL_NESTED_CONTAINER   Call_Type = 16
+	// See 'LaunchNestedContainerSession' below.
+	Call_LAUNCH_NESTED_CONTAINER_SESSION Call_Type = 17
+	Call_ATTACH_CONTAINER_INPUT          Call_Type = 18
+	Call_ATTACH_CONTAINER_OUTPUT         Call_Type = 19
 )
 
 var Call_Type_name = map[int32]string{
@@ -85,25 +93,31 @@ var Call_Type_name = map[int32]string{
 	14: "LAUNCH_NESTED_CONTAINER",
 	15: "WAIT_NESTED_CONTAINER",
 	16: "KILL_NESTED_CONTAINER",
+	17: "LAUNCH_NESTED_CONTAINER_SESSION",
+	18: "ATTACH_CONTAINER_INPUT",
+	19: "ATTACH_CONTAINER_OUTPUT",
 }
 var Call_Type_value = map[string]int32{
-	"UNKNOWN":                 0,
-	"GET_HEALTH":              1,
-	"GET_FLAGS":               2,
-	"GET_VERSION":             3,
-	"GET_METRICS":             4,
-	"GET_LOGGING_LEVEL":       5,
-	"SET_LOGGING_LEVEL":       6,
-	"LIST_FILES":              7,
-	"READ_FILE":               8,
-	"GET_STATE":               9,
-	"GET_CONTAINERS":          10,
-	"GET_FRAMEWORKS":          11,
-	"GET_EXECUTORS":           12,
-	"GET_TASKS":               13,
-	"LAUNCH_NESTED_CONTAINER": 14,
-	"WAIT_NESTED_CONTAINER":   15,
-	"KILL_NESTED_CONTAINER":   16,
+	"UNKNOWN":                         0,
+	"GET_HEALTH":                      1,
+	"GET_FLAGS":                       2,
+	"GET_VERSION":                     3,
+	"GET_METRICS":                     4,
+	"GET_LOGGING_LEVEL":               5,
+	"SET_LOGGING_LEVEL":               6,
+	"LIST_FILES":                      7,
+	"READ_FILE":                       8,
+	"GET_STATE":                       9,
+	"GET_CONTAINERS":                  10,
+	"GET_FRAMEWORKS":                  11,
+	"GET_EXECUTORS":                   12,
+	"GET_TASKS":                       13,
+	"LAUNCH_NESTED_CONTAINER":         14,
+	"WAIT_NESTED_CONTAINER":           15,
+	"KILL_NESTED_CONTAINER":           16,
+	"LAUNCH_NESTED_CONTAINER_SESSION": 17,
+	"ATTACH_CONTAINER_INPUT":          18,
+	"ATTACH_CONTAINER_OUTPUT":         19,
 }
 
 func (x Call_Type) Enum() *Call_Type {
@@ -111,8 +125,8 @@ func (x Call_Type) Enum() *Call_Type {
 	*p = x
 	return p
 }
-func (x Call_Type) String() string {
-	return proto.EnumName(Call_Type_name, int32(x))
+func (x Call_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Call_Type_name, int32(x))
 }
 func (x *Call_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Call_Type_value, data, "Call_Type")
@@ -123,6 +137,45 @@ func (x *Call_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Call_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 0} }
+
+type Call_AttachContainerInput_Type int32
+
+const (
+	Call_AttachContainerInput_UNKNOWN      Call_AttachContainerInput_Type = 0
+	Call_AttachContainerInput_CONTAINER_ID Call_AttachContainerInput_Type = 1
+	Call_AttachContainerInput_PROCESS_IO   Call_AttachContainerInput_Type = 2
+)
+
+var Call_AttachContainerInput_Type_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "CONTAINER_ID",
+	2: "PROCESS_IO",
+}
+var Call_AttachContainerInput_Type_value = map[string]int32{
+	"UNKNOWN":      0,
+	"CONTAINER_ID": 1,
+	"PROCESS_IO":   2,
+}
+
+func (x Call_AttachContainerInput_Type) Enum() *Call_AttachContainerInput_Type {
+	p := new(Call_AttachContainerInput_Type)
+	*p = x
+	return p
+}
+func (x Call_AttachContainerInput_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Call_AttachContainerInput_Type_name, int32(x))
+}
+func (x *Call_AttachContainerInput_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(Call_AttachContainerInput_Type_value, data, "Call_AttachContainerInput_Type")
+	if err != nil {
+		return err
+	}
+	*x = Call_AttachContainerInput_Type(value)
+	return nil
+}
+func (Call_AttachContainerInput_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{0, 8, 0}
+}
 
 // Each of the responses of type `FOO` corresponds to `Foo` message below.
 type Response_Type int32
@@ -182,8 +235,8 @@ func (x Response_Type) Enum() *Response_Type {
 	*p = x
 	return p
 }
-func (x Response_Type) String() string {
-	return proto.EnumName(Response_Type_name, int32(x))
+func (x Response_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Response_Type_name, int32(x))
 }
 func (x *Response_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Response_Type_value, data, "Response_Type")
@@ -195,6 +248,124 @@ func (x *Response_Type) UnmarshalJSON(data []byte) error {
 }
 func (Response_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 0} }
 
+type ProcessIO_Type int32
+
+const (
+	ProcessIO_UNKNOWN ProcessIO_Type = 0
+	ProcessIO_DATA    ProcessIO_Type = 1
+	ProcessIO_CONTROL ProcessIO_Type = 2
+)
+
+var ProcessIO_Type_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "DATA",
+	2: "CONTROL",
+}
+var ProcessIO_Type_value = map[string]int32{
+	"UNKNOWN": 0,
+	"DATA":    1,
+	"CONTROL": 2,
+}
+
+func (x ProcessIO_Type) Enum() *ProcessIO_Type {
+	p := new(ProcessIO_Type)
+	*p = x
+	return p
+}
+func (x ProcessIO_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(ProcessIO_Type_name, int32(x))
+}
+func (x *ProcessIO_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(ProcessIO_Type_value, data, "ProcessIO_Type")
+	if err != nil {
+		return err
+	}
+	*x = ProcessIO_Type(value)
+	return nil
+}
+func (ProcessIO_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorAgent, []int{2, 0} }
+
+type ProcessIO_Data_Type int32
+
+const (
+	ProcessIO_Data_UNKNOWN ProcessIO_Data_Type = 0
+	ProcessIO_Data_STDIN   ProcessIO_Data_Type = 1
+	ProcessIO_Data_STDOUT  ProcessIO_Data_Type = 2
+	ProcessIO_Data_STDERR  ProcessIO_Data_Type = 3
+)
+
+var ProcessIO_Data_Type_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "STDIN",
+	2: "STDOUT",
+	3: "STDERR",
+}
+var ProcessIO_Data_Type_value = map[string]int32{
+	"UNKNOWN": 0,
+	"STDIN":   1,
+	"STDOUT":  2,
+	"STDERR":  3,
+}
+
+func (x ProcessIO_Data_Type) Enum() *ProcessIO_Data_Type {
+	p := new(ProcessIO_Data_Type)
+	*p = x
+	return p
+}
+func (x ProcessIO_Data_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(ProcessIO_Data_Type_name, int32(x))
+}
+func (x *ProcessIO_Data_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(ProcessIO_Data_Type_value, data, "ProcessIO_Data_Type")
+	if err != nil {
+		return err
+	}
+	*x = ProcessIO_Data_Type(value)
+	return nil
+}
+func (ProcessIO_Data_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{2, 0, 0}
+}
+
+type ProcessIO_Control_Type int32
+
+const (
+	ProcessIO_Control_UNKNOWN   ProcessIO_Control_Type = 0
+	ProcessIO_Control_TTY_INFO  ProcessIO_Control_Type = 1
+	ProcessIO_Control_HEARTBEAT ProcessIO_Control_Type = 2
+)
+
+var ProcessIO_Control_Type_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "TTY_INFO",
+	2: "HEARTBEAT",
+}
+var ProcessIO_Control_Type_value = map[string]int32{
+	"UNKNOWN":   0,
+	"TTY_INFO":  1,
+	"HEARTBEAT": 2,
+}
+
+func (x ProcessIO_Control_Type) Enum() *ProcessIO_Control_Type {
+	p := new(ProcessIO_Control_Type)
+	*p = x
+	return p
+}
+func (x ProcessIO_Control_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(ProcessIO_Control_Type_name, int32(x))
+}
+func (x *ProcessIO_Control_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(ProcessIO_Control_Type_value, data, "ProcessIO_Control_Type")
+	if err != nil {
+		return err
+	}
+	*x = ProcessIO_Control_Type(value)
+	return nil
+}
+func (ProcessIO_Control_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{2, 1, 0}
+}
+
 // *
 // Calls that can be sent to the v1 agent API.
 //
@@ -202,14 +373,17 @@ func (Response_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorAge
 // trick, see
 // https://developers.google.com/protocol-buffers/docs/techniques#union.
 type Call struct {
-	Type                  Call_Type                   `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.Call_Type" json:"type"`
-	GetMetrics            *Call_GetMetrics            `protobuf:"bytes,2,opt,name=get_metrics" json:"get_metrics,omitempty"`
-	SetLoggingLevel       *Call_SetLoggingLevel       `protobuf:"bytes,3,opt,name=set_logging_level" json:"set_logging_level,omitempty"`
-	ListFiles             *Call_ListFiles             `protobuf:"bytes,4,opt,name=list_files" json:"list_files,omitempty"`
-	ReadFile              *Call_ReadFile              `protobuf:"bytes,5,opt,name=read_file" json:"read_file,omitempty"`
-	LaunchNestedContainer *Call_LaunchNestedContainer `protobuf:"bytes,6,opt,name=launch_nested_container" json:"launch_nested_container,omitempty"`
-	WaitNestedContainer   *Call_WaitNestedContainer   `protobuf:"bytes,7,opt,name=wait_nested_container" json:"wait_nested_container,omitempty"`
-	KillNestedContainer   *Call_KillNestedContainer   `protobuf:"bytes,8,opt,name=kill_nested_container" json:"kill_nested_container,omitempty"`
+	Type                         Call_Type                          `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.Call_Type" json:"type"`
+	GetMetrics                   *Call_GetMetrics                   `protobuf:"bytes,2,opt,name=get_metrics" json:"get_metrics,omitempty"`
+	SetLoggingLevel              *Call_SetLoggingLevel              `protobuf:"bytes,3,opt,name=set_logging_level" json:"set_logging_level,omitempty"`
+	ListFiles                    *Call_ListFiles                    `protobuf:"bytes,4,opt,name=list_files" json:"list_files,omitempty"`
+	ReadFile                     *Call_ReadFile                     `protobuf:"bytes,5,opt,name=read_file" json:"read_file,omitempty"`
+	LaunchNestedContainer        *Call_LaunchNestedContainer        `protobuf:"bytes,6,opt,name=launch_nested_container" json:"launch_nested_container,omitempty"`
+	WaitNestedContainer          *Call_WaitNestedContainer          `protobuf:"bytes,7,opt,name=wait_nested_container" json:"wait_nested_container,omitempty"`
+	KillNestedContainer          *Call_KillNestedContainer          `protobuf:"bytes,8,opt,name=kill_nested_container" json:"kill_nested_container,omitempty"`
+	LaunchNestedContainerSession *Call_LaunchNestedContainerSession `protobuf:"bytes,9,opt,name=launch_nested_container_session" json:"launch_nested_container_session,omitempty"`
+	AttachContainerInput         *Call_AttachContainerInput         `protobuf:"bytes,10,opt,name=attach_container_input" json:"attach_container_input,omitempty"`
+	AttachContainerOutput        *Call_AttachContainerOutput        `protobuf:"bytes,11,opt,name=attach_container_output" json:"attach_container_output,omitempty"`
 }
 
 func (m *Call) Reset()                    { *m = Call{} }
@@ -268,6 +442,27 @@ func (m *Call) GetWaitNestedContainer() *Call_WaitNestedContainer {
 func (m *Call) GetKillNestedContainer() *Call_KillNestedContainer {
 	if m != nil {
 		return m.KillNestedContainer
+	}
+	return nil
+}
+
+func (m *Call) GetLaunchNestedContainerSession() *Call_LaunchNestedContainerSession {
+	if m != nil {
+		return m.LaunchNestedContainerSession
+	}
+	return nil
+}
+
+func (m *Call) GetAttachContainerInput() *Call_AttachContainerInput {
+	if m != nil {
+		return m.AttachContainerInput
+	}
+	return nil
+}
+
+func (m *Call) GetAttachContainerOutput() *Call_AttachContainerOutput {
+	if m != nil {
+		return m.AttachContainerOutput
 	}
 	return nil
 }
@@ -345,7 +540,7 @@ type Call_ReadFile struct {
 	Offset uint64 `protobuf:"varint,2,req,name=offset" json:"offset"`
 	// The maximum number of bytes to read. The read length is capped at 16
 	// memory pages.
-	Length uint64 `protobuf:"varint,3,opt,name=length" json:"length"`
+	Length *uint64 `protobuf:"varint,3,opt,name=length" json:"length,omitempty"`
 }
 
 func (m *Call_ReadFile) Reset()                    { *m = Call_ReadFile{} }
@@ -367,8 +562,8 @@ func (m *Call_ReadFile) GetOffset() uint64 {
 }
 
 func (m *Call_ReadFile) GetLength() uint64 {
-	if m != nil {
-		return m.Length
+	if m != nil && m.Length != nil {
+		return *m.Length
 	}
 	return 0
 }
@@ -435,6 +630,107 @@ func (*Call_KillNestedContainer) Descriptor() ([]byte, []int) { return fileDescr
 func (m *Call_KillNestedContainer) GetContainerID() mesos_v1.ContainerID {
 	if m != nil {
 		return m.ContainerID
+	}
+	return mesos_v1.ContainerID{}
+}
+
+// Launches a nested container within an executor's tree of containers.
+// The differences between this call and `LaunchNestedContainer` are:
+// 1) The container's life-cycle is tied to the lifetime of the
+//    connection used to make this call, i.e., if the connection ever
+//    breaks, the container will be destroyed.
+// 2) The nested container shares the same namespaces and cgroups as
+//    its parent container.
+// 3) Results in a streaming response of type `ProcessIO`. So the call
+//    needs to be made on a persistent connection.
+type Call_LaunchNestedContainerSession struct {
+	ContainerId mesos_v1.ContainerID    `protobuf:"bytes,1,req,name=container_id" json:"container_id"`
+	Command     *mesos_v1.CommandInfo   `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
+	Container   *mesos_v1.ContainerInfo `protobuf:"bytes,3,opt,name=container" json:"container,omitempty"`
+}
+
+func (m *Call_LaunchNestedContainerSession) Reset()      { *m = Call_LaunchNestedContainerSession{} }
+func (*Call_LaunchNestedContainerSession) ProtoMessage() {}
+func (*Call_LaunchNestedContainerSession) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{0, 7}
+}
+
+func (m *Call_LaunchNestedContainerSession) GetContainerId() mesos_v1.ContainerID {
+	if m != nil {
+		return m.ContainerId
+	}
+	return mesos_v1.ContainerID{}
+}
+
+func (m *Call_LaunchNestedContainerSession) GetCommand() *mesos_v1.CommandInfo {
+	if m != nil {
+		return m.Command
+	}
+	return nil
+}
+
+func (m *Call_LaunchNestedContainerSession) GetContainer() *mesos_v1.ContainerInfo {
+	if m != nil {
+		return m.Container
+	}
+	return nil
+}
+
+// Attaches the caller to the STDIN of the entry point of the container.
+// Clients can use this to stream input data to a container.
+// Note that this call needs to be made on a persistent connection by
+// streaming a CONTAINER_ID message followed by one or more PROCESS_IO
+// messages.
+type Call_AttachContainerInput struct {
+	Type        Call_AttachContainerInput_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.Call_AttachContainerInput_Type" json:"type"`
+	ContainerId *mesos_v1.ContainerID          `protobuf:"bytes,2,opt,name=container_id" json:"container_id,omitempty"`
+	ProcessIo   *ProcessIO                     `protobuf:"bytes,3,opt,name=process_io" json:"process_io,omitempty"`
+}
+
+func (m *Call_AttachContainerInput) Reset()      { *m = Call_AttachContainerInput{} }
+func (*Call_AttachContainerInput) ProtoMessage() {}
+func (*Call_AttachContainerInput) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{0, 8}
+}
+
+func (m *Call_AttachContainerInput) GetType() Call_AttachContainerInput_Type {
+	if m != nil {
+		return m.Type
+	}
+	return Call_AttachContainerInput_UNKNOWN
+}
+
+func (m *Call_AttachContainerInput) GetContainerId() *mesos_v1.ContainerID {
+	if m != nil {
+		return m.ContainerId
+	}
+	return nil
+}
+
+func (m *Call_AttachContainerInput) GetProcessIo() *ProcessIO {
+	if m != nil {
+		return m.ProcessIo
+	}
+	return nil
+}
+
+// Attaches the caller to the STDOUT and STDERR of the entrypoint of
+// the container. Clients can use this to stream output/error from the
+// container. This call will result in a streaming response of `ProcessIO`;
+// so this call needs to be made on a persistent connection.
+type Call_AttachContainerOutput struct {
+	ContainerId mesos_v1.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id"`
+}
+
+func (m *Call_AttachContainerOutput) Reset()      { *m = Call_AttachContainerOutput{} }
+func (*Call_AttachContainerOutput) ProtoMessage() {}
+func (*Call_AttachContainerOutput) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{0, 9}
+}
+
+func (m *Call_AttachContainerOutput) GetContainerId() mesos_v1.ContainerID {
+	if m != nil {
+		return m.ContainerId
 	}
 	return mesos_v1.ContainerID{}
 }
@@ -932,7 +1228,7 @@ func (m *Response_GetTasks) GetCompletedTasks() []mesos_v1.Task {
 
 // Returns termination information about the nested container.
 type Response_WaitNestedContainer struct {
-	ExitStatus int32 `protobuf:"varint,1,opt,name=exit_status" json:"exit_status"`
+	ExitStatus *int32 `protobuf:"varint,1,opt,name=exit_status" json:"exit_status,omitempty"`
 }
 
 func (m *Response_WaitNestedContainer) Reset()      { *m = Response_WaitNestedContainer{} }
@@ -942,10 +1238,118 @@ func (*Response_WaitNestedContainer) Descriptor() ([]byte, []int) {
 }
 
 func (m *Response_WaitNestedContainer) GetExitStatus() int32 {
-	if m != nil {
-		return m.ExitStatus
+	if m != nil && m.ExitStatus != nil {
+		return *m.ExitStatus
 	}
 	return 0
+}
+
+// *
+// Streaming response to `Call::LAUNCH_NESTED_CONTAINER_SESSION` and
+// `Call::ATTACH_CONTAINER_OUTPUT`.
+//
+// This message is also used to stream request data for
+// `Call::ATTACH_CONTAINER_INPUT`.
+type ProcessIO struct {
+	Type    ProcessIO_Type     `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.ProcessIO_Type" json:"type"`
+	Data    *ProcessIO_Data    `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
+	Control *ProcessIO_Control `protobuf:"bytes,3,opt,name=control" json:"control,omitempty"`
+}
+
+func (m *ProcessIO) Reset()                    { *m = ProcessIO{} }
+func (*ProcessIO) ProtoMessage()               {}
+func (*ProcessIO) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{2} }
+
+func (m *ProcessIO) GetType() ProcessIO_Type {
+	if m != nil {
+		return m.Type
+	}
+	return ProcessIO_UNKNOWN
+}
+
+func (m *ProcessIO) GetData() *ProcessIO_Data {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+func (m *ProcessIO) GetControl() *ProcessIO_Control {
+	if m != nil {
+		return m.Control
+	}
+	return nil
+}
+
+type ProcessIO_Data struct {
+	Type ProcessIO_Data_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.ProcessIO_Data_Type" json:"type"`
+	Data []byte              `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
+}
+
+func (m *ProcessIO_Data) Reset()                    { *m = ProcessIO_Data{} }
+func (*ProcessIO_Data) ProtoMessage()               {}
+func (*ProcessIO_Data) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{2, 0} }
+
+func (m *ProcessIO_Data) GetType() ProcessIO_Data_Type {
+	if m != nil {
+		return m.Type
+	}
+	return ProcessIO_Data_UNKNOWN
+}
+
+func (m *ProcessIO_Data) GetData() []byte {
+	if m != nil {
+		return m.Data
+	}
+	return nil
+}
+
+type ProcessIO_Control struct {
+	Type      ProcessIO_Control_Type       `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.ProcessIO_Control_Type" json:"type"`
+	TtyInfo   *mesos_v1.TTYInfo            `protobuf:"bytes,2,opt,name=tty_info" json:"tty_info,omitempty"`
+	Heartbeat *ProcessIO_Control_Heartbeat `protobuf:"bytes,3,opt,name=heartbeat" json:"heartbeat,omitempty"`
+}
+
+func (m *ProcessIO_Control) Reset()                    { *m = ProcessIO_Control{} }
+func (*ProcessIO_Control) ProtoMessage()               {}
+func (*ProcessIO_Control) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{2, 1} }
+
+func (m *ProcessIO_Control) GetType() ProcessIO_Control_Type {
+	if m != nil {
+		return m.Type
+	}
+	return ProcessIO_Control_UNKNOWN
+}
+
+func (m *ProcessIO_Control) GetTtyInfo() *mesos_v1.TTYInfo {
+	if m != nil {
+		return m.TtyInfo
+	}
+	return nil
+}
+
+func (m *ProcessIO_Control) GetHeartbeat() *ProcessIO_Control_Heartbeat {
+	if m != nil {
+		return m.Heartbeat
+	}
+	return nil
+}
+
+type ProcessIO_Control_Heartbeat struct {
+	Interval *mesos_v1.DurationInfo `protobuf:"bytes,1,opt,name=interval" json:"interval,omitempty"`
+}
+
+func (m *ProcessIO_Control_Heartbeat) Reset()      { *m = ProcessIO_Control_Heartbeat{} }
+func (*ProcessIO_Control_Heartbeat) ProtoMessage() {}
+func (*ProcessIO_Control_Heartbeat) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{2, 1, 0}
+}
+
+func (m *ProcessIO_Control_Heartbeat) GetInterval() *mesos_v1.DurationInfo {
+	if m != nil {
+		return m.Interval
+	}
+	return nil
 }
 
 func init() {
@@ -957,6 +1361,9 @@ func init() {
 	proto.RegisterType((*Call_LaunchNestedContainer)(nil), "mesos.v1.agent.Call.LaunchNestedContainer")
 	proto.RegisterType((*Call_WaitNestedContainer)(nil), "mesos.v1.agent.Call.WaitNestedContainer")
 	proto.RegisterType((*Call_KillNestedContainer)(nil), "mesos.v1.agent.Call.KillNestedContainer")
+	proto.RegisterType((*Call_LaunchNestedContainerSession)(nil), "mesos.v1.agent.Call.LaunchNestedContainerSession")
+	proto.RegisterType((*Call_AttachContainerInput)(nil), "mesos.v1.agent.Call.AttachContainerInput")
+	proto.RegisterType((*Call_AttachContainerOutput)(nil), "mesos.v1.agent.Call.AttachContainerOutput")
 	proto.RegisterType((*Response)(nil), "mesos.v1.agent.Response")
 	proto.RegisterType((*Response_GetHealth)(nil), "mesos.v1.agent.Response.GetHealth")
 	proto.RegisterType((*Response_GetFlags)(nil), "mesos.v1.agent.Response.GetFlags")
@@ -974,8 +1381,118 @@ func init() {
 	proto.RegisterType((*Response_GetExecutors_Executor)(nil), "mesos.v1.agent.Response.GetExecutors.Executor")
 	proto.RegisterType((*Response_GetTasks)(nil), "mesos.v1.agent.Response.GetTasks")
 	proto.RegisterType((*Response_WaitNestedContainer)(nil), "mesos.v1.agent.Response.WaitNestedContainer")
+	proto.RegisterType((*ProcessIO)(nil), "mesos.v1.agent.ProcessIO")
+	proto.RegisterType((*ProcessIO_Data)(nil), "mesos.v1.agent.ProcessIO.Data")
+	proto.RegisterType((*ProcessIO_Control)(nil), "mesos.v1.agent.ProcessIO.Control")
+	proto.RegisterType((*ProcessIO_Control_Heartbeat)(nil), "mesos.v1.agent.ProcessIO.Control.Heartbeat")
 	proto.RegisterEnum("mesos.v1.agent.Call_Type", Call_Type_name, Call_Type_value)
+	proto.RegisterEnum("mesos.v1.agent.Call_AttachContainerInput_Type", Call_AttachContainerInput_Type_name, Call_AttachContainerInput_Type_value)
 	proto.RegisterEnum("mesos.v1.agent.Response_Type", Response_Type_name, Response_Type_value)
+	proto.RegisterEnum("mesos.v1.agent.ProcessIO_Type", ProcessIO_Type_name, ProcessIO_Type_value)
+	proto.RegisterEnum("mesos.v1.agent.ProcessIO_Data_Type", ProcessIO_Data_Type_name, ProcessIO_Data_Type_value)
+	proto.RegisterEnum("mesos.v1.agent.ProcessIO_Control_Type", ProcessIO_Control_Type_name, ProcessIO_Control_Type_value)
+}
+func (x Call_Type) String() string {
+	s, ok := Call_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x Call_AttachContainerInput_Type) String() string {
+	s, ok := Call_AttachContainerInput_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x Response_Type) String() string {
+	s, ok := Response_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x ProcessIO_Type) String() string {
+	s, ok := ProcessIO_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x ProcessIO_Data_Type) String() string {
+	s, ok := ProcessIO_Data_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x ProcessIO_Control_Type) String() string {
+	s, ok := ProcessIO_Control_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (this *Call) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call)
+	if !ok {
+		that2, ok := that.(Call)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.GetMetrics.Equal(that1.GetMetrics) {
+		return fmt.Errorf("GetMetrics this(%v) Not Equal that(%v)", this.GetMetrics, that1.GetMetrics)
+	}
+	if !this.SetLoggingLevel.Equal(that1.SetLoggingLevel) {
+		return fmt.Errorf("SetLoggingLevel this(%v) Not Equal that(%v)", this.SetLoggingLevel, that1.SetLoggingLevel)
+	}
+	if !this.ListFiles.Equal(that1.ListFiles) {
+		return fmt.Errorf("ListFiles this(%v) Not Equal that(%v)", this.ListFiles, that1.ListFiles)
+	}
+	if !this.ReadFile.Equal(that1.ReadFile) {
+		return fmt.Errorf("ReadFile this(%v) Not Equal that(%v)", this.ReadFile, that1.ReadFile)
+	}
+	if !this.LaunchNestedContainer.Equal(that1.LaunchNestedContainer) {
+		return fmt.Errorf("LaunchNestedContainer this(%v) Not Equal that(%v)", this.LaunchNestedContainer, that1.LaunchNestedContainer)
+	}
+	if !this.WaitNestedContainer.Equal(that1.WaitNestedContainer) {
+		return fmt.Errorf("WaitNestedContainer this(%v) Not Equal that(%v)", this.WaitNestedContainer, that1.WaitNestedContainer)
+	}
+	if !this.KillNestedContainer.Equal(that1.KillNestedContainer) {
+		return fmt.Errorf("KillNestedContainer this(%v) Not Equal that(%v)", this.KillNestedContainer, that1.KillNestedContainer)
+	}
+	if !this.LaunchNestedContainerSession.Equal(that1.LaunchNestedContainerSession) {
+		return fmt.Errorf("LaunchNestedContainerSession this(%v) Not Equal that(%v)", this.LaunchNestedContainerSession, that1.LaunchNestedContainerSession)
+	}
+	if !this.AttachContainerInput.Equal(that1.AttachContainerInput) {
+		return fmt.Errorf("AttachContainerInput this(%v) Not Equal that(%v)", this.AttachContainerInput, that1.AttachContainerInput)
+	}
+	if !this.AttachContainerOutput.Equal(that1.AttachContainerOutput) {
+		return fmt.Errorf("AttachContainerOutput this(%v) Not Equal that(%v)", this.AttachContainerOutput, that1.AttachContainerOutput)
+	}
+	return nil
 }
 func (this *Call) Equal(that interface{}) bool {
 	if that == nil {
@@ -1026,7 +1543,46 @@ func (this *Call) Equal(that interface{}) bool {
 	if !this.KillNestedContainer.Equal(that1.KillNestedContainer) {
 		return false
 	}
+	if !this.LaunchNestedContainerSession.Equal(that1.LaunchNestedContainerSession) {
+		return false
+	}
+	if !this.AttachContainerInput.Equal(that1.AttachContainerInput) {
+		return false
+	}
+	if !this.AttachContainerOutput.Equal(that1.AttachContainerOutput) {
+		return false
+	}
 	return true
+}
+func (this *Call_GetMetrics) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_GetMetrics)
+	if !ok {
+		that2, ok := that.(Call_GetMetrics)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_GetMetrics")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_GetMetrics but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_GetMetrics but is not nil && this == nil")
+	}
+	if !this.Timeout.Equal(that1.Timeout) {
+		return fmt.Errorf("Timeout this(%v) Not Equal that(%v)", this.Timeout, that1.Timeout)
+	}
+	return nil
 }
 func (this *Call_GetMetrics) Equal(that interface{}) bool {
 	if that == nil {
@@ -1057,6 +1613,39 @@ func (this *Call_GetMetrics) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_SetLoggingLevel) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_SetLoggingLevel)
+	if !ok {
+		that2, ok := that.(Call_SetLoggingLevel)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_SetLoggingLevel")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_SetLoggingLevel but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_SetLoggingLevel but is not nil && this == nil")
+	}
+	if this.Level != that1.Level {
+		return fmt.Errorf("Level this(%v) Not Equal that(%v)", this.Level, that1.Level)
+	}
+	if !this.Duration.Equal(&that1.Duration) {
+		return fmt.Errorf("Duration this(%v) Not Equal that(%v)", this.Duration, that1.Duration)
+	}
+	return nil
 }
 func (this *Call_SetLoggingLevel) Equal(that interface{}) bool {
 	if that == nil {
@@ -1091,6 +1680,36 @@ func (this *Call_SetLoggingLevel) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_ListFiles) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_ListFiles)
+	if !ok {
+		that2, ok := that.(Call_ListFiles)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_ListFiles")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_ListFiles but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_ListFiles but is not nil && this == nil")
+	}
+	if this.Path != that1.Path {
+		return fmt.Errorf("Path this(%v) Not Equal that(%v)", this.Path, that1.Path)
+	}
+	return nil
+}
 func (this *Call_ListFiles) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1120,6 +1739,48 @@ func (this *Call_ListFiles) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_ReadFile) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_ReadFile)
+	if !ok {
+		that2, ok := that.(Call_ReadFile)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_ReadFile")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_ReadFile but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_ReadFile but is not nil && this == nil")
+	}
+	if this.Path != that1.Path {
+		return fmt.Errorf("Path this(%v) Not Equal that(%v)", this.Path, that1.Path)
+	}
+	if this.Offset != that1.Offset {
+		return fmt.Errorf("Offset this(%v) Not Equal that(%v)", this.Offset, that1.Offset)
+	}
+	if this.Length != nil && that1.Length != nil {
+		if *this.Length != *that1.Length {
+			return fmt.Errorf("Length this(%v) Not Equal that(%v)", *this.Length, *that1.Length)
+		}
+	} else if this.Length != nil {
+		return fmt.Errorf("this.Length == nil && that.Length != nil")
+	} else if that1.Length != nil {
+		return fmt.Errorf("Length this(%v) Not Equal that(%v)", this.Length, that1.Length)
+	}
+	return nil
 }
 func (this *Call_ReadFile) Equal(that interface{}) bool {
 	if that == nil {
@@ -1152,10 +1813,52 @@ func (this *Call_ReadFile) Equal(that interface{}) bool {
 	if this.Offset != that1.Offset {
 		return false
 	}
-	if this.Length != that1.Length {
+	if this.Length != nil && that1.Length != nil {
+		if *this.Length != *that1.Length {
+			return false
+		}
+	} else if this.Length != nil {
+		return false
+	} else if that1.Length != nil {
 		return false
 	}
 	return true
+}
+func (this *Call_LaunchNestedContainer) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_LaunchNestedContainer)
+	if !ok {
+		that2, ok := that.(Call_LaunchNestedContainer)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_LaunchNestedContainer")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_LaunchNestedContainer but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_LaunchNestedContainer but is not nil && this == nil")
+	}
+	if !this.ContainerID.Equal(&that1.ContainerID) {
+		return fmt.Errorf("ContainerID this(%v) Not Equal that(%v)", this.ContainerID, that1.ContainerID)
+	}
+	if !this.Command.Equal(that1.Command) {
+		return fmt.Errorf("Command this(%v) Not Equal that(%v)", this.Command, that1.Command)
+	}
+	if !this.Container.Equal(that1.Container) {
+		return fmt.Errorf("Container this(%v) Not Equal that(%v)", this.Container, that1.Container)
+	}
+	return nil
 }
 func (this *Call_LaunchNestedContainer) Equal(that interface{}) bool {
 	if that == nil {
@@ -1193,6 +1896,36 @@ func (this *Call_LaunchNestedContainer) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_WaitNestedContainer) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_WaitNestedContainer)
+	if !ok {
+		that2, ok := that.(Call_WaitNestedContainer)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_WaitNestedContainer")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_WaitNestedContainer but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_WaitNestedContainer but is not nil && this == nil")
+	}
+	if !this.ContainerID.Equal(&that1.ContainerID) {
+		return fmt.Errorf("ContainerID this(%v) Not Equal that(%v)", this.ContainerID, that1.ContainerID)
+	}
+	return nil
+}
 func (this *Call_WaitNestedContainer) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1223,6 +1956,36 @@ func (this *Call_WaitNestedContainer) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_KillNestedContainer) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_KillNestedContainer)
+	if !ok {
+		that2, ok := that.(Call_KillNestedContainer)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_KillNestedContainer")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_KillNestedContainer but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_KillNestedContainer but is not nil && this == nil")
+	}
+	if !this.ContainerID.Equal(&that1.ContainerID) {
+		return fmt.Errorf("ContainerID this(%v) Not Equal that(%v)", this.ContainerID, that1.ContainerID)
+	}
+	return nil
+}
 func (this *Call_KillNestedContainer) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1252,6 +2015,279 @@ func (this *Call_KillNestedContainer) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_LaunchNestedContainerSession) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_LaunchNestedContainerSession)
+	if !ok {
+		that2, ok := that.(Call_LaunchNestedContainerSession)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_LaunchNestedContainerSession")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_LaunchNestedContainerSession but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_LaunchNestedContainerSession but is not nil && this == nil")
+	}
+	if !this.ContainerId.Equal(&that1.ContainerId) {
+		return fmt.Errorf("ContainerId this(%v) Not Equal that(%v)", this.ContainerId, that1.ContainerId)
+	}
+	if !this.Command.Equal(that1.Command) {
+		return fmt.Errorf("Command this(%v) Not Equal that(%v)", this.Command, that1.Command)
+	}
+	if !this.Container.Equal(that1.Container) {
+		return fmt.Errorf("Container this(%v) Not Equal that(%v)", this.Container, that1.Container)
+	}
+	return nil
+}
+func (this *Call_LaunchNestedContainerSession) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Call_LaunchNestedContainerSession)
+	if !ok {
+		that2, ok := that.(Call_LaunchNestedContainerSession)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if !this.ContainerId.Equal(&that1.ContainerId) {
+		return false
+	}
+	if !this.Command.Equal(that1.Command) {
+		return false
+	}
+	if !this.Container.Equal(that1.Container) {
+		return false
+	}
+	return true
+}
+func (this *Call_AttachContainerInput) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_AttachContainerInput)
+	if !ok {
+		that2, ok := that.(Call_AttachContainerInput)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_AttachContainerInput")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_AttachContainerInput but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_AttachContainerInput but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.ContainerId.Equal(that1.ContainerId) {
+		return fmt.Errorf("ContainerId this(%v) Not Equal that(%v)", this.ContainerId, that1.ContainerId)
+	}
+	if !this.ProcessIo.Equal(that1.ProcessIo) {
+		return fmt.Errorf("ProcessIo this(%v) Not Equal that(%v)", this.ProcessIo, that1.ProcessIo)
+	}
+	return nil
+}
+func (this *Call_AttachContainerInput) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Call_AttachContainerInput)
+	if !ok {
+		that2, ok := that.(Call_AttachContainerInput)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.Type != that1.Type {
+		return false
+	}
+	if !this.ContainerId.Equal(that1.ContainerId) {
+		return false
+	}
+	if !this.ProcessIo.Equal(that1.ProcessIo) {
+		return false
+	}
+	return true
+}
+func (this *Call_AttachContainerOutput) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_AttachContainerOutput)
+	if !ok {
+		that2, ok := that.(Call_AttachContainerOutput)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_AttachContainerOutput")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_AttachContainerOutput but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_AttachContainerOutput but is not nil && this == nil")
+	}
+	if !this.ContainerId.Equal(&that1.ContainerId) {
+		return fmt.Errorf("ContainerId this(%v) Not Equal that(%v)", this.ContainerId, that1.ContainerId)
+	}
+	return nil
+}
+func (this *Call_AttachContainerOutput) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*Call_AttachContainerOutput)
+	if !ok {
+		that2, ok := that.(Call_AttachContainerOutput)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if !this.ContainerId.Equal(&that1.ContainerId) {
+		return false
+	}
+	return true
+}
+func (this *Response) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response)
+	if !ok {
+		that2, ok := that.(Response)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.GetHealth.Equal(that1.GetHealth) {
+		return fmt.Errorf("GetHealth this(%v) Not Equal that(%v)", this.GetHealth, that1.GetHealth)
+	}
+	if !this.GetFlags.Equal(that1.GetFlags) {
+		return fmt.Errorf("GetFlags this(%v) Not Equal that(%v)", this.GetFlags, that1.GetFlags)
+	}
+	if !this.GetVersion.Equal(that1.GetVersion) {
+		return fmt.Errorf("GetVersion this(%v) Not Equal that(%v)", this.GetVersion, that1.GetVersion)
+	}
+	if !this.GetMetrics.Equal(that1.GetMetrics) {
+		return fmt.Errorf("GetMetrics this(%v) Not Equal that(%v)", this.GetMetrics, that1.GetMetrics)
+	}
+	if !this.GetLoggingLevel.Equal(that1.GetLoggingLevel) {
+		return fmt.Errorf("GetLoggingLevel this(%v) Not Equal that(%v)", this.GetLoggingLevel, that1.GetLoggingLevel)
+	}
+	if !this.ListFiles.Equal(that1.ListFiles) {
+		return fmt.Errorf("ListFiles this(%v) Not Equal that(%v)", this.ListFiles, that1.ListFiles)
+	}
+	if !this.ReadFile.Equal(that1.ReadFile) {
+		return fmt.Errorf("ReadFile this(%v) Not Equal that(%v)", this.ReadFile, that1.ReadFile)
+	}
+	if !this.GetState.Equal(that1.GetState) {
+		return fmt.Errorf("GetState this(%v) Not Equal that(%v)", this.GetState, that1.GetState)
+	}
+	if !this.GetContainers.Equal(that1.GetContainers) {
+		return fmt.Errorf("GetContainers this(%v) Not Equal that(%v)", this.GetContainers, that1.GetContainers)
+	}
+	if !this.GetFrameworks.Equal(that1.GetFrameworks) {
+		return fmt.Errorf("GetFrameworks this(%v) Not Equal that(%v)", this.GetFrameworks, that1.GetFrameworks)
+	}
+	if !this.GetExecutors.Equal(that1.GetExecutors) {
+		return fmt.Errorf("GetExecutors this(%v) Not Equal that(%v)", this.GetExecutors, that1.GetExecutors)
+	}
+	if !this.GetTasks.Equal(that1.GetTasks) {
+		return fmt.Errorf("GetTasks this(%v) Not Equal that(%v)", this.GetTasks, that1.GetTasks)
+	}
+	if !this.WaitNestedContainer.Equal(that1.WaitNestedContainer) {
+		return fmt.Errorf("WaitNestedContainer this(%v) Not Equal that(%v)", this.WaitNestedContainer, that1.WaitNestedContainer)
+	}
+	return nil
 }
 func (this *Response) Equal(that interface{}) bool {
 	if that == nil {
@@ -1322,6 +2358,36 @@ func (this *Response) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetHealth) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetHealth)
+	if !ok {
+		that2, ok := that.(Response_GetHealth)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetHealth")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetHealth but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetHealth but is not nil && this == nil")
+	}
+	if this.Healthy != that1.Healthy {
+		return fmt.Errorf("Healthy this(%v) Not Equal that(%v)", this.Healthy, that1.Healthy)
+	}
+	return nil
+}
 func (this *Response_GetHealth) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1351,6 +2417,41 @@ func (this *Response_GetHealth) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetFlags) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetFlags)
+	if !ok {
+		that2, ok := that.(Response_GetFlags)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetFlags")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetFlags but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetFlags but is not nil && this == nil")
+	}
+	if len(this.Flags) != len(that1.Flags) {
+		return fmt.Errorf("Flags this(%v) Not Equal that(%v)", len(this.Flags), len(that1.Flags))
+	}
+	for i := range this.Flags {
+		if !this.Flags[i].Equal(&that1.Flags[i]) {
+			return fmt.Errorf("Flags this[%v](%v) Not Equal that[%v](%v)", i, this.Flags[i], i, that1.Flags[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetFlags) Equal(that interface{}) bool {
 	if that == nil {
@@ -1387,6 +2488,36 @@ func (this *Response_GetFlags) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetVersion) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetVersion)
+	if !ok {
+		that2, ok := that.(Response_GetVersion)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetVersion")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetVersion but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetVersion but is not nil && this == nil")
+	}
+	if !this.VersionInfo.Equal(&that1.VersionInfo) {
+		return fmt.Errorf("VersionInfo this(%v) Not Equal that(%v)", this.VersionInfo, that1.VersionInfo)
+	}
+	return nil
+}
 func (this *Response_GetVersion) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1416,6 +2547,41 @@ func (this *Response_GetVersion) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetMetrics) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetMetrics)
+	if !ok {
+		that2, ok := that.(Response_GetMetrics)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetMetrics")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetMetrics but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetMetrics but is not nil && this == nil")
+	}
+	if len(this.Metrics) != len(that1.Metrics) {
+		return fmt.Errorf("Metrics this(%v) Not Equal that(%v)", len(this.Metrics), len(that1.Metrics))
+	}
+	for i := range this.Metrics {
+		if !this.Metrics[i].Equal(&that1.Metrics[i]) {
+			return fmt.Errorf("Metrics this[%v](%v) Not Equal that[%v](%v)", i, this.Metrics[i], i, that1.Metrics[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetMetrics) Equal(that interface{}) bool {
 	if that == nil {
@@ -1452,6 +2618,36 @@ func (this *Response_GetMetrics) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetLoggingLevel) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetLoggingLevel)
+	if !ok {
+		that2, ok := that.(Response_GetLoggingLevel)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetLoggingLevel")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetLoggingLevel but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetLoggingLevel but is not nil && this == nil")
+	}
+	if this.Level != that1.Level {
+		return fmt.Errorf("Level this(%v) Not Equal that(%v)", this.Level, that1.Level)
+	}
+	return nil
+}
 func (this *Response_GetLoggingLevel) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1481,6 +2677,41 @@ func (this *Response_GetLoggingLevel) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_ListFiles) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_ListFiles)
+	if !ok {
+		that2, ok := that.(Response_ListFiles)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_ListFiles")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_ListFiles but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_ListFiles but is not nil && this == nil")
+	}
+	if len(this.FileInfos) != len(that1.FileInfos) {
+		return fmt.Errorf("FileInfos this(%v) Not Equal that(%v)", len(this.FileInfos), len(that1.FileInfos))
+	}
+	for i := range this.FileInfos {
+		if !this.FileInfos[i].Equal(&that1.FileInfos[i]) {
+			return fmt.Errorf("FileInfos this[%v](%v) Not Equal that[%v](%v)", i, this.FileInfos[i], i, that1.FileInfos[i])
+		}
+	}
+	return nil
 }
 func (this *Response_ListFiles) Equal(that interface{}) bool {
 	if that == nil {
@@ -1517,6 +2748,39 @@ func (this *Response_ListFiles) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_ReadFile) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_ReadFile)
+	if !ok {
+		that2, ok := that.(Response_ReadFile)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_ReadFile")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_ReadFile but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_ReadFile but is not nil && this == nil")
+	}
+	if this.Size_ != that1.Size_ {
+		return fmt.Errorf("Size_ this(%v) Not Equal that(%v)", this.Size_, that1.Size_)
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return fmt.Errorf("Data this(%v) Not Equal that(%v)", this.Data, that1.Data)
+	}
+	return nil
+}
 func (this *Response_ReadFile) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1549,6 +2813,42 @@ func (this *Response_ReadFile) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetState) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetState)
+	if !ok {
+		that2, ok := that.(Response_GetState)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetState")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetState but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetState but is not nil && this == nil")
+	}
+	if !this.GetTasks.Equal(that1.GetTasks) {
+		return fmt.Errorf("GetTasks this(%v) Not Equal that(%v)", this.GetTasks, that1.GetTasks)
+	}
+	if !this.GetExecutors.Equal(that1.GetExecutors) {
+		return fmt.Errorf("GetExecutors this(%v) Not Equal that(%v)", this.GetExecutors, that1.GetExecutors)
+	}
+	if !this.GetFrameworks.Equal(that1.GetFrameworks) {
+		return fmt.Errorf("GetFrameworks this(%v) Not Equal that(%v)", this.GetFrameworks, that1.GetFrameworks)
+	}
+	return nil
 }
 func (this *Response_GetState) Equal(that interface{}) bool {
 	if that == nil {
@@ -1586,6 +2886,41 @@ func (this *Response_GetState) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetContainers) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetContainers)
+	if !ok {
+		that2, ok := that.(Response_GetContainers)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetContainers")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetContainers but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetContainers but is not nil && this == nil")
+	}
+	if len(this.Containers) != len(that1.Containers) {
+		return fmt.Errorf("Containers this(%v) Not Equal that(%v)", len(this.Containers), len(that1.Containers))
+	}
+	for i := range this.Containers {
+		if !this.Containers[i].Equal(&that1.Containers[i]) {
+			return fmt.Errorf("Containers this[%v](%v) Not Equal that[%v](%v)", i, this.Containers[i], i, that1.Containers[i])
+		}
+	}
+	return nil
+}
 func (this *Response_GetContainers) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1620,6 +2955,51 @@ func (this *Response_GetContainers) Equal(that interface{}) bool {
 		}
 	}
 	return true
+}
+func (this *Response_GetContainers_Container) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetContainers_Container)
+	if !ok {
+		that2, ok := that.(Response_GetContainers_Container)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetContainers_Container")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetContainers_Container but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetContainers_Container but is not nil && this == nil")
+	}
+	if !this.FrameworkID.Equal(&that1.FrameworkID) {
+		return fmt.Errorf("FrameworkID this(%v) Not Equal that(%v)", this.FrameworkID, that1.FrameworkID)
+	}
+	if !this.ExecutorID.Equal(&that1.ExecutorID) {
+		return fmt.Errorf("ExecutorID this(%v) Not Equal that(%v)", this.ExecutorID, that1.ExecutorID)
+	}
+	if this.ExecutorName != that1.ExecutorName {
+		return fmt.Errorf("ExecutorName this(%v) Not Equal that(%v)", this.ExecutorName, that1.ExecutorName)
+	}
+	if !this.ContainerID.Equal(&that1.ContainerID) {
+		return fmt.Errorf("ContainerID this(%v) Not Equal that(%v)", this.ContainerID, that1.ContainerID)
+	}
+	if !this.ContainerStatus.Equal(that1.ContainerStatus) {
+		return fmt.Errorf("ContainerStatus this(%v) Not Equal that(%v)", this.ContainerStatus, that1.ContainerStatus)
+	}
+	if !this.ResourceStatistics.Equal(that1.ResourceStatistics) {
+		return fmt.Errorf("ResourceStatistics this(%v) Not Equal that(%v)", this.ResourceStatistics, that1.ResourceStatistics)
+	}
+	return nil
 }
 func (this *Response_GetContainers_Container) Equal(that interface{}) bool {
 	if that == nil {
@@ -1666,6 +3046,49 @@ func (this *Response_GetContainers_Container) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetFrameworks) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetFrameworks)
+	if !ok {
+		that2, ok := that.(Response_GetFrameworks)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetFrameworks")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetFrameworks but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetFrameworks but is not nil && this == nil")
+	}
+	if len(this.Frameworks) != len(that1.Frameworks) {
+		return fmt.Errorf("Frameworks this(%v) Not Equal that(%v)", len(this.Frameworks), len(that1.Frameworks))
+	}
+	for i := range this.Frameworks {
+		if !this.Frameworks[i].Equal(&that1.Frameworks[i]) {
+			return fmt.Errorf("Frameworks this[%v](%v) Not Equal that[%v](%v)", i, this.Frameworks[i], i, that1.Frameworks[i])
+		}
+	}
+	if len(this.CompletedFrameworks) != len(that1.CompletedFrameworks) {
+		return fmt.Errorf("CompletedFrameworks this(%v) Not Equal that(%v)", len(this.CompletedFrameworks), len(that1.CompletedFrameworks))
+	}
+	for i := range this.CompletedFrameworks {
+		if !this.CompletedFrameworks[i].Equal(&that1.CompletedFrameworks[i]) {
+			return fmt.Errorf("CompletedFrameworks this[%v](%v) Not Equal that[%v](%v)", i, this.CompletedFrameworks[i], i, that1.CompletedFrameworks[i])
+		}
+	}
+	return nil
+}
 func (this *Response_GetFrameworks) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1709,6 +3132,36 @@ func (this *Response_GetFrameworks) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetFrameworks_Framework) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetFrameworks_Framework)
+	if !ok {
+		that2, ok := that.(Response_GetFrameworks_Framework)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetFrameworks_Framework")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetFrameworks_Framework but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetFrameworks_Framework but is not nil && this == nil")
+	}
+	if !this.FrameworkInfo.Equal(&that1.FrameworkInfo) {
+		return fmt.Errorf("FrameworkInfo this(%v) Not Equal that(%v)", this.FrameworkInfo, that1.FrameworkInfo)
+	}
+	return nil
+}
 func (this *Response_GetFrameworks_Framework) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1738,6 +3191,49 @@ func (this *Response_GetFrameworks_Framework) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetExecutors) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetExecutors)
+	if !ok {
+		that2, ok := that.(Response_GetExecutors)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetExecutors")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetExecutors but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetExecutors but is not nil && this == nil")
+	}
+	if len(this.Executors) != len(that1.Executors) {
+		return fmt.Errorf("Executors this(%v) Not Equal that(%v)", len(this.Executors), len(that1.Executors))
+	}
+	for i := range this.Executors {
+		if !this.Executors[i].Equal(&that1.Executors[i]) {
+			return fmt.Errorf("Executors this[%v](%v) Not Equal that[%v](%v)", i, this.Executors[i], i, that1.Executors[i])
+		}
+	}
+	if len(this.CompletedExecutors) != len(that1.CompletedExecutors) {
+		return fmt.Errorf("CompletedExecutors this(%v) Not Equal that(%v)", len(this.CompletedExecutors), len(that1.CompletedExecutors))
+	}
+	for i := range this.CompletedExecutors {
+		if !this.CompletedExecutors[i].Equal(&that1.CompletedExecutors[i]) {
+			return fmt.Errorf("CompletedExecutors this[%v](%v) Not Equal that[%v](%v)", i, this.CompletedExecutors[i], i, that1.CompletedExecutors[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetExecutors) Equal(that interface{}) bool {
 	if that == nil {
@@ -1782,6 +3278,36 @@ func (this *Response_GetExecutors) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetExecutors_Executor) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetExecutors_Executor)
+	if !ok {
+		that2, ok := that.(Response_GetExecutors_Executor)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetExecutors_Executor")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetExecutors_Executor but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetExecutors_Executor but is not nil && this == nil")
+	}
+	if !this.ExecutorInfo.Equal(&that1.ExecutorInfo) {
+		return fmt.Errorf("ExecutorInfo this(%v) Not Equal that(%v)", this.ExecutorInfo, that1.ExecutorInfo)
+	}
+	return nil
+}
 func (this *Response_GetExecutors_Executor) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1811,6 +3337,73 @@ func (this *Response_GetExecutors_Executor) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetTasks) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetTasks)
+	if !ok {
+		that2, ok := that.(Response_GetTasks)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetTasks")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetTasks but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetTasks but is not nil && this == nil")
+	}
+	if len(this.PendingTasks) != len(that1.PendingTasks) {
+		return fmt.Errorf("PendingTasks this(%v) Not Equal that(%v)", len(this.PendingTasks), len(that1.PendingTasks))
+	}
+	for i := range this.PendingTasks {
+		if !this.PendingTasks[i].Equal(&that1.PendingTasks[i]) {
+			return fmt.Errorf("PendingTasks this[%v](%v) Not Equal that[%v](%v)", i, this.PendingTasks[i], i, that1.PendingTasks[i])
+		}
+	}
+	if len(this.QueuedTasks) != len(that1.QueuedTasks) {
+		return fmt.Errorf("QueuedTasks this(%v) Not Equal that(%v)", len(this.QueuedTasks), len(that1.QueuedTasks))
+	}
+	for i := range this.QueuedTasks {
+		if !this.QueuedTasks[i].Equal(&that1.QueuedTasks[i]) {
+			return fmt.Errorf("QueuedTasks this[%v](%v) Not Equal that[%v](%v)", i, this.QueuedTasks[i], i, that1.QueuedTasks[i])
+		}
+	}
+	if len(this.LaunchedTasks) != len(that1.LaunchedTasks) {
+		return fmt.Errorf("LaunchedTasks this(%v) Not Equal that(%v)", len(this.LaunchedTasks), len(that1.LaunchedTasks))
+	}
+	for i := range this.LaunchedTasks {
+		if !this.LaunchedTasks[i].Equal(&that1.LaunchedTasks[i]) {
+			return fmt.Errorf("LaunchedTasks this[%v](%v) Not Equal that[%v](%v)", i, this.LaunchedTasks[i], i, that1.LaunchedTasks[i])
+		}
+	}
+	if len(this.TerminatedTasks) != len(that1.TerminatedTasks) {
+		return fmt.Errorf("TerminatedTasks this(%v) Not Equal that(%v)", len(this.TerminatedTasks), len(that1.TerminatedTasks))
+	}
+	for i := range this.TerminatedTasks {
+		if !this.TerminatedTasks[i].Equal(&that1.TerminatedTasks[i]) {
+			return fmt.Errorf("TerminatedTasks this[%v](%v) Not Equal that[%v](%v)", i, this.TerminatedTasks[i], i, that1.TerminatedTasks[i])
+		}
+	}
+	if len(this.CompletedTasks) != len(that1.CompletedTasks) {
+		return fmt.Errorf("CompletedTasks this(%v) Not Equal that(%v)", len(this.CompletedTasks), len(that1.CompletedTasks))
+	}
+	for i := range this.CompletedTasks {
+		if !this.CompletedTasks[i].Equal(&that1.CompletedTasks[i]) {
+			return fmt.Errorf("CompletedTasks this[%v](%v) Not Equal that[%v](%v)", i, this.CompletedTasks[i], i, that1.CompletedTasks[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetTasks) Equal(that interface{}) bool {
 	if that == nil {
@@ -1879,6 +3472,42 @@ func (this *Response_GetTasks) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_WaitNestedContainer) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_WaitNestedContainer)
+	if !ok {
+		that2, ok := that.(Response_WaitNestedContainer)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_WaitNestedContainer")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_WaitNestedContainer but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_WaitNestedContainer but is not nil && this == nil")
+	}
+	if this.ExitStatus != nil && that1.ExitStatus != nil {
+		if *this.ExitStatus != *that1.ExitStatus {
+			return fmt.Errorf("ExitStatus this(%v) Not Equal that(%v)", *this.ExitStatus, *that1.ExitStatus)
+		}
+	} else if this.ExitStatus != nil {
+		return fmt.Errorf("this.ExitStatus == nil && that.ExitStatus != nil")
+	} else if that1.ExitStatus != nil {
+		return fmt.Errorf("ExitStatus this(%v) Not Equal that(%v)", this.ExitStatus, that1.ExitStatus)
+	}
+	return nil
+}
 func (this *Response_WaitNestedContainer) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1904,7 +3533,283 @@ func (this *Response_WaitNestedContainer) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.ExitStatus != that1.ExitStatus {
+	if this.ExitStatus != nil && that1.ExitStatus != nil {
+		if *this.ExitStatus != *that1.ExitStatus {
+			return false
+		}
+	} else if this.ExitStatus != nil {
+		return false
+	} else if that1.ExitStatus != nil {
+		return false
+	}
+	return true
+}
+func (this *ProcessIO) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*ProcessIO)
+	if !ok {
+		that2, ok := that.(ProcessIO)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *ProcessIO")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *ProcessIO but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *ProcessIO but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.Data.Equal(that1.Data) {
+		return fmt.Errorf("Data this(%v) Not Equal that(%v)", this.Data, that1.Data)
+	}
+	if !this.Control.Equal(that1.Control) {
+		return fmt.Errorf("Control this(%v) Not Equal that(%v)", this.Control, that1.Control)
+	}
+	return nil
+}
+func (this *ProcessIO) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*ProcessIO)
+	if !ok {
+		that2, ok := that.(ProcessIO)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.Type != that1.Type {
+		return false
+	}
+	if !this.Data.Equal(that1.Data) {
+		return false
+	}
+	if !this.Control.Equal(that1.Control) {
+		return false
+	}
+	return true
+}
+func (this *ProcessIO_Data) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*ProcessIO_Data)
+	if !ok {
+		that2, ok := that.(ProcessIO_Data)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *ProcessIO_Data")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *ProcessIO_Data but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *ProcessIO_Data but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return fmt.Errorf("Data this(%v) Not Equal that(%v)", this.Data, that1.Data)
+	}
+	return nil
+}
+func (this *ProcessIO_Data) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*ProcessIO_Data)
+	if !ok {
+		that2, ok := that.(ProcessIO_Data)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.Type != that1.Type {
+		return false
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return false
+	}
+	return true
+}
+func (this *ProcessIO_Control) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*ProcessIO_Control)
+	if !ok {
+		that2, ok := that.(ProcessIO_Control)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *ProcessIO_Control")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *ProcessIO_Control but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *ProcessIO_Control but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.TtyInfo.Equal(that1.TtyInfo) {
+		return fmt.Errorf("TtyInfo this(%v) Not Equal that(%v)", this.TtyInfo, that1.TtyInfo)
+	}
+	if !this.Heartbeat.Equal(that1.Heartbeat) {
+		return fmt.Errorf("Heartbeat this(%v) Not Equal that(%v)", this.Heartbeat, that1.Heartbeat)
+	}
+	return nil
+}
+func (this *ProcessIO_Control) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*ProcessIO_Control)
+	if !ok {
+		that2, ok := that.(ProcessIO_Control)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if this.Type != that1.Type {
+		return false
+	}
+	if !this.TtyInfo.Equal(that1.TtyInfo) {
+		return false
+	}
+	if !this.Heartbeat.Equal(that1.Heartbeat) {
+		return false
+	}
+	return true
+}
+func (this *ProcessIO_Control_Heartbeat) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*ProcessIO_Control_Heartbeat)
+	if !ok {
+		that2, ok := that.(ProcessIO_Control_Heartbeat)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *ProcessIO_Control_Heartbeat")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *ProcessIO_Control_Heartbeat but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *ProcessIO_Control_Heartbeat but is not nil && this == nil")
+	}
+	if !this.Interval.Equal(that1.Interval) {
+		return fmt.Errorf("Interval this(%v) Not Equal that(%v)", this.Interval, that1.Interval)
+	}
+	return nil
+}
+func (this *ProcessIO_Control_Heartbeat) Equal(that interface{}) bool {
+	if that == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	}
+
+	that1, ok := that.(*ProcessIO_Control_Heartbeat)
+	if !ok {
+		that2, ok := that.(ProcessIO_Control_Heartbeat)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return true
+		}
+		return false
+	} else if this == nil {
+		return false
+	}
+	if !this.Interval.Equal(that1.Interval) {
 		return false
 	}
 	return true
@@ -1913,7 +3818,7 @@ func (this *Call) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 12)
+	s := make([]string, 0, 15)
 	s = append(s, "&agent.Call{")
 	s = append(s, "Type: "+fmt.Sprintf("%#v", this.Type)+",\n")
 	if this.GetMetrics != nil {
@@ -1936,6 +3841,15 @@ func (this *Call) GoString() string {
 	}
 	if this.KillNestedContainer != nil {
 		s = append(s, "KillNestedContainer: "+fmt.Sprintf("%#v", this.KillNestedContainer)+",\n")
+	}
+	if this.LaunchNestedContainerSession != nil {
+		s = append(s, "LaunchNestedContainerSession: "+fmt.Sprintf("%#v", this.LaunchNestedContainerSession)+",\n")
+	}
+	if this.AttachContainerInput != nil {
+		s = append(s, "AttachContainerInput: "+fmt.Sprintf("%#v", this.AttachContainerInput)+",\n")
+	}
+	if this.AttachContainerOutput != nil {
+		s = append(s, "AttachContainerOutput: "+fmt.Sprintf("%#v", this.AttachContainerOutput)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -1981,7 +3895,9 @@ func (this *Call_ReadFile) GoString() string {
 	s = append(s, "&agent.Call_ReadFile{")
 	s = append(s, "Path: "+fmt.Sprintf("%#v", this.Path)+",\n")
 	s = append(s, "Offset: "+fmt.Sprintf("%#v", this.Offset)+",\n")
-	s = append(s, "Length: "+fmt.Sprintf("%#v", this.Length)+",\n")
+	if this.Length != nil {
+		s = append(s, "Length: "+valueToGoStringAgent(this.Length, "uint64")+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -2018,6 +3934,48 @@ func (this *Call_KillNestedContainer) GoString() string {
 	s := make([]string, 0, 5)
 	s = append(s, "&agent.Call_KillNestedContainer{")
 	s = append(s, "ContainerID: "+strings.Replace(this.ContainerID.GoString(), `&`, ``, 1)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *Call_LaunchNestedContainerSession) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 7)
+	s = append(s, "&agent.Call_LaunchNestedContainerSession{")
+	s = append(s, "ContainerId: "+strings.Replace(this.ContainerId.GoString(), `&`, ``, 1)+",\n")
+	if this.Command != nil {
+		s = append(s, "Command: "+fmt.Sprintf("%#v", this.Command)+",\n")
+	}
+	if this.Container != nil {
+		s = append(s, "Container: "+fmt.Sprintf("%#v", this.Container)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *Call_AttachContainerInput) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 7)
+	s = append(s, "&agent.Call_AttachContainerInput{")
+	s = append(s, "Type: "+fmt.Sprintf("%#v", this.Type)+",\n")
+	if this.ContainerId != nil {
+		s = append(s, "ContainerId: "+fmt.Sprintf("%#v", this.ContainerId)+",\n")
+	}
+	if this.ProcessIo != nil {
+		s = append(s, "ProcessIo: "+fmt.Sprintf("%#v", this.ProcessIo)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *Call_AttachContainerOutput) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&agent.Call_AttachContainerOutput{")
+	s = append(s, "ContainerId: "+strings.Replace(this.ContainerId.GoString(), `&`, ``, 1)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -2278,7 +4236,66 @@ func (this *Response_WaitNestedContainer) GoString() string {
 	}
 	s := make([]string, 0, 5)
 	s = append(s, "&agent.Response_WaitNestedContainer{")
-	s = append(s, "ExitStatus: "+fmt.Sprintf("%#v", this.ExitStatus)+",\n")
+	if this.ExitStatus != nil {
+		s = append(s, "ExitStatus: "+valueToGoStringAgent(this.ExitStatus, "int32")+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ProcessIO) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 7)
+	s = append(s, "&agent.ProcessIO{")
+	s = append(s, "Type: "+fmt.Sprintf("%#v", this.Type)+",\n")
+	if this.Data != nil {
+		s = append(s, "Data: "+fmt.Sprintf("%#v", this.Data)+",\n")
+	}
+	if this.Control != nil {
+		s = append(s, "Control: "+fmt.Sprintf("%#v", this.Control)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ProcessIO_Data) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&agent.ProcessIO_Data{")
+	s = append(s, "Type: "+fmt.Sprintf("%#v", this.Type)+",\n")
+	if this.Data != nil {
+		s = append(s, "Data: "+valueToGoStringAgent(this.Data, "byte")+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ProcessIO_Control) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 7)
+	s = append(s, "&agent.ProcessIO_Control{")
+	s = append(s, "Type: "+fmt.Sprintf("%#v", this.Type)+",\n")
+	if this.TtyInfo != nil {
+		s = append(s, "TtyInfo: "+fmt.Sprintf("%#v", this.TtyInfo)+",\n")
+	}
+	if this.Heartbeat != nil {
+		s = append(s, "Heartbeat: "+fmt.Sprintf("%#v", this.Heartbeat)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ProcessIO_Control_Heartbeat) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&agent.ProcessIO_Control_Heartbeat{")
+	if this.Interval != nil {
+		s = append(s, "Interval: "+fmt.Sprintf("%#v", this.Interval)+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -2378,6 +4395,36 @@ func (m *Call) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n7
 	}
+	if m.LaunchNestedContainerSession != nil {
+		dAtA[i] = 0x4a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.LaunchNestedContainerSession.Size()))
+		n8, err := m.LaunchNestedContainerSession.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	if m.AttachContainerInput != nil {
+		dAtA[i] = 0x52
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.AttachContainerInput.Size()))
+		n9, err := m.AttachContainerInput.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
+	if m.AttachContainerOutput != nil {
+		dAtA[i] = 0x5a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.AttachContainerOutput.Size()))
+		n10, err := m.AttachContainerOutput.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n10
+	}
 	return i, nil
 }
 
@@ -2400,11 +4447,11 @@ func (m *Call_GetMetrics) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Timeout.Size()))
-		n8, err := m.Timeout.MarshalTo(dAtA[i:])
+		n11, err := m.Timeout.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n8
+		i += n11
 	}
 	return i, nil
 }
@@ -2430,11 +4477,11 @@ func (m *Call_SetLoggingLevel) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.Duration.Size()))
-	n9, err := m.Duration.MarshalTo(dAtA[i:])
+	n12, err := m.Duration.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n9
+	i += n12
 	return i, nil
 }
 
@@ -2482,9 +4529,11 @@ func (m *Call_ReadFile) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.Offset))
-	dAtA[i] = 0x18
-	i++
-	i = encodeVarintAgent(dAtA, i, uint64(m.Length))
+	if m.Length != nil {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.Length))
+	}
 	return i, nil
 }
 
@@ -2506,30 +4555,30 @@ func (m *Call_LaunchNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.ContainerID.Size()))
-	n10, err := m.ContainerID.MarshalTo(dAtA[i:])
+	n13, err := m.ContainerID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n10
+	i += n13
 	if m.Command != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Command.Size()))
-		n11, err := m.Command.MarshalTo(dAtA[i:])
+		n14, err := m.Command.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n11
+		i += n14
 	}
 	if m.Container != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Container.Size()))
-		n12, err := m.Container.MarshalTo(dAtA[i:])
+		n15, err := m.Container.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n12
+		i += n15
 	}
 	return i, nil
 }
@@ -2552,11 +4601,11 @@ func (m *Call_WaitNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.ContainerID.Size()))
-	n13, err := m.ContainerID.MarshalTo(dAtA[i:])
+	n16, err := m.ContainerID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n13
+	i += n16
 	return i, nil
 }
 
@@ -2578,11 +4627,124 @@ func (m *Call_KillNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.ContainerID.Size()))
-	n14, err := m.ContainerID.MarshalTo(dAtA[i:])
+	n17, err := m.ContainerID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n14
+	i += n17
+	return i, nil
+}
+
+func (m *Call_LaunchNestedContainerSession) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_LaunchNestedContainerSession) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
+	n18, err := m.ContainerId.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n18
+	if m.Command != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Command.Size()))
+		n19, err := m.Command.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n19
+	}
+	if m.Container != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Container.Size()))
+		n20, err := m.Container.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n20
+	}
+	return i, nil
+}
+
+func (m *Call_AttachContainerInput) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_AttachContainerInput) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0x8
+	i++
+	i = encodeVarintAgent(dAtA, i, uint64(m.Type))
+	if m.ContainerId != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
+		n21, err := m.ContainerId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n21
+	}
+	if m.ProcessIo != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ProcessIo.Size()))
+		n22, err := m.ProcessIo.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n22
+	}
+	return i, nil
+}
+
+func (m *Call_AttachContainerOutput) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_AttachContainerOutput) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
+	n23, err := m.ContainerId.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n23
 	return i, nil
 }
 
@@ -2608,131 +4770,131 @@ func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetHealth.Size()))
-		n15, err := m.GetHealth.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n15
-	}
-	if m.GetFlags != nil {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetFlags.Size()))
-		n16, err := m.GetFlags.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n16
-	}
-	if m.GetVersion != nil {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetVersion.Size()))
-		n17, err := m.GetVersion.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n17
-	}
-	if m.GetMetrics != nil {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetMetrics.Size()))
-		n18, err := m.GetMetrics.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n18
-	}
-	if m.GetLoggingLevel != nil {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetLoggingLevel.Size()))
-		n19, err := m.GetLoggingLevel.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n19
-	}
-	if m.ListFiles != nil {
-		dAtA[i] = 0x3a
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.ListFiles.Size()))
-		n20, err := m.ListFiles.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n20
-	}
-	if m.ReadFile != nil {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.ReadFile.Size()))
-		n21, err := m.ReadFile.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n21
-	}
-	if m.GetState != nil {
-		dAtA[i] = 0x4a
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetState.Size()))
-		n22, err := m.GetState.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n22
-	}
-	if m.GetContainers != nil {
-		dAtA[i] = 0x52
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetContainers.Size()))
-		n23, err := m.GetContainers.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n23
-	}
-	if m.GetFrameworks != nil {
-		dAtA[i] = 0x5a
-		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetFrameworks.Size()))
-		n24, err := m.GetFrameworks.MarshalTo(dAtA[i:])
+		n24, err := m.GetHealth.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n24
 	}
-	if m.GetExecutors != nil {
-		dAtA[i] = 0x62
+	if m.GetFlags != nil {
+		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetExecutors.Size()))
-		n25, err := m.GetExecutors.MarshalTo(dAtA[i:])
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetFlags.Size()))
+		n25, err := m.GetFlags.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n25
 	}
-	if m.GetTasks != nil {
-		dAtA[i] = 0x6a
+	if m.GetVersion != nil {
+		dAtA[i] = 0x22
 		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.GetTasks.Size()))
-		n26, err := m.GetTasks.MarshalTo(dAtA[i:])
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetVersion.Size()))
+		n26, err := m.GetVersion.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n26
 	}
-	if m.WaitNestedContainer != nil {
-		dAtA[i] = 0x72
+	if m.GetMetrics != nil {
+		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.WaitNestedContainer.Size()))
-		n27, err := m.WaitNestedContainer.MarshalTo(dAtA[i:])
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetMetrics.Size()))
+		n27, err := m.GetMetrics.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
 		i += n27
+	}
+	if m.GetLoggingLevel != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetLoggingLevel.Size()))
+		n28, err := m.GetLoggingLevel.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n28
+	}
+	if m.ListFiles != nil {
+		dAtA[i] = 0x3a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ListFiles.Size()))
+		n29, err := m.ListFiles.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n29
+	}
+	if m.ReadFile != nil {
+		dAtA[i] = 0x42
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ReadFile.Size()))
+		n30, err := m.ReadFile.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n30
+	}
+	if m.GetState != nil {
+		dAtA[i] = 0x4a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetState.Size()))
+		n31, err := m.GetState.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n31
+	}
+	if m.GetContainers != nil {
+		dAtA[i] = 0x52
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetContainers.Size()))
+		n32, err := m.GetContainers.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n32
+	}
+	if m.GetFrameworks != nil {
+		dAtA[i] = 0x5a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetFrameworks.Size()))
+		n33, err := m.GetFrameworks.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n33
+	}
+	if m.GetExecutors != nil {
+		dAtA[i] = 0x62
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetExecutors.Size()))
+		n34, err := m.GetExecutors.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n34
+	}
+	if m.GetTasks != nil {
+		dAtA[i] = 0x6a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetTasks.Size()))
+		n35, err := m.GetTasks.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n35
+	}
+	if m.WaitNestedContainer != nil {
+		dAtA[i] = 0x72
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.WaitNestedContainer.Size()))
+		n36, err := m.WaitNestedContainer.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n36
 	}
 	return i, nil
 }
@@ -2811,11 +4973,11 @@ func (m *Response_GetVersion) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.VersionInfo.Size()))
-	n28, err := m.VersionInfo.MarshalTo(dAtA[i:])
+	n37, err := m.VersionInfo.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n28
+	i += n37
 	return i, nil
 }
 
@@ -2948,31 +5110,31 @@ func (m *Response_GetState) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetTasks.Size()))
-		n29, err := m.GetTasks.MarshalTo(dAtA[i:])
+		n38, err := m.GetTasks.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n38
 	}
 	if m.GetExecutors != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetExecutors.Size()))
-		n30, err := m.GetExecutors.MarshalTo(dAtA[i:])
+		n39, err := m.GetExecutors.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n39
 	}
 	if m.GetFrameworks != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetFrameworks.Size()))
-		n31, err := m.GetFrameworks.MarshalTo(dAtA[i:])
+		n40, err := m.GetFrameworks.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n31
+		i += n40
 	}
 	return i, nil
 }
@@ -3025,19 +5187,19 @@ func (m *Response_GetContainers_Container) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.FrameworkID.Size()))
-	n32, err := m.FrameworkID.MarshalTo(dAtA[i:])
+	n41, err := m.FrameworkID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n32
+	i += n41
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.ExecutorID.Size()))
-	n33, err := m.ExecutorID.MarshalTo(dAtA[i:])
+	n42, err := m.ExecutorID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n33
+	i += n42
 	dAtA[i] = 0x1a
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(len(m.ExecutorName)))
@@ -3045,30 +5207,30 @@ func (m *Response_GetContainers_Container) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x22
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.ContainerID.Size()))
-	n34, err := m.ContainerID.MarshalTo(dAtA[i:])
+	n43, err := m.ContainerID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n34
+	i += n43
 	if m.ContainerStatus != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerStatus.Size()))
-		n35, err := m.ContainerStatus.MarshalTo(dAtA[i:])
+		n44, err := m.ContainerStatus.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n35
+		i += n44
 	}
 	if m.ResourceStatistics != nil {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ResourceStatistics.Size()))
-		n36, err := m.ResourceStatistics.MarshalTo(dAtA[i:])
+		n45, err := m.ResourceStatistics.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n36
+		i += n45
 	}
 	return i, nil
 }
@@ -3133,11 +5295,11 @@ func (m *Response_GetFrameworks_Framework) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.FrameworkInfo.Size()))
-	n37, err := m.FrameworkInfo.MarshalTo(dAtA[i:])
+	n46, err := m.FrameworkInfo.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n37
+	i += n46
 	return i, nil
 }
 
@@ -3201,11 +5363,11 @@ func (m *Response_GetExecutors_Executor) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintAgent(dAtA, i, uint64(m.ExecutorInfo.Size()))
-	n38, err := m.ExecutorInfo.MarshalTo(dAtA[i:])
+	n47, err := m.ExecutorInfo.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n38
+	i += n47
 	return i, nil
 }
 
@@ -3302,9 +5464,148 @@ func (m *Response_WaitNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.ExitStatus != nil {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.ExitStatus))
+	}
+	return i, nil
+}
+
+func (m *ProcessIO) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ProcessIO) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
 	dAtA[i] = 0x8
 	i++
-	i = encodeVarintAgent(dAtA, i, uint64(m.ExitStatus))
+	i = encodeVarintAgent(dAtA, i, uint64(m.Type))
+	if m.Data != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Data.Size()))
+		n48, err := m.Data.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n48
+	}
+	if m.Control != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Control.Size()))
+		n49, err := m.Control.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n49
+	}
+	return i, nil
+}
+
+func (m *ProcessIO_Data) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ProcessIO_Data) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0x8
+	i++
+	i = encodeVarintAgent(dAtA, i, uint64(m.Type))
+	if m.Data != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(len(m.Data)))
+		i += copy(dAtA[i:], m.Data)
+	}
+	return i, nil
+}
+
+func (m *ProcessIO_Control) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ProcessIO_Control) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0x8
+	i++
+	i = encodeVarintAgent(dAtA, i, uint64(m.Type))
+	if m.TtyInfo != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.TtyInfo.Size()))
+		n50, err := m.TtyInfo.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n50
+	}
+	if m.Heartbeat != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Heartbeat.Size()))
+		n51, err := m.Heartbeat.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n51
+	}
+	return i, nil
+}
+
+func (m *ProcessIO_Control_Heartbeat) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ProcessIO_Control_Heartbeat) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Interval != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Interval.Size()))
+		n52, err := m.Interval.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n52
+	}
 	return i, nil
 }
 
@@ -3367,6 +5668,18 @@ func (m *Call) Size() (n int) {
 		l = m.KillNestedContainer.Size()
 		n += 1 + l + sovAgent(uint64(l))
 	}
+	if m.LaunchNestedContainerSession != nil {
+		l = m.LaunchNestedContainerSession.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.AttachContainerInput != nil {
+		l = m.AttachContainerInput.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.AttachContainerOutput != nil {
+		l = m.AttachContainerOutput.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
 	return n
 }
 
@@ -3403,7 +5716,9 @@ func (m *Call_ReadFile) Size() (n int) {
 	l = len(m.Path)
 	n += 1 + l + sovAgent(uint64(l))
 	n += 1 + sovAgent(uint64(m.Offset))
-	n += 1 + sovAgent(uint64(m.Length))
+	if m.Length != nil {
+		n += 1 + sovAgent(uint64(*m.Length))
+	}
 	return n
 }
 
@@ -3435,6 +5750,45 @@ func (m *Call_KillNestedContainer) Size() (n int) {
 	var l int
 	_ = l
 	l = m.ContainerID.Size()
+	n += 1 + l + sovAgent(uint64(l))
+	return n
+}
+
+func (m *Call_LaunchNestedContainerSession) Size() (n int) {
+	var l int
+	_ = l
+	l = m.ContainerId.Size()
+	n += 1 + l + sovAgent(uint64(l))
+	if m.Command != nil {
+		l = m.Command.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Container != nil {
+		l = m.Container.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	return n
+}
+
+func (m *Call_AttachContainerInput) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovAgent(uint64(m.Type))
+	if m.ContainerId != nil {
+		l = m.ContainerId.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.ProcessIo != nil {
+		l = m.ProcessIo.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	return n
+}
+
+func (m *Call_AttachContainerOutput) Size() (n int) {
+	var l int
+	_ = l
+	l = m.ContainerId.Size()
 	n += 1 + l + sovAgent(uint64(l))
 	return n
 }
@@ -3710,7 +6064,60 @@ func (m *Response_GetTasks) Size() (n int) {
 func (m *Response_WaitNestedContainer) Size() (n int) {
 	var l int
 	_ = l
-	n += 1 + sovAgent(uint64(m.ExitStatus))
+	if m.ExitStatus != nil {
+		n += 1 + sovAgent(uint64(*m.ExitStatus))
+	}
+	return n
+}
+
+func (m *ProcessIO) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovAgent(uint64(m.Type))
+	if m.Data != nil {
+		l = m.Data.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Control != nil {
+		l = m.Control.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	return n
+}
+
+func (m *ProcessIO_Data) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovAgent(uint64(m.Type))
+	if m.Data != nil {
+		l = len(m.Data)
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	return n
+}
+
+func (m *ProcessIO_Control) Size() (n int) {
+	var l int
+	_ = l
+	n += 1 + sovAgent(uint64(m.Type))
+	if m.TtyInfo != nil {
+		l = m.TtyInfo.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Heartbeat != nil {
+		l = m.Heartbeat.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	return n
+}
+
+func (m *ProcessIO_Control_Heartbeat) Size() (n int) {
+	var l int
+	_ = l
+	if m.Interval != nil {
+		l = m.Interval.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
 	return n
 }
 
@@ -3740,6 +6147,9 @@ func (this *Call) String() string {
 		`LaunchNestedContainer:` + strings.Replace(fmt.Sprintf("%v", this.LaunchNestedContainer), "Call_LaunchNestedContainer", "Call_LaunchNestedContainer", 1) + `,`,
 		`WaitNestedContainer:` + strings.Replace(fmt.Sprintf("%v", this.WaitNestedContainer), "Call_WaitNestedContainer", "Call_WaitNestedContainer", 1) + `,`,
 		`KillNestedContainer:` + strings.Replace(fmt.Sprintf("%v", this.KillNestedContainer), "Call_KillNestedContainer", "Call_KillNestedContainer", 1) + `,`,
+		`LaunchNestedContainerSession:` + strings.Replace(fmt.Sprintf("%v", this.LaunchNestedContainerSession), "Call_LaunchNestedContainerSession", "Call_LaunchNestedContainerSession", 1) + `,`,
+		`AttachContainerInput:` + strings.Replace(fmt.Sprintf("%v", this.AttachContainerInput), "Call_AttachContainerInput", "Call_AttachContainerInput", 1) + `,`,
+		`AttachContainerOutput:` + strings.Replace(fmt.Sprintf("%v", this.AttachContainerOutput), "Call_AttachContainerOutput", "Call_AttachContainerOutput", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3782,7 +6192,7 @@ func (this *Call_ReadFile) String() string {
 	s := strings.Join([]string{`&Call_ReadFile{`,
 		`Path:` + fmt.Sprintf("%v", this.Path) + `,`,
 		`Offset:` + fmt.Sprintf("%v", this.Offset) + `,`,
-		`Length:` + fmt.Sprintf("%v", this.Length) + `,`,
+		`Length:` + valueToStringAgent(this.Length) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3815,6 +6225,40 @@ func (this *Call_KillNestedContainer) String() string {
 	}
 	s := strings.Join([]string{`&Call_KillNestedContainer{`,
 		`ContainerID:` + strings.Replace(strings.Replace(this.ContainerID.String(), "ContainerID", "mesos_v1.ContainerID", 1), `&`, ``, 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Call_LaunchNestedContainerSession) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Call_LaunchNestedContainerSession{`,
+		`ContainerId:` + strings.Replace(strings.Replace(this.ContainerId.String(), "ContainerID", "mesos_v1.ContainerID", 1), `&`, ``, 1) + `,`,
+		`Command:` + strings.Replace(fmt.Sprintf("%v", this.Command), "CommandInfo", "mesos_v1.CommandInfo", 1) + `,`,
+		`Container:` + strings.Replace(fmt.Sprintf("%v", this.Container), "ContainerInfo", "mesos_v1.ContainerInfo", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Call_AttachContainerInput) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Call_AttachContainerInput{`,
+		`Type:` + fmt.Sprintf("%v", this.Type) + `,`,
+		`ContainerId:` + strings.Replace(fmt.Sprintf("%v", this.ContainerId), "ContainerID", "mesos_v1.ContainerID", 1) + `,`,
+		`ProcessIo:` + strings.Replace(fmt.Sprintf("%v", this.ProcessIo), "ProcessIO", "ProcessIO", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *Call_AttachContainerOutput) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&Call_AttachContainerOutput{`,
+		`ContainerId:` + strings.Replace(strings.Replace(this.ContainerId.String(), "ContainerID", "mesos_v1.ContainerID", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -4011,7 +6455,52 @@ func (this *Response_WaitNestedContainer) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Response_WaitNestedContainer{`,
-		`ExitStatus:` + fmt.Sprintf("%v", this.ExitStatus) + `,`,
+		`ExitStatus:` + valueToStringAgent(this.ExitStatus) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ProcessIO) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ProcessIO{`,
+		`Type:` + fmt.Sprintf("%v", this.Type) + `,`,
+		`Data:` + strings.Replace(fmt.Sprintf("%v", this.Data), "ProcessIO_Data", "ProcessIO_Data", 1) + `,`,
+		`Control:` + strings.Replace(fmt.Sprintf("%v", this.Control), "ProcessIO_Control", "ProcessIO_Control", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ProcessIO_Data) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ProcessIO_Data{`,
+		`Type:` + fmt.Sprintf("%v", this.Type) + `,`,
+		`Data:` + valueToStringAgent(this.Data) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ProcessIO_Control) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ProcessIO_Control{`,
+		`Type:` + fmt.Sprintf("%v", this.Type) + `,`,
+		`TtyInfo:` + strings.Replace(fmt.Sprintf("%v", this.TtyInfo), "TTYInfo", "mesos_v1.TTYInfo", 1) + `,`,
+		`Heartbeat:` + strings.Replace(fmt.Sprintf("%v", this.Heartbeat), "ProcessIO_Control_Heartbeat", "ProcessIO_Control_Heartbeat", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ProcessIO_Control_Heartbeat) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ProcessIO_Control_Heartbeat{`,
+		`Interval:` + strings.Replace(fmt.Sprintf("%v", this.Interval), "DurationInfo", "mesos_v1.DurationInfo", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -4300,6 +6789,105 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 				m.KillNestedContainer = &Call_KillNestedContainer{}
 			}
 			if err := m.KillNestedContainer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LaunchNestedContainerSession", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LaunchNestedContainerSession == nil {
+				m.LaunchNestedContainerSession = &Call_LaunchNestedContainerSession{}
+			}
+			if err := m.LaunchNestedContainerSession.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AttachContainerInput", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AttachContainerInput == nil {
+				m.AttachContainerInput = &Call_AttachContainerInput{}
+			}
+			if err := m.AttachContainerInput.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AttachContainerOutput", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AttachContainerOutput == nil {
+				m.AttachContainerOutput = &Call_AttachContainerOutput{}
+			}
+			if err := m.AttachContainerOutput.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4683,7 +7271,7 @@ func (m *Call_ReadFile) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Length", wireType)
 			}
-			m.Length = 0
+			var v uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowAgent
@@ -4693,11 +7281,12 @@ func (m *Call_ReadFile) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Length |= (uint64(b) & 0x7F) << shift
+				v |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			m.Length = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAgent(dAtA[iNdEx:])
@@ -5018,6 +7607,377 @@ func (m *Call_KillNestedContainer) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if err := m.ContainerID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("container_id")
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_LaunchNestedContainerSession) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LaunchNestedContainerSession: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LaunchNestedContainerSession: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Command", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Command == nil {
+				m.Command = &mesos_v1.CommandInfo{}
+			}
+			if err := m.Command.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Container", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Container == nil {
+				m.Container = &mesos_v1.ContainerInfo{}
+			}
+			if err := m.Container.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("container_id")
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_AttachContainerInput) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AttachContainerInput: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AttachContainerInput: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Type |= (Call_AttachContainerInput_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ContainerId == nil {
+				m.ContainerId = &mesos_v1.ContainerID{}
+			}
+			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProcessIo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ProcessIo == nil {
+				m.ProcessIo = &ProcessIO{}
+			}
+			if err := m.ProcessIo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_AttachContainerOutput) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AttachContainerOutput: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AttachContainerOutput: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7244,7 +10204,7 @@ func (m *Response_WaitNestedContainer) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ExitStatus", wireType)
 			}
-			m.ExitStatus = 0
+			var v int32
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowAgent
@@ -7254,11 +10214,465 @@ func (m *Response_WaitNestedContainer) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.ExitStatus |= (int32(b) & 0x7F) << shift
+				v |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			m.ExitStatus = &v
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ProcessIO) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ProcessIO: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ProcessIO: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Type |= (ProcessIO_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Data == nil {
+				m.Data = &ProcessIO_Data{}
+			}
+			if err := m.Data.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Control", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Control == nil {
+				m.Control = &ProcessIO_Control{}
+			}
+			if err := m.Control.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ProcessIO_Data) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Data: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Data: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Type |= (ProcessIO_Data_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Data = append(m.Data[:0], dAtA[iNdEx:postIndex]...)
+			if m.Data == nil {
+				m.Data = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ProcessIO_Control) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Control: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Control: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			m.Type = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Type |= (ProcessIO_Control_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TtyInfo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.TtyInfo == nil {
+				m.TtyInfo = &mesos_v1.TTYInfo{}
+			}
+			if err := m.TtyInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Heartbeat", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Heartbeat == nil {
+				m.Heartbeat = &ProcessIO_Control_Heartbeat{}
+			}
+			if err := m.Heartbeat.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ProcessIO_Control_Heartbeat) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Heartbeat: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Heartbeat: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Interval", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Interval == nil {
+				m.Interval = &mesos_v1.DurationInfo{}
+			}
+			if err := m.Interval.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAgent(dAtA[iNdEx:])
@@ -7388,111 +10802,126 @@ var (
 func init() { proto.RegisterFile("operator/agent/agent.proto", fileDescriptorAgent) }
 
 var fileDescriptorAgent = []byte{
-	// 1692 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xbc, 0x58, 0x4b, 0x73, 0xdb, 0x5e,
-	0x15, 0x8f, 0xfc, 0x88, 0xed, 0xe3, 0x47, 0x94, 0x9b, 0x97, 0xa3, 0x82, 0x1d, 0x52, 0x68, 0x33,
-	0x85, 0x38, 0x34, 0x0c, 0x8b, 0x0e, 0xd3, 0x52, 0xdb, 0x91, 0x1d, 0x37, 0xae, 0x43, 0x2d, 0x37,
-	0xe9, 0xb0, 0x31, 0xaa, 0x7d, 0xed, 0x88, 0xc8, 0x92, 0xb1, 0xae, 0x5b, 0xca, 0x8a, 0x8f, 0x00,
-	0x3b, 0x36, 0xec, 0xd9, 0xc0, 0xb7, 0x60, 0xa6, 0x1b, 0x86, 0x2e, 0x59, 0x79, 0xa8, 0xd8, 0xb0,
-	0x2c, 0x1b, 0x96, 0x0c, 0x73, 0xaf, 0x9e, 0x8e, 0xe4, 0xa4, 0x6d, 0x66, 0xfe, 0x9b, 0x4e, 0xcf,
-	0xd1, 0xef, 0xfc, 0xce, 0xf5, 0xb9, 0xe7, 0x75, 0x03, 0x82, 0x3e, 0xc6, 0x13, 0x99, 0xe8, 0x93,
-	0x03, 0x79, 0x88, 0x35, 0x62, 0xfd, 0x5b, 0x1a, 0x4f, 0x74, 0xa2, 0xa3, 0xdc, 0x08, 0x1b, 0xba,
-	0x51, 0x7a, 0xf3, 0xb0, 0xc4, 0xb4, 0xc2, 0xc3, 0xa1, 0x42, 0x2e, 0xa6, 0xaf, 0x4b, 0x3d, 0x7d,
-	0x74, 0xa0, 0x6b, 0xfd, 0x09, 0xfe, 0xe5, 0xbe, 0x31, 0xd2, 0x55, 0xf9, 0x80, 0xe1, 0xf6, 0x87,
-	0xfa, 0xfe, 0x05, 0x21, 0x63, 0x4b, 0xb2, 0x28, 0x84, 0x7d, 0x9f, 0xc9, 0x50, 0x1f, 0xea, 0x07,
-	0x4c, 0xfd, 0x7a, 0x3a, 0x60, 0x12, 0x13, 0xd8, 0xff, 0x2c, 0xf8, 0xee, 0x5f, 0x32, 0x10, 0xab,
-	0xca, 0xaa, 0x8a, 0xf6, 0x21, 0x46, 0xde, 0x8d, 0x71, 0x9e, 0xdb, 0xe1, 0xf6, 0x72, 0x87, 0xdb,
-	0xa5, 0xf9, 0x93, 0x94, 0x28, 0xa6, 0xd4, 0x79, 0x37, 0xc6, 0x95, 0xd8, 0xfb, 0x59, 0x71, 0x09,
-	0x1d, 0x41, 0x7a, 0x88, 0x49, 0x77, 0x84, 0xc9, 0x44, 0xe9, 0x19, 0xf9, 0xc8, 0x0e, 0xb7, 0x97,
-	0x3e, 0x2c, 0x86, 0x5a, 0xd5, 0x31, 0x79, 0x6e, 0xc1, 0x2a, 0x39, 0x73, 0x56, 0x04, 0x4f, 0x46,
-	0x1d, 0x58, 0x35, 0x30, 0xe9, 0xaa, 0xfa, 0x70, 0xa8, 0x68, 0xc3, 0xae, 0x8a, 0xdf, 0x60, 0x35,
-	0x1f, 0x65, 0x5c, 0xdf, 0x0d, 0xe5, 0x92, 0x30, 0x69, 0x5a, 0xe0, 0x26, 0xc5, 0x56, 0xd6, 0xcc,
-	0x59, 0x71, 0xe5, 0x8a, 0x12, 0x95, 0x01, 0x54, 0xc5, 0x20, 0xdd, 0x81, 0xa2, 0x62, 0x23, 0x1f,
-	0x63, 0x74, 0x85, 0x50, 0xba, 0xa6, 0x62, 0x90, 0x1a, 0x45, 0x55, 0xb2, 0xe6, 0xac, 0x98, 0x72,
-	0x45, 0xf4, 0x04, 0x52, 0x13, 0x2c, 0xf7, 0x19, 0x45, 0x3e, 0xce, 0x18, 0xbe, 0x1d, 0xca, 0xd0,
-	0xc6, 0x72, 0x9f, 0x9a, 0x54, 0x32, 0xe6, 0xac, 0x98, 0x74, 0x24, 0x34, 0x80, 0x2d, 0x55, 0x9e,
-	0x6a, 0xbd, 0x8b, 0xae, 0x86, 0x0d, 0x82, 0xfb, 0xdd, 0x9e, 0xae, 0x11, 0x59, 0xd1, 0xf0, 0x24,
-	0xbf, 0xcc, 0xd8, 0x1e, 0x84, 0x9f, 0x87, 0xd9, 0xb4, 0x98, 0x49, 0xd5, 0xb1, 0xa8, 0x6c, 0x9b,
-	0xb3, 0xe2, 0x46, 0xe8, 0x27, 0xf4, 0x0b, 0xd8, 0x78, 0x2b, 0x2b, 0x24, 0xe8, 0x25, 0xc1, 0xbc,
-	0xec, 0x85, 0x7a, 0x39, 0x97, 0x15, 0x72, 0xd5, 0xc7, 0x96, 0x39, 0x2b, 0xae, 0x85, 0x7c, 0xa0,
-	0x1e, 0x2e, 0x15, 0x55, 0x0d, 0x7a, 0x48, 0x5e, 0xe3, 0xe1, 0x44, 0x51, 0xd5, 0x50, 0x0f, 0x21,
-	0x1f, 0x84, 0x1f, 0x83, 0x3f, 0x25, 0xee, 0x43, 0x82, 0x28, 0x23, 0xac, 0x4f, 0x09, 0x4b, 0xc5,
-	0xf4, 0xe1, 0xa6, 0xe7, 0xe1, 0x68, 0x3a, 0x91, 0x89, 0xa2, 0x6b, 0x0d, 0x6d, 0xa0, 0x0b, 0x67,
-	0x10, 0xb8, 0xf8, 0x35, 0x88, 0x5b, 0x29, 0xc4, 0xed, 0x44, 0xf6, 0xb2, 0x76, 0xa6, 0x96, 0x20,
-	0xd9, 0xb7, 0xed, 0xf2, 0x91, 0x9d, 0xc8, 0x62, 0x46, 0x0b, 0x2f, 0x14, 0xc1, 0x97, 0x07, 0x08,
-	0x62, 0x63, 0x99, 0x5c, 0x30, 0xc2, 0x94, 0x0d, 0x78, 0x06, 0xde, 0x3d, 0x87, 0x7c, 0x47, 0xeb,
-	0xb0, 0xac, 0x0f, 0x06, 0x06, 0x26, 0xcc, 0x5d, 0xcc, 0xd3, 0xaa, 0x58, 0x1b, 0x92, 0x0b, 0x96,
-	0xdf, 0xb6, 0x56, 0xf8, 0x33, 0x07, 0x0b, 0x6e, 0xf6, 0x29, 0x64, 0xdc, 0x58, 0x77, 0x95, 0x3e,
-	0xf3, 0x90, 0x3e, 0xdc, 0xf0, 0x8e, 0xee, 0x42, 0x1b, 0x47, 0x95, 0x35, 0x4a, 0x66, 0xce, 0x8a,
-	0x69, 0x9f, 0x12, 0xdd, 0x83, 0x44, 0x4f, 0x1f, 0x8d, 0x64, 0xad, 0x6f, 0x97, 0xe7, 0x9c, 0x31,
-	0xfb, 0x40, 0x7f, 0x36, 0x7a, 0x00, 0x29, 0xef, 0x56, 0xad, 0xe2, 0xdb, 0x0a, 0x73, 0x43, 0x83,
-	0x7e, 0x0e, 0xa1, 0x49, 0x72, 0xeb, 0xc3, 0x52, 0xe2, 0x90, 0xdc, 0xb8, 0x3d, 0xf1, 0xee, 0xdf,
-	0x22, 0x10, 0xa3, 0x7d, 0x0b, 0xa5, 0x21, 0xf1, 0xb2, 0x75, 0xd2, 0x3a, 0x3d, 0x6f, 0xf1, 0x4b,
-	0x28, 0x07, 0x50, 0x17, 0x3b, 0xdd, 0x63, 0xb1, 0xdc, 0xec, 0x1c, 0xf3, 0x1c, 0xca, 0x42, 0x8a,
-	0xca, 0xb5, 0x66, 0xb9, 0x2e, 0xf1, 0x11, 0xb4, 0x02, 0x69, 0x2a, 0x9e, 0x89, 0x6d, 0xa9, 0x71,
-	0xda, 0xe2, 0xa3, 0x8e, 0xe2, 0xb9, 0xd8, 0x69, 0x37, 0xaa, 0x12, 0x1f, 0x43, 0x1b, 0xb0, 0x4a,
-	0x15, 0xcd, 0xd3, 0x7a, 0xbd, 0xd1, 0xaa, 0x77, 0x9b, 0xe2, 0x99, 0xd8, 0xe4, 0xe3, 0x54, 0x2d,
-	0x05, 0xd4, 0xcb, 0xd4, 0x5d, 0xb3, 0x21, 0x75, 0xba, 0xb5, 0x46, 0x53, 0x94, 0xf8, 0x04, 0x75,
-	0xd7, 0x16, 0xcb, 0x47, 0x4c, 0xe6, 0x93, 0x8e, 0x77, 0xa9, 0x53, 0xee, 0x88, 0x7c, 0x0a, 0x21,
-	0xc8, 0x51, 0xb1, 0x7a, 0xda, 0xea, 0x94, 0x1b, 0x2d, 0xb1, 0x2d, 0xf1, 0xe0, 0xe8, 0x6a, 0xed,
-	0xf2, 0x73, 0xf1, 0xfc, 0xb4, 0x7d, 0x22, 0xf1, 0x69, 0xb4, 0x0a, 0x59, 0xaa, 0x13, 0x5f, 0x89,
-	0xd5, 0x97, 0x9d, 0xd3, 0xb6, 0xc4, 0x67, 0x1c, 0xa6, 0x4e, 0x59, 0x3a, 0x91, 0xf8, 0x2c, 0xba,
-	0x03, 0x5b, 0xcd, 0xf2, 0xcb, 0x56, 0xf5, 0xb8, 0xdb, 0x12, 0xa5, 0x8e, 0x78, 0xe4, 0x71, 0xf2,
-	0x39, 0xb4, 0x0d, 0x1b, 0xe7, 0xe5, 0x46, 0x27, 0xf8, 0x69, 0x85, 0x7e, 0x3a, 0x69, 0x34, 0x9b,
-	0xc1, 0x4f, 0xfc, 0xee, 0xdf, 0x05, 0x9a, 0xfe, 0xc6, 0x58, 0xd7, 0x0c, 0x8c, 0x1e, 0xce, 0x0d,
-	0x8d, 0x40, 0x87, 0x74, 0x70, 0xfe, 0xc1, 0x21, 0x02, 0xd0, 0xc1, 0x71, 0x81, 0x65, 0x95, 0x5c,
-	0xd8, 0x89, 0xb9, 0xbb, 0xd0, 0xb0, 0x8e, 0xc9, 0x31, 0x43, 0x5a, 0x0d, 0xda, 0x15, 0x51, 0x05,
-	0x52, 0x94, 0x66, 0xa0, 0xca, 0x43, 0xc3, 0x4e, 0xda, 0xef, 0x5c, 0xc7, 0x52, 0xa3, 0x40, 0xab,
-	0x49, 0x3b, 0x12, 0x3a, 0xb6, 0x66, 0xd8, 0x1b, 0x3c, 0x31, 0x68, 0x73, 0xb0, 0x06, 0xc5, 0xdd,
-	0xeb, 0x58, 0xce, 0x2c, 0xa8, 0x3b, 0xc7, 0x6c, 0xd9, 0x61, 0x72, 0xa6, 0x61, 0xfc, 0x66, 0xa6,
-	0x45, 0x13, 0xf1, 0x15, 0xac, 0x0e, 0x03, 0x13, 0x71, 0x39, 0xbc, 0xd5, 0xfa, 0xf9, 0x82, 0x53,
-	0xf1, 0x8a, 0x92, 0x06, 0xde, 0x37, 0x15, 0x13, 0x37, 0x04, 0x7e, 0xe1, 0x64, 0xac, 0xf8, 0x27,
-	0x63, 0xf2, 0x86, 0xc0, 0x2f, 0x98, 0x8e, 0xf6, 0xe5, 0x19, 0x44, 0x26, 0x38, 0x9f, 0xba, 0xf9,
-	0xf2, 0x24, 0x0a, 0x74, 0x2f, 0x8f, 0x49, 0xe8, 0x05, 0xe4, 0x28, 0x87, 0xdb, 0x1d, 0x8c, 0x3c,
-	0x30, 0xa2, 0x7b, 0xd7, 0x11, 0xb9, 0x8d, 0xc1, 0xa8, 0xac, 0x9a, 0xb3, 0x62, 0x76, 0x4e, 0xe5,
-	0x50, 0x0e, 0x26, 0xf2, 0x08, 0xbf, 0xd5, 0x27, 0x97, 0x46, 0x3e, 0x7d, 0x33, 0x65, 0xcd, 0x45,
-	0xbb, 0x94, 0x9e, 0x0a, 0xb5, 0x20, 0x4b, 0x29, 0xf1, 0xaf, 0x71, 0x6f, 0x4a, 0xf4, 0x89, 0x91,
-	0xcf, 0x30, 0xc6, 0xef, 0x5d, 0xc7, 0x28, 0x3a, 0xe0, 0x0a, 0x6f, 0xce, 0x8a, 0x19, 0xbf, 0xc6,
-	0x89, 0x1c, 0x91, 0x8d, 0x4b, 0x23, 0x9f, 0xbd, 0x39, 0x72, 0x1d, 0x0a, 0x74, 0x23, 0xc7, 0x24,
-	0xd4, 0x5f, 0xb4, 0x33, 0xe4, 0x18, 0xdf, 0x0f, 0x16, 0xf2, 0x7d, 0xc9, 0xde, 0x20, 0xec, 0x82,
-	0xaf, 0x5a, 0x37, 0x20, 0x61, 0x15, 0xfc, 0x3b, 0xd6, 0xc1, 0x93, 0xf6, 0xf4, 0x3b, 0x00, 0xaf,
-	0x18, 0xef, 0x42, 0xdc, 0x2a, 0x66, 0x6e, 0x27, 0xba, 0x97, 0x3e, 0xcc, 0x79, 0xa7, 0xa0, 0xdf,
-	0x6d, 0x83, 0x16, 0xf8, 0xab, 0xee, 0x29, 0x64, 0xec, 0xda, 0xed, 0x2a, 0xda, 0x40, 0x0f, 0x0e,
-	0x07, 0x1b, 0xc8, 0x86, 0xbb, 0x3b, 0x1c, 0x7c, 0xca, 0xe0, 0xea, 0xe1, 0x54, 0xb0, 0x75, 0x08,
-	0xde, 0xa3, 0xb2, 0x30, 0xf6, 0x31, 0xee, 0x41, 0xa0, 0xba, 0xc2, 0x56, 0x0f, 0xa1, 0xe6, 0x5f,
-	0x25, 0x1e, 0x01, 0xd0, 0x9a, 0x61, 0x47, 0x75, 0x1c, 0x20, 0xdf, 0xaf, 0x54, 0x54, 0xcc, 0x0e,
-	0xba, 0x6a, 0x1f, 0x34, 0xe5, 0x68, 0x0c, 0xe1, 0x70, 0x7e, 0xe3, 0x30, 0x94, 0xdf, 0x60, 0xe6,
-	0xc7, 0xd9, 0x2d, 0x10, 0xc4, 0xfa, 0x32, 0x91, 0xd9, 0xbe, 0x91, 0x61, 0x3a, 0x4e, 0xf8, 0x0f,
-	0x07, 0x5e, 0xb1, 0xcc, 0xa5, 0x0d, 0xf7, 0x75, 0x69, 0x13, 0x48, 0xe5, 0xc8, 0xed, 0x52, 0x39,
-	0x58, 0x6d, 0xd1, 0x5b, 0x56, 0x9b, 0xf0, 0xdf, 0x28, 0x5c, 0x29, 0xe9, 0x67, 0x00, 0xbe, 0x0e,
-	0x61, 0x05, 0xfd, 0x87, 0x9f, 0xd7, 0x21, 0xbc, 0xd5, 0xc2, 0xbe, 0xcd, 0x3f, 0x44, 0x21, 0x35,
-	0xb7, 0x99, 0xb8, 0x47, 0x0f, 0xdd, 0x4c, 0xdc, 0x73, 0xf9, 0x37, 0x13, 0x9f, 0x12, 0x3d, 0x86,
-	0xb4, 0x13, 0x4c, 0x4a, 0x60, 0xed, 0xa6, 0xeb, 0x1e, 0x81, 0x13, 0xaa, 0xc6, 0x51, 0x05, 0xd9,
-	0xf6, 0xe0, 0xe9, 0xd0, 0xf7, 0x21, 0xeb, 0x9a, 0x6b, 0xf2, 0x08, 0xe7, 0xa3, 0x6c, 0x07, 0x5d,
-	0xb7, 0xa1, 0x19, 0x07, 0xda, 0x92, 0x47, 0x38, 0xb0, 0x47, 0xc5, 0xbe, 0x78, 0x9b, 0x3c, 0x06,
-	0xde, 0x63, 0xa0, 0x9d, 0x7b, 0xea, 0xcc, 0xb9, 0xed, 0x10, 0x16, 0x89, 0x01, 0xac, 0x41, 0x74,
-	0x45, 0x89, 0x5e, 0xc0, 0xda, 0x04, 0x1b, 0xfa, 0x74, 0xd2, 0xc3, 0x8c, 0x48, 0x31, 0x08, 0x2d,
-	0x39, 0x6b, 0xc8, 0x7d, 0xcb, 0x23, 0x6b, 0xdb, 0x20, 0xc9, 0xc5, 0x54, 0x36, 0xcd, 0x59, 0x11,
-	0x05, 0xf5, 0xc2, 0x1f, 0x23, 0x70, 0xa5, 0xf1, 0x3e, 0x03, 0xf0, 0x65, 0xd6, 0x67, 0x5c, 0xbc,
-	0x67, 0xeb, 0xdd, 0x9c, 0x5d, 0x5e, 0x97, 0xb0, 0xde, 0xd3, 0x47, 0x63, 0x15, 0xd3, 0x76, 0xe9,
-	0x63, 0x8d, 0x7c, 0x25, 0xeb, 0x1d, 0x3b, 0xbe, 0x6b, 0x55, 0x87, 0xd5, 0x97, 0xc3, 0x12, 0xa4,
-	0x5c, 0x09, 0xd5, 0x20, 0xe7, 0x4b, 0x32, 0xaf, 0xc7, 0x6d, 0x85, 0xa5, 0x19, 0x6d, 0x1e, 0x1b,
-	0x36, 0x75, 0x76, 0x4e, 0x2d, 0xfc, 0x3e, 0x02, 0xf3, 0xc5, 0x57, 0x87, 0x94, 0x57, 0xc8, 0x56,
-	0x74, 0x4a, 0x9f, 0x55, 0xc8, 0x6e, 0x56, 0xda, 0xb1, 0x19, 0xc2, 0x9a, 0x17, 0x1b, 0x7f, 0x6f,
-	0xf8, 0x1a, 0x4a, 0xc1, 0x3e, 0x3d, 0x72, 0x03, 0xe3, 0x82, 0x84, 0x53, 0x48, 0x3a, 0x02, 0xaa,
-	0xfa, 0x52, 0xdf, 0x17, 0x95, 0xcd, 0x90, 0xda, 0xa1, 0x41, 0x09, 0x94, 0x04, 0x8b, 0xc9, 0x5f,
-	0x23, 0xe0, 0x35, 0xb7, 0x9f, 0x40, 0x76, 0x8c, 0xb5, 0x3e, 0x5d, 0xb9, 0x9c, 0x26, 0x79, 0x65,
-	0x0a, 0x51, 0x9c, 0xc7, 0xf4, 0x33, 0x0b, 0x6c, 0x19, 0x3f, 0x82, 0xcc, 0xaf, 0xa6, 0x78, 0x8a,
-	0xfb, 0xb6, 0x6d, 0x24, 0xd4, 0xd6, 0xad, 0xaa, 0x17, 0x0c, 0x6b, 0x99, 0x3e, 0x86, 0x9c, 0xf5,
-	0x77, 0x02, 0xd7, 0x38, 0x1a, 0x6a, 0xec, 0xde, 0x6b, 0xd3, 0x46, 0x5b, 0xe6, 0x65, 0xe0, 0x09,
-	0x9e, 0x8c, 0x14, 0x4d, 0x26, 0x2e, 0x41, 0x2c, 0x94, 0x60, 0xcb, 0x26, 0x58, 0xe9, 0xb8, 0x78,
-	0x8b, 0xe2, 0xa7, 0xb0, 0xe2, 0x5d, 0xa0, 0xc5, 0x10, 0x0f, 0x65, 0xd8, 0xb4, 0x19, 0x72, 0xee,
-	0xe5, 0x30, 0x02, 0xe1, 0x49, 0xf8, 0x93, 0xf0, 0x3e, 0xed, 0x6e, 0x0a, 0x71, 0x5a, 0x05, 0x1d,
-	0x3a, 0x71, 0x7f, 0x1f, 0x53, 0x88, 0xd5, 0x0e, 0x76, 0xff, 0xc7, 0x7d, 0x93, 0x0f, 0xb4, 0xf9,
-	0x97, 0xd8, 0xf2, 0xfc, 0x4b, 0x2c, 0x31, 0xff, 0x12, 0x4b, 0x86, 0xbc, 0xc4, 0x52, 0x21, 0x2f,
-	0x31, 0x08, 0xbe, 0xc4, 0xd2, 0xf3, 0x2f, 0xb1, 0xcc, 0xe2, 0xc7, 0x56, 0xb6, 0xf2, 0xa3, 0x0f,
-	0x1f, 0x0b, 0xdc, 0x3f, 0x3e, 0x16, 0x96, 0x3e, 0x7d, 0x2c, 0x70, 0xbf, 0x35, 0x0b, 0xdc, 0x9f,
-	0xcc, 0x02, 0xf7, 0xde, 0x2c, 0x70, 0x1f, 0xcc, 0x02, 0xf7, 0x4f, 0xb3, 0xc0, 0xfd, 0xdb, 0x2c,
-	0x70, 0x9f, 0xcc, 0xc2, 0xd2, 0xef, 0xfe, 0x55, 0x58, 0xfa, 0x79, 0x9c, 0x55, 0xd2, 0xff, 0x03,
-	0x00, 0x00, 0xff, 0xff, 0xf4, 0x5c, 0x1c, 0xc8, 0x46, 0x14, 0x00, 0x00,
+	// 1931 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x58, 0xcd, 0x6f, 0x23, 0x49,
+	0xf9, 0x4e, 0x3b, 0x4e, 0x62, 0xbf, 0xfe, 0x48, 0xa7, 0x32, 0xc9, 0x78, 0x7a, 0xf7, 0xe7, 0xe4,
+	0xe7, 0xc0, 0x10, 0x32, 0x13, 0x67, 0x92, 0xf9, 0x80, 0x45, 0xb0, 0x83, 0x63, 0x77, 0x9c, 0x9e,
+	0x78, 0xec, 0xc1, 0xdd, 0x99, 0xb0, 0x7b, 0xb1, 0x7a, 0xec, 0x8a, 0xdd, 0x4c, 0xbb, 0xdb, 0x74,
+	0x97, 0x67, 0x19, 0x4e, 0xdc, 0xb9, 0x20, 0xf1, 0x37, 0x20, 0x21, 0x21, 0x24, 0xae, 0x5c, 0x38,
+	0xef, 0x0d, 0x8e, 0x48, 0x48, 0xab, 0x9d, 0x70, 0x41, 0x42, 0x48, 0xc3, 0x81, 0x2b, 0x42, 0x55,
+	0xfd, 0x1d, 0xb7, 0x9d, 0xcc, 0x8e, 0xe0, 0x12, 0xa5, 0xab, 0xdf, 0xe7, 0xa9, 0xb7, 0xde, 0x7a,
+	0xde, 0xaa, 0xa7, 0x0d, 0x82, 0x39, 0xc2, 0x96, 0x4a, 0x4c, 0x6b, 0x4f, 0xed, 0x63, 0x83, 0x38,
+	0x7f, 0xcb, 0x23, 0xcb, 0x24, 0x26, 0xca, 0x0f, 0xb1, 0x6d, 0xda, 0xe5, 0x57, 0xfb, 0x65, 0x36,
+	0x2a, 0xec, 0xf7, 0x35, 0x32, 0x18, 0xbf, 0x28, 0x77, 0xcd, 0xe1, 0x9e, 0x69, 0xf4, 0x2c, 0xfc,
+	0xa3, 0x5d, 0x7b, 0x68, 0xea, 0xea, 0x1e, 0x8b, 0xdb, 0xed, 0x9b, 0xbb, 0x03, 0x42, 0x46, 0xce,
+	0x93, 0x43, 0x21, 0xec, 0x86, 0x20, 0x7d, 0xb3, 0x6f, 0xee, 0xb1, 0xe1, 0x17, 0xe3, 0x73, 0xf6,
+	0xc4, 0x1e, 0xd8, 0x7f, 0x4e, 0x78, 0xe9, 0x8f, 0x2b, 0x90, 0xac, 0xaa, 0xba, 0x8e, 0x76, 0x21,
+	0x49, 0x5e, 0x8f, 0x70, 0x81, 0xdb, 0xe4, 0xb6, 0xf3, 0x07, 0xb7, 0xca, 0xd1, 0x4c, 0xca, 0x34,
+	0xa6, 0xac, 0xbc, 0x1e, 0xe1, 0xc3, 0xe4, 0xe7, 0x5f, 0x6c, 0xcc, 0xa1, 0x07, 0x90, 0xe9, 0x63,
+	0xd2, 0x19, 0x62, 0x62, 0x69, 0x5d, 0xbb, 0x90, 0xd8, 0xe4, 0xb6, 0x33, 0x07, 0x1b, 0xb1, 0xa8,
+	0x3a, 0x26, 0x4f, 0x9d, 0x30, 0xf4, 0x18, 0x56, 0x6c, 0x4c, 0x3a, 0xba, 0xd9, 0xef, 0x6b, 0x46,
+	0xbf, 0xa3, 0xe3, 0x57, 0x58, 0x2f, 0xcc, 0x33, 0xec, 0xd7, 0x62, 0xb1, 0x32, 0x26, 0x0d, 0x27,
+	0xb8, 0x41, 0x63, 0xd1, 0x01, 0x80, 0xae, 0xd9, 0xa4, 0x73, 0xae, 0xe9, 0xd8, 0x2e, 0x24, 0x19,
+	0xb2, 0x18, 0x8b, 0x6c, 0x68, 0x36, 0x39, 0xa2, 0x51, 0xe8, 0x1e, 0xa4, 0x2d, 0xac, 0xf6, 0x18,
+	0xa6, 0xb0, 0xc0, 0x20, 0xff, 0x17, 0x0b, 0x69, 0x63, 0xb5, 0x47, 0x21, 0xe8, 0x04, 0x6e, 0xea,
+	0xea, 0xd8, 0xe8, 0x0e, 0x3a, 0x06, 0xb6, 0x09, 0xee, 0x75, 0xba, 0xa6, 0x41, 0x54, 0xcd, 0xc0,
+	0x56, 0x61, 0x91, 0xe1, 0x77, 0xe2, 0xa7, 0x64, 0x98, 0x26, 0x83, 0x54, 0x3d, 0x04, 0xaa, 0xc3,
+	0xda, 0x67, 0xaa, 0x46, 0x26, 0xa9, 0x96, 0x18, 0xd5, 0x76, 0x2c, 0xd5, 0x99, 0xaa, 0x91, 0x18,
+	0xa2, 0x97, 0x9a, 0xae, 0x4f, 0x12, 0xa5, 0x66, 0x10, 0x9d, 0x68, 0xba, 0x7e, 0x99, 0xe8, 0x53,
+	0xd8, 0x98, 0xb2, 0xbc, 0x8e, 0x8d, 0x6d, 0x5b, 0x33, 0x8d, 0x42, 0x9a, 0x51, 0xee, 0x5f, 0x7f,
+	0x99, 0xb2, 0x03, 0x44, 0x12, 0xac, 0xab, 0x84, 0xa8, 0xdd, 0x41, 0x88, 0x54, 0x33, 0x46, 0x63,
+	0x52, 0x00, 0x46, 0xf9, 0xcd, 0x58, 0xca, 0x0a, 0x83, 0xf8, 0x64, 0x12, 0x05, 0xd0, 0x5d, 0x98,
+	0xa0, 0x32, 0xc7, 0x84, 0x72, 0x65, 0x66, 0xec, 0xc2, 0x25, 0xae, 0x16, 0x43, 0x08, 0x0f, 0x01,
+	0x42, 0x3a, 0xfc, 0x06, 0x2c, 0x11, 0x6d, 0x88, 0xcd, 0x31, 0x61, 0x7a, 0xcf, 0x1c, 0xac, 0x07,
+	0x54, 0xb5, 0xb1, 0xa5, 0x12, 0xcd, 0x34, 0x24, 0xe3, 0xdc, 0x14, 0x9e, 0xc3, 0xf2, 0x65, 0x09,
+	0xae, 0xc2, 0x82, 0xa3, 0x5b, 0x6e, 0x33, 0xb1, 0x9d, 0x73, 0xdb, 0xa1, 0x0c, 0xa9, 0x9e, 0x8b,
+	0x2b, 0x24, 0x36, 0x13, 0xd3, 0x19, 0x9d, 0x78, 0x61, 0x03, 0xd2, 0x81, 0x40, 0x11, 0x24, 0x47,
+	0x2a, 0x19, 0x30, 0xc2, 0xb4, 0x1b, 0x50, 0x83, 0x94, 0x2f, 0xc7, 0x98, 0xf7, 0xe8, 0x06, 0x2c,
+	0x9a, 0xe7, 0xe7, 0x36, 0x26, 0x6c, 0xba, 0xa4, 0x3b, 0x9a, 0x87, 0x45, 0x1d, 0x1b, 0x7d, 0x32,
+	0x60, 0x4d, 0x95, 0x14, 0x7e, 0xcb, 0xc1, 0x5a, 0xbc, 0x2a, 0xbf, 0x0f, 0xd9, 0xd0, 0x06, 0xf5,
+	0x18, 0x77, 0xe6, 0x60, 0x2d, 0x48, 0x3a, 0xd8, 0x8c, 0xda, 0xe1, 0x2a, 0x25, 0xbf, 0xf8, 0x62,
+	0x23, 0x13, 0x1a, 0x44, 0xb7, 0x61, 0xa9, 0x6b, 0x0e, 0x87, 0xaa, 0xd1, 0x73, 0xbb, 0x3f, 0x02,
+	0x66, 0x2f, 0xe8, 0x82, 0xd1, 0x0e, 0xa4, 0x03, 0xa9, 0x3a, 0xbd, 0x7e, 0x33, 0x6e, 0x1a, 0x5a,
+	0xee, 0x33, 0x58, 0x8d, 0x53, 0xfe, 0x7b, 0x27, 0x4b, 0x89, 0xe3, 0x3a, 0xe1, 0xfd, 0x89, 0x7f,
+	0xc5, 0xc1, 0x87, 0x33, 0x1b, 0x62, 0xff, 0x5d, 0xa6, 0x70, 0x76, 0xf1, 0xbf, 0x51, 0xd9, 0x7f,
+	0x70, 0x70, 0x23, 0xb6, 0xcb, 0x0e, 0x23, 0xe7, 0x7e, 0xf9, 0xda, 0xed, 0x19, 0xbe, 0x0c, 0xee,
+	0x5c, 0x5a, 0x63, 0x4c, 0xd6, 0x81, 0x6e, 0x76, 0x01, 0x46, 0x96, 0xd9, 0xc5, 0xb6, 0xdd, 0xd1,
+	0x4c, 0x37, 0xed, 0x89, 0xeb, 0xe6, 0x99, 0x13, 0x21, 0xb5, 0x4a, 0x0f, 0x21, 0x49, 0x67, 0x42,
+	0x19, 0x58, 0x3a, 0x6d, 0x9e, 0x34, 0x5b, 0x67, 0x4d, 0x7e, 0x0e, 0xf1, 0x90, 0xad, 0xb6, 0x9a,
+	0x4a, 0x45, 0x6a, 0x8a, 0xed, 0x8e, 0x54, 0xe3, 0x39, 0x94, 0x07, 0x78, 0xd6, 0x6e, 0x55, 0x45,
+	0x59, 0xee, 0x48, 0x2d, 0x3e, 0x21, 0x3c, 0x81, 0xb5, 0xd8, 0x83, 0xe0, 0x2b, 0xec, 0x47, 0xe9,
+	0x37, 0xf3, 0x71, 0x39, 0xe4, 0x01, 0xea, 0xa2, 0xd2, 0x39, 0x16, 0x2b, 0x0d, 0xe5, 0x98, 0xe7,
+	0x50, 0x0e, 0xd2, 0xf4, 0xf9, 0xa8, 0x51, 0xa9, 0xcb, 0x7c, 0x02, 0x2d, 0x43, 0x86, 0x3e, 0x3e,
+	0x17, 0xdb, 0xb2, 0xd4, 0x6a, 0xf2, 0xf3, 0xde, 0xc0, 0x53, 0x51, 0x69, 0x4b, 0x55, 0x99, 0x4f,
+	0xa2, 0x35, 0x58, 0xa1, 0x03, 0x8d, 0x56, 0xbd, 0x2e, 0x35, 0xeb, 0x9d, 0x86, 0xf8, 0x5c, 0x6c,
+	0xf0, 0x0b, 0x74, 0x58, 0x9e, 0x18, 0x5e, 0xa4, 0xd3, 0x35, 0x24, 0x59, 0xe9, 0x1c, 0x49, 0x0d,
+	0x51, 0xe6, 0x97, 0xe8, 0x74, 0x6d, 0xb1, 0x52, 0x63, 0xcf, 0x7c, 0xca, 0x9b, 0x5d, 0x56, 0x2a,
+	0x8a, 0xc8, 0xa7, 0x11, 0x82, 0x3c, 0x7d, 0xf4, 0x8b, 0x24, 0xf3, 0xe0, 0x8d, 0x1d, 0xb5, 0x2b,
+	0x4f, 0xc5, 0xb3, 0x56, 0xfb, 0x44, 0xe6, 0x33, 0x68, 0x05, 0x72, 0x74, 0x4c, 0xfc, 0xa1, 0x58,
+	0x3d, 0x55, 0x5a, 0x6d, 0x99, 0xcf, 0x7a, 0x4c, 0x4a, 0x45, 0x3e, 0x91, 0xf9, 0x1c, 0xfa, 0x00,
+	0x6e, 0x36, 0x2a, 0xa7, 0xcd, 0xea, 0x71, 0xa7, 0x29, 0xca, 0x8a, 0x58, 0x0b, 0x38, 0xf9, 0x3c,
+	0xba, 0x05, 0x6b, 0x67, 0x15, 0x49, 0x99, 0x7c, 0xb5, 0x4c, 0x5f, 0x9d, 0x48, 0x8d, 0xc6, 0xe4,
+	0x2b, 0x1e, 0x6d, 0xc1, 0xc6, 0x14, 0xca, 0x8e, 0x2c, 0xca, 0xac, 0x5c, 0x2b, 0x48, 0x80, 0xf5,
+	0x8a, 0xa2, 0x54, 0xaa, 0xc7, 0xa1, 0xb7, 0x52, 0xf3, 0xd9, 0xa9, 0xc2, 0x23, 0x9a, 0xd3, 0xc4,
+	0xbb, 0xd6, 0xa9, 0x42, 0x5f, 0xae, 0x96, 0x7e, 0xb7, 0x4e, 0x8f, 0x4e, 0x7b, 0x64, 0x1a, 0x36,
+	0x46, 0xfb, 0x11, 0x75, 0x4f, 0x5c, 0xfb, 0x5e, 0x5c, 0x58, 0xcc, 0x8f, 0x00, 0xa8, 0xb3, 0x19,
+	0x60, 0x55, 0x27, 0x03, 0x57, 0xca, 0xa5, 0xa9, 0xc0, 0x3a, 0x26, 0xc7, 0x2c, 0x12, 0x3d, 0x80,
+	0x34, 0xc5, 0x9d, 0xeb, 0x6a, 0xdf, 0x76, 0x65, 0xfd, 0xff, 0xb3, 0x60, 0x47, 0x34, 0x10, 0x7d,
+	0xdb, 0xf1, 0x51, 0xaf, 0xb0, 0xc5, 0xee, 0x5d, 0xc7, 0xd1, 0x6c, 0xcd, 0xc2, 0x3d, 0x77, 0x42,
+	0x3d, 0xa4, 0xe7, 0xc0, 0x16, 0xae, 0x46, 0x7a, 0xb7, 0x5f, 0x15, 0x56, 0xfa, 0x13, 0x2e, 0x6c,
+	0x31, 0xde, 0x44, 0x84, 0xf1, 0x91, 0x6b, 0xf0, 0x51, 0xc4, 0x89, 0x2d, 0x5d, 0x51, 0xa6, 0xe0,
+	0xb2, 0x7b, 0x10, 0x76, 0x63, 0xa9, 0x2b, 0xca, 0xe4, 0x5f, 0x81, 0x6e, 0x71, 0x6d, 0xa2, 0x12,
+	0xec, 0x9a, 0x93, 0x99, 0xc5, 0x95, 0x69, 0x20, 0xfa, 0x18, 0xf2, 0x14, 0xe5, 0xf7, 0xbb, 0xed,
+	0x9a, 0x90, 0xdb, 0xb3, 0xa0, 0x7e, 0xff, 0xdb, 0x1e, 0xfe, 0xdc, 0x52, 0x87, 0xf8, 0x33, 0xd3,
+	0x7a, 0x69, 0xbb, 0xc6, 0x63, 0x26, 0xfe, 0xc8, 0x8f, 0x46, 0xdf, 0x85, 0x1c, 0xc5, 0xe3, 0x9f,
+	0xe0, 0xee, 0x98, 0x98, 0x96, 0x5d, 0xc8, 0x32, 0xf8, 0xd7, 0x67, 0xc1, 0x45, 0x2f, 0xd8, 0x5b,
+	0x33, 0x51, 0xed, 0x97, 0x76, 0x21, 0x77, 0xf5, 0x9a, 0x15, 0x1a, 0x88, 0x4e, 0xa6, 0xd9, 0xcd,
+	0x3c, 0x63, 0xb8, 0x3b, 0x95, 0x21, 0xe6, 0xe2, 0x15, 0x4a, 0x90, 0x0e, 0x04, 0xbe, 0x06, 0x4b,
+	0x4e, 0x53, 0xbc, 0x66, 0x87, 0x66, 0xca, 0x75, 0x2a, 0x7b, 0x90, 0xf2, 0xd5, 0xbc, 0x05, 0x0b,
+	0x8e, 0xfe, 0xb9, 0xcd, 0xf9, 0xed, 0xcc, 0x41, 0x3e, 0x98, 0x8c, 0xbe, 0x77, 0x01, 0x8f, 0x99,
+	0x15, 0xf3, 0x64, 0xbc, 0x0f, 0x59, 0x57, 0xfc, 0x1d, 0xcd, 0x38, 0x37, 0x27, 0xcf, 0x63, 0x37,
+	0x30, 0x64, 0x9e, 0x26, 0xbc, 0x9c, 0xd7, 0x03, 0xce, 0xac, 0x7c, 0x80, 0x75, 0x62, 0x5c, 0xd8,
+	0x6d, 0x58, 0xae, 0x5f, 0xc3, 0xcb, 0x09, 0x1f, 0x85, 0xbd, 0xd9, 0x5d, 0x00, 0xaa, 0x54, 0x96,
+	0x9b, 0x37, 0x01, 0x0a, 0x2d, 0x4b, 0xd3, 0x71, 0x28, 0xb3, 0x83, 0xa8, 0x6b, 0xb3, 0xb5, 0x9f,
+	0x62, 0x46, 0xed, 0xf9, 0x33, 0x04, 0xc9, 0x9e, 0x4a, 0x54, 0xe6, 0xd9, 0xb2, 0x6c, 0x8c, 0x13,
+	0xfe, 0xc0, 0xb1, 0x02, 0x3a, 0x8a, 0x8d, 0xec, 0x39, 0x77, 0xdd, 0x3d, 0x9f, 0xd0, 0x59, 0xe2,
+	0x5d, 0x74, 0x36, 0xa9, 0xf2, 0xf9, 0x77, 0x51, 0xb9, 0xf0, 0xfb, 0x79, 0xc8, 0x45, 0xfb, 0xe6,
+	0x09, 0x40, 0xa8, 0xe7, 0x9c, 0xa2, 0xdd, 0xbb, 0x5e, 0xcf, 0x05, 0xd7, 0xaf, 0x5b, 0xd2, 0xbf,
+	0x24, 0x20, 0x1d, 0x31, 0x6c, 0x7e, 0x9e, 0xb1, 0xb7, 0xb7, 0x9f, 0x57, 0xd8, 0xb0, 0x85, 0x06,
+	0xd1, 0xf7, 0x20, 0xe3, 0xd5, 0xc9, 0xb1, 0x2a, 0x94, 0xe0, 0x46, 0x40, 0xe0, 0xd5, 0x45, 0xaa,
+	0x1d, 0x22, 0x17, 0x0f, 0xc1, 0x18, 0xfa, 0x00, 0x72, 0x3e, 0xdc, 0x50, 0x87, 0xb8, 0x30, 0x1f,
+	0x32, 0xe5, 0x97, 0xed, 0x64, 0xf2, 0x9d, 0x4d, 0xf5, 0x7d, 0xe0, 0x43, 0x1f, 0x63, 0x44, 0x25,
+	0x63, 0xef, 0x64, 0xbf, 0x15, 0xc3, 0x22, 0xb3, 0x00, 0xf4, 0x11, 0xac, 0x5a, 0xd8, 0x36, 0xc7,
+	0x56, 0x17, 0x33, 0x8c, 0x66, 0x13, 0xda, 0x0d, 0xce, 0x89, 0xfe, 0x61, 0x80, 0x6b, 0xbb, 0x41,
+	0xb2, 0x1f, 0x23, 0xfc, 0x8b, 0x63, 0x7b, 0x17, 0x3a, 0xb3, 0x9e, 0x00, 0x84, 0x94, 0x70, 0x8d,
+	0xbd, 0x0b, 0xb0, 0x41, 0xf1, 0xdd, 0x7a, 0x28, 0x70, 0xa3, 0x6b, 0x0e, 0x47, 0x3a, 0xa6, 0x27,
+	0x51, 0x88, 0x35, 0xf1, 0x3e, 0xac, 0xc2, 0x21, 0xa4, 0xfd, 0x21, 0xf4, 0x10, 0xf2, 0x21, 0x41,
+	0x04, 0x07, 0xc8, 0xcd, 0x38, 0x49, 0x04, 0x8d, 0xfa, 0x77, 0x0e, 0xb2, 0x91, 0x26, 0xa8, 0x43,
+	0x3a, 0x68, 0x1f, 0x67, 0xd5, 0xe5, 0x6b, 0xb5, 0x8f, 0x2f, 0x18, 0x77, 0xcd, 0x3f, 0x80, 0xd5,
+	0x60, 0xcd, 0xe1, 0x8e, 0xfc, 0xca, 0x94, 0xc2, 0x63, 0x48, 0x79, 0x23, 0xe8, 0x7e, 0x48, 0x7f,
+	0xa1, 0xe5, 0xae, 0xc7, 0x08, 0x38, 0x58, 0xed, 0x5b, 0xe7, 0x88, 0x71, 0x0e, 0x8b, 0x3b, 0x90,
+	0x1b, 0x61, 0xa3, 0x47, 0x6f, 0x7e, 0xef, 0x98, 0xb9, 0x74, 0x56, 0xd3, 0x38, 0x77, 0x35, 0x3b,
+	0x90, 0xfd, 0xf1, 0x18, 0x8f, 0x71, 0xcf, 0x8d, 0x4d, 0xcc, 0x88, 0xbd, 0x0b, 0x79, 0xe7, 0x67,
+	0x05, 0x3f, 0x7a, 0x7e, 0x46, 0x74, 0x19, 0x78, 0x82, 0xad, 0xa1, 0x66, 0xa8, 0xc4, 0x8f, 0x4f,
+	0xce, 0x88, 0xdf, 0x85, 0xe5, 0xa0, 0xae, 0x4e, 0xf8, 0xc2, 0xf4, 0x70, 0x61, 0x27, 0xfe, 0x4b,
+	0x72, 0x95, 0x76, 0xbf, 0x46, 0xbc, 0xd6, 0xa2, 0x27, 0xec, 0x42, 0xe9, 0xdf, 0xdc, 0xff, 0xd2,
+	0xdf, 0x47, 0x8d, 0xfc, 0x62, 0xd4, 0xc8, 0x2f, 0x45, 0x8d, 0x7c, 0x2a, 0xc6, 0xc8, 0xa7, 0x63,
+	0x8c, 0x3c, 0x4c, 0x1a, 0xf9, 0x4c, 0xd4, 0xc8, 0x67, 0xa7, 0x7b, 0xf5, 0x5c, 0xe9, 0x9f, 0x49,
+	0x48, 0xfb, 0x5f, 0x5c, 0xe8, 0x20, 0xe2, 0x99, 0x8b, 0x53, 0x3f, 0xcd, 0xc2, 0xa6, 0xf9, 0xae,
+	0x7f, 0xb1, 0xc5, 0xfe, 0x22, 0x17, 0x60, 0x6a, 0x2a, 0x51, 0xd1, 0x01, 0xfd, 0xc0, 0x35, 0x88,
+	0x65, 0xea, 0xd3, 0x8c, 0x72, 0x00, 0xa8, 0x3a, 0x81, 0xc2, 0xcf, 0x39, 0x48, 0x32, 0xf0, 0xb7,
+	0x22, 0xe9, 0x6d, 0xcd, 0x9e, 0x2a, 0x9c, 0x23, 0x0a, 0xe5, 0xe8, 0x5e, 0xbe, 0xa5, 0x47, 0x71,
+	0x3b, 0x9f, 0x86, 0x05, 0x59, 0xa9, 0x49, 0x4d, 0x9e, 0x43, 0x00, 0x8b, 0xb2, 0x52, 0x6b, 0x9d,
+	0x2a, 0x7c, 0xc2, 0xfd, 0x5f, 0x6c, 0xb7, 0xf9, 0x79, 0xe1, 0x97, 0x09, 0x58, 0x72, 0x33, 0x43,
+	0xdf, 0x89, 0x24, 0x74, 0xfb, 0xca, 0xa5, 0x84, 0x73, 0xda, 0x82, 0x14, 0x21, 0xaf, 0x9d, 0x4e,
+	0x76, 0x6a, 0xb7, 0x12, 0x92, 0xb3, 0xf2, 0x09, 0xfb, 0xce, 0xff, 0x18, 0xd2, 0x03, 0xac, 0x5a,
+	0xe4, 0x05, 0x56, 0x89, 0x5b, 0xb0, 0x3b, 0x57, 0xcf, 0x72, 0xec, 0x41, 0x84, 0x87, 0x90, 0xf6,
+	0x1f, 0xd0, 0x36, 0xa4, 0x34, 0x83, 0x60, 0xeb, 0x95, 0xaa, 0xcf, 0xfe, 0xed, 0xab, 0x74, 0x2f,
+	0xae, 0x36, 0x59, 0x48, 0x29, 0xca, 0x27, 0x1d, 0xa9, 0x79, 0xd4, 0x72, 0x7a, 0xe2, 0x58, 0xac,
+	0xb4, 0x95, 0x43, 0xb1, 0xa2, 0xf0, 0x89, 0xd2, 0x4e, 0x1c, 0x22, 0x05, 0xc9, 0x5a, 0x45, 0xa9,
+	0xf0, 0x1c, 0x1d, 0xa6, 0xaa, 0x6b, 0xb7, 0x1a, 0x7c, 0xe2, 0xf0, 0xfe, 0x9f, 0xdf, 0x14, 0xe7,
+	0xbe, 0x7c, 0x53, 0xe4, 0xde, 0xbe, 0x29, 0x72, 0x3f, 0xbb, 0x28, 0x72, 0xbf, 0xbe, 0x28, 0x72,
+	0x9f, 0x5f, 0x14, 0xb9, 0x3f, 0x5d, 0x14, 0xb9, 0x2f, 0x2f, 0x8a, 0xdc, 0xdf, 0x2e, 0x8a, 0x73,
+	0x6f, 0x2f, 0x8a, 0xdc, 0x2f, 0xfe, 0x5a, 0x9c, 0xfb, 0x74, 0x81, 0xad, 0xf2, 0x3f, 0x01, 0x00,
+	0x00, 0xff, 0xff, 0xbd, 0x4a, 0x2f, 0x75, 0x3c, 0x17, 0x00, 0x00,
 }

@@ -20,6 +20,8 @@ import math "math"
 import mesos_v1 "github.com/ondrej-smola/mesos-go-http"
 import _ "github.com/gogo/protobuf/gogoproto"
 
+import strconv "strconv"
+
 import bytes "bytes"
 
 import strings "strings"
@@ -101,8 +103,8 @@ func (x Event_Type) Enum() *Event_Type {
 	*p = x
 	return p
 }
-func (x Event_Type) String() string {
-	return proto.EnumName(Event_Type_name, int32(x))
+func (x Event_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Event_Type_name, int32(x))
 }
 func (x *Event_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Event_Type_value, data, "Event_Type")
@@ -177,8 +179,8 @@ func (x Call_Type) Enum() *Call_Type {
 	*p = x
 	return p
 }
-func (x Call_Type) String() string {
-	return proto.EnumName(Call_Type_name, int32(x))
+func (x Call_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Call_Type_name, int32(x))
 }
 func (x *Call_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Call_Type_value, data, "Call_Type")
@@ -291,7 +293,7 @@ type Event_Subscribed struct {
 	ID mesos_v1.FrameworkID `protobuf:"bytes,1,req,name=framework_id" json:"framework_id"`
 	// This value will be set if the master is sending heartbeats. See
 	// the comment above on 'HEARTBEAT' for more details.
-	HeartbeatIntervalSeconds float64 `protobuf:"fixed64,2,opt,name=heartbeat_interval_seconds" json:"heartbeat_interval_seconds"`
+	HeartbeatIntervalSeconds *float64 `protobuf:"fixed64,2,opt,name=heartbeat_interval_seconds" json:"heartbeat_interval_seconds,omitempty"`
 	// Since Mesos 1.1.
 	MasterInfo *mesos_v1.MasterInfo `protobuf:"bytes,3,opt,name=master_info" json:"master_info,omitempty"`
 }
@@ -308,8 +310,8 @@ func (m *Event_Subscribed) GetID() mesos_v1.FrameworkID {
 }
 
 func (m *Event_Subscribed) GetHeartbeatIntervalSeconds() float64 {
-	if m != nil {
-		return m.HeartbeatIntervalSeconds
+	if m != nil && m.HeartbeatIntervalSeconds != nil {
+		return *m.HeartbeatIntervalSeconds
 	}
 	return 0
 }
@@ -407,7 +409,7 @@ func (m *Event_RescindInverseOffer) GetInverseOfferID() mesos_v1.OfferID {
 // the executor or agent or master. Status updates should be used by
 // executors to reliably communicate the status of the tasks that
 // they manage. It is crucial that a terminal update (see TaskState
-// in mesos.proto) is sent by the executor as soon as the task
+// in v1/mesos.proto) is sent by the executor as soon as the task
 // terminates, in order for Mesos to release the resources allocated
 // to the task. It is also the responsibility of the scheduler to
 // explicitly acknowledge the receipt of a status update. See
@@ -463,23 +465,23 @@ func (m *Event_Message) GetData() []byte {
 	return nil
 }
 
-// Received when a agent is removed from the cluster (e.g., failed
+// Received when an agent is removed from the cluster (e.g., failed
 // health checks) or when an executor is terminated. Note that, this
 // event coincides with receipt of terminal UPDATE events for any
 // active tasks belonging to the agent or executor and receipt of
 // 'Rescind' events for any outstanding offers belonging to the
 // agent. Note that there is no guaranteed order between the
-// 'Failure', 'Update' and 'Rescind' events when a agent or executor
+// 'Failure', 'Update' and 'Rescind' events when an agent or executor
 // is removed.
 // TODO(vinod): Consider splitting the lost agent and terminated
 // executor into separate events and ensure it's reliably generated.
 type Event_Failure struct {
 	AgentID *mesos_v1.AgentID `protobuf:"bytes,1,opt,name=agent_id" json:"agent_id,omitempty"`
-	// If this was just a failure of an executor on a agent then
+	// If this was just a failure of an executor on an agent then
 	// 'executor_id' will be set and possibly 'status' (if we were
 	// able to determine the exit status).
 	ExecutorID *mesos_v1.ExecutorID `protobuf:"bytes,2,opt,name=executor_id" json:"executor_id,omitempty"`
-	Status     int32                `protobuf:"varint,3,opt,name=status" json:"status"`
+	Status     *int32               `protobuf:"varint,3,opt,name=status" json:"status,omitempty"`
 }
 
 func (m *Event_Failure) Reset()                    { *m = Event_Failure{} }
@@ -501,8 +503,8 @@ func (m *Event_Failure) GetExecutorID() *mesos_v1.ExecutorID {
 }
 
 func (m *Event_Failure) GetStatus() int32 {
-	if m != nil {
-		return m.Status
+	if m != nil && m.Status != nil {
+		return *m.Status
 	}
 	return 0
 }
@@ -547,12 +549,14 @@ type Call struct {
 	Decline              *Call_Decline              `protobuf:"bytes,5,opt,name=decline" json:"decline,omitempty"`
 	AcceptInverseOffers  *Call_AcceptInverseOffers  `protobuf:"bytes,13,opt,name=accept_inverse_offers" json:"accept_inverse_offers,omitempty"`
 	DeclineInverseOffers *Call_DeclineInverseOffers `protobuf:"bytes,14,opt,name=decline_inverse_offers" json:"decline_inverse_offers,omitempty"`
+	Revive               *Call_Revive               `protobuf:"bytes,15,opt,name=revive" json:"revive,omitempty"`
 	Kill                 *Call_Kill                 `protobuf:"bytes,6,opt,name=kill" json:"kill,omitempty"`
 	Shutdown             *Call_Shutdown             `protobuf:"bytes,7,opt,name=shutdown" json:"shutdown,omitempty"`
 	Acknowledge          *Call_Acknowledge          `protobuf:"bytes,8,opt,name=acknowledge" json:"acknowledge,omitempty"`
 	Reconcile            *Call_Reconcile            `protobuf:"bytes,9,opt,name=reconcile" json:"reconcile,omitempty"`
 	Message              *Call_Message              `protobuf:"bytes,10,opt,name=message" json:"message,omitempty"`
 	Request              *Call_Request              `protobuf:"bytes,11,opt,name=request" json:"request,omitempty"`
+	Suppress             *Call_Suppress             `protobuf:"bytes,16,opt,name=suppress" json:"suppress,omitempty"`
 }
 
 func (m *Call) Reset()                    { *m = Call{} }
@@ -608,6 +612,13 @@ func (m *Call) GetDeclineInverseOffers() *Call_DeclineInverseOffers {
 	return nil
 }
 
+func (m *Call) GetRevive() *Call_Revive {
+	if m != nil {
+		return m.Revive
+	}
+	return nil
+}
+
 func (m *Call) GetKill() *Call_Kill {
 	if m != nil {
 		return m.Kill
@@ -646,6 +657,13 @@ func (m *Call) GetMessage() *Call_Message {
 func (m *Call) GetRequest() *Call_Request {
 	if m != nil {
 		return m.Request
+	}
+	return nil
+}
+
+func (m *Call) GetSuppress() *Call_Suppress {
+	if m != nil {
+		return m.Suppress
 	}
 	return nil
 }
@@ -809,7 +827,7 @@ func (m *Call_DeclineInverseOffers) GetFilters() *mesos_v1.Filters {
 // `REVIVE` call will revive offers for all of the roles the
 // framework is subscribed to.
 type Call_Revive struct {
-	Role string `protobuf:"bytes,1,opt,name=role" json:"role"`
+	Role *string `protobuf:"bytes,1,opt,name=role" json:"role,omitempty"`
 }
 
 func (m *Call_Revive) Reset()                    { *m = Call_Revive{} }
@@ -817,8 +835,8 @@ func (*Call_Revive) ProtoMessage()               {}
 func (*Call_Revive) Descriptor() ([]byte, []int) { return fileDescriptorScheduler, []int{1, 5} }
 
 func (m *Call_Revive) GetRole() string {
-	if m != nil {
-		return m.Role
+	if m != nil && m.Role != nil {
+		return *m.Role
 	}
 	return ""
 }
@@ -1043,7 +1061,7 @@ func (m *Call_Request) GetRequests() []mesos_v1.Request {
 // `SUPPRESS` call will suppress offers for all of the roles the
 // framework is subscribed to.
 type Call_Suppress struct {
-	Role string `protobuf:"bytes,1,opt,name=role" json:"role"`
+	Role *string `protobuf:"bytes,1,opt,name=role" json:"role,omitempty"`
 }
 
 func (m *Call_Suppress) Reset()                    { *m = Call_Suppress{} }
@@ -1051,8 +1069,8 @@ func (*Call_Suppress) ProtoMessage()               {}
 func (*Call_Suppress) Descriptor() ([]byte, []int) { return fileDescriptorScheduler, []int{1, 12} }
 
 func (m *Call_Suppress) GetRole() string {
-	if m != nil {
-		return m.Role
+	if m != nil && m.Role != nil {
+		return *m.Role
 	}
 	return ""
 }
@@ -1085,6 +1103,77 @@ func init() {
 	proto.RegisterType((*Call_Suppress)(nil), "mesos.v1.scheduler.Call.Suppress")
 	proto.RegisterEnum("mesos.v1.scheduler.Event_Type", Event_Type_name, Event_Type_value)
 	proto.RegisterEnum("mesos.v1.scheduler.Call_Type", Call_Type_name, Call_Type_value)
+}
+func (x Event_Type) String() string {
+	s, ok := Event_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x Call_Type) String() string {
+	s, ok := Call_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (this *Event) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event)
+	if !ok {
+		that2, ok := that.(Event)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.Subscribed.Equal(that1.Subscribed) {
+		return fmt.Errorf("Subscribed this(%v) Not Equal that(%v)", this.Subscribed, that1.Subscribed)
+	}
+	if !this.Offers.Equal(that1.Offers) {
+		return fmt.Errorf("Offers this(%v) Not Equal that(%v)", this.Offers, that1.Offers)
+	}
+	if !this.InverseOffers.Equal(that1.InverseOffers) {
+		return fmt.Errorf("InverseOffers this(%v) Not Equal that(%v)", this.InverseOffers, that1.InverseOffers)
+	}
+	if !this.Rescind.Equal(that1.Rescind) {
+		return fmt.Errorf("Rescind this(%v) Not Equal that(%v)", this.Rescind, that1.Rescind)
+	}
+	if !this.RescindInverseOffer.Equal(that1.RescindInverseOffer) {
+		return fmt.Errorf("RescindInverseOffer this(%v) Not Equal that(%v)", this.RescindInverseOffer, that1.RescindInverseOffer)
+	}
+	if !this.Update.Equal(that1.Update) {
+		return fmt.Errorf("Update this(%v) Not Equal that(%v)", this.Update, that1.Update)
+	}
+	if !this.Message.Equal(that1.Message) {
+		return fmt.Errorf("Message this(%v) Not Equal that(%v)", this.Message, that1.Message)
+	}
+	if !this.Failure.Equal(that1.Failure) {
+		return fmt.Errorf("Failure this(%v) Not Equal that(%v)", this.Failure, that1.Failure)
+	}
+	if !this.Error.Equal(that1.Error) {
+		return fmt.Errorf("Error this(%v) Not Equal that(%v)", this.Error, that1.Error)
+	}
+	return nil
 }
 func (this *Event) Equal(that interface{}) bool {
 	if that == nil {
@@ -1143,6 +1232,48 @@ func (this *Event) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_Subscribed) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Subscribed)
+	if !ok {
+		that2, ok := that.(Event_Subscribed)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Subscribed")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Subscribed but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Subscribed but is not nil && this == nil")
+	}
+	if !this.ID.Equal(&that1.ID) {
+		return fmt.Errorf("ID this(%v) Not Equal that(%v)", this.ID, that1.ID)
+	}
+	if this.HeartbeatIntervalSeconds != nil && that1.HeartbeatIntervalSeconds != nil {
+		if *this.HeartbeatIntervalSeconds != *that1.HeartbeatIntervalSeconds {
+			return fmt.Errorf("HeartbeatIntervalSeconds this(%v) Not Equal that(%v)", *this.HeartbeatIntervalSeconds, *that1.HeartbeatIntervalSeconds)
+		}
+	} else if this.HeartbeatIntervalSeconds != nil {
+		return fmt.Errorf("this.HeartbeatIntervalSeconds == nil && that.HeartbeatIntervalSeconds != nil")
+	} else if that1.HeartbeatIntervalSeconds != nil {
+		return fmt.Errorf("HeartbeatIntervalSeconds this(%v) Not Equal that(%v)", this.HeartbeatIntervalSeconds, that1.HeartbeatIntervalSeconds)
+	}
+	if !this.MasterInfo.Equal(that1.MasterInfo) {
+		return fmt.Errorf("MasterInfo this(%v) Not Equal that(%v)", this.MasterInfo, that1.MasterInfo)
+	}
+	return nil
+}
 func (this *Event_Subscribed) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1171,13 +1302,54 @@ func (this *Event_Subscribed) Equal(that interface{}) bool {
 	if !this.ID.Equal(&that1.ID) {
 		return false
 	}
-	if this.HeartbeatIntervalSeconds != that1.HeartbeatIntervalSeconds {
+	if this.HeartbeatIntervalSeconds != nil && that1.HeartbeatIntervalSeconds != nil {
+		if *this.HeartbeatIntervalSeconds != *that1.HeartbeatIntervalSeconds {
+			return false
+		}
+	} else if this.HeartbeatIntervalSeconds != nil {
+		return false
+	} else if that1.HeartbeatIntervalSeconds != nil {
 		return false
 	}
 	if !this.MasterInfo.Equal(that1.MasterInfo) {
 		return false
 	}
 	return true
+}
+func (this *Event_Offers) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Offers)
+	if !ok {
+		that2, ok := that.(Event_Offers)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Offers")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Offers but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Offers but is not nil && this == nil")
+	}
+	if len(this.Offers) != len(that1.Offers) {
+		return fmt.Errorf("Offers this(%v) Not Equal that(%v)", len(this.Offers), len(that1.Offers))
+	}
+	for i := range this.Offers {
+		if !this.Offers[i].Equal(&that1.Offers[i]) {
+			return fmt.Errorf("Offers this[%v](%v) Not Equal that[%v](%v)", i, this.Offers[i], i, that1.Offers[i])
+		}
+	}
+	return nil
 }
 func (this *Event_Offers) Equal(that interface{}) bool {
 	if that == nil {
@@ -1214,6 +1386,41 @@ func (this *Event_Offers) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_InverseOffers) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_InverseOffers)
+	if !ok {
+		that2, ok := that.(Event_InverseOffers)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_InverseOffers")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_InverseOffers but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_InverseOffers but is not nil && this == nil")
+	}
+	if len(this.InverseOffers) != len(that1.InverseOffers) {
+		return fmt.Errorf("InverseOffers this(%v) Not Equal that(%v)", len(this.InverseOffers), len(that1.InverseOffers))
+	}
+	for i := range this.InverseOffers {
+		if !this.InverseOffers[i].Equal(&that1.InverseOffers[i]) {
+			return fmt.Errorf("InverseOffers this[%v](%v) Not Equal that[%v](%v)", i, this.InverseOffers[i], i, that1.InverseOffers[i])
+		}
+	}
+	return nil
+}
 func (this *Event_InverseOffers) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1249,6 +1456,36 @@ func (this *Event_InverseOffers) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_Rescind) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Rescind)
+	if !ok {
+		that2, ok := that.(Event_Rescind)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Rescind")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Rescind but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Rescind but is not nil && this == nil")
+	}
+	if !this.OfferID.Equal(&that1.OfferID) {
+		return fmt.Errorf("OfferID this(%v) Not Equal that(%v)", this.OfferID, that1.OfferID)
+	}
+	return nil
+}
 func (this *Event_Rescind) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1278,6 +1515,36 @@ func (this *Event_Rescind) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Event_RescindInverseOffer) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_RescindInverseOffer)
+	if !ok {
+		that2, ok := that.(Event_RescindInverseOffer)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_RescindInverseOffer")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_RescindInverseOffer but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_RescindInverseOffer but is not nil && this == nil")
+	}
+	if !this.InverseOfferID.Equal(&that1.InverseOfferID) {
+		return fmt.Errorf("InverseOfferID this(%v) Not Equal that(%v)", this.InverseOfferID, that1.InverseOfferID)
+	}
+	return nil
 }
 func (this *Event_RescindInverseOffer) Equal(that interface{}) bool {
 	if that == nil {
@@ -1309,6 +1576,36 @@ func (this *Event_RescindInverseOffer) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_Update) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Update)
+	if !ok {
+		that2, ok := that.(Event_Update)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Update")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Update but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Update but is not nil && this == nil")
+	}
+	if !this.Status.Equal(&that1.Status) {
+		return fmt.Errorf("Status this(%v) Not Equal that(%v)", this.Status, that1.Status)
+	}
+	return nil
+}
 func (this *Event_Update) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1338,6 +1635,42 @@ func (this *Event_Update) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Event_Message) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Message)
+	if !ok {
+		that2, ok := that.(Event_Message)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Message")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Message but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Message but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if !this.ExecutorID.Equal(&that1.ExecutorID) {
+		return fmt.Errorf("ExecutorID this(%v) Not Equal that(%v)", this.ExecutorID, that1.ExecutorID)
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return fmt.Errorf("Data this(%v) Not Equal that(%v)", this.Data, that1.Data)
+	}
+	return nil
 }
 func (this *Event_Message) Equal(that interface{}) bool {
 	if that == nil {
@@ -1375,6 +1708,48 @@ func (this *Event_Message) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_Failure) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Failure)
+	if !ok {
+		that2, ok := that.(Event_Failure)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Failure")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Failure but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Failure but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if !this.ExecutorID.Equal(that1.ExecutorID) {
+		return fmt.Errorf("ExecutorID this(%v) Not Equal that(%v)", this.ExecutorID, that1.ExecutorID)
+	}
+	if this.Status != nil && that1.Status != nil {
+		if *this.Status != *that1.Status {
+			return fmt.Errorf("Status this(%v) Not Equal that(%v)", *this.Status, *that1.Status)
+		}
+	} else if this.Status != nil {
+		return fmt.Errorf("this.Status == nil && that.Status != nil")
+	} else if that1.Status != nil {
+		return fmt.Errorf("Status this(%v) Not Equal that(%v)", this.Status, that1.Status)
+	}
+	return nil
+}
 func (this *Event_Failure) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1406,10 +1781,46 @@ func (this *Event_Failure) Equal(that interface{}) bool {
 	if !this.ExecutorID.Equal(that1.ExecutorID) {
 		return false
 	}
-	if this.Status != that1.Status {
+	if this.Status != nil && that1.Status != nil {
+		if *this.Status != *that1.Status {
+			return false
+		}
+	} else if this.Status != nil {
+		return false
+	} else if that1.Status != nil {
 		return false
 	}
 	return true
+}
+func (this *Event_Error) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Error)
+	if !ok {
+		that2, ok := that.(Event_Error)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Error")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Error but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Error but is not nil && this == nil")
+	}
+	if this.Message != that1.Message {
+		return fmt.Errorf("Message this(%v) Not Equal that(%v)", this.Message, that1.Message)
+	}
+	return nil
 }
 func (this *Event_Error) Equal(that interface{}) bool {
 	if that == nil {
@@ -1440,6 +1851,78 @@ func (this *Event_Error) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call)
+	if !ok {
+		that2, ok := that.(Call)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call but is not nil && this == nil")
+	}
+	if !this.FrameworkID.Equal(that1.FrameworkID) {
+		return fmt.Errorf("FrameworkID this(%v) Not Equal that(%v)", this.FrameworkID, that1.FrameworkID)
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.Subscribe.Equal(that1.Subscribe) {
+		return fmt.Errorf("Subscribe this(%v) Not Equal that(%v)", this.Subscribe, that1.Subscribe)
+	}
+	if !this.Accept.Equal(that1.Accept) {
+		return fmt.Errorf("Accept this(%v) Not Equal that(%v)", this.Accept, that1.Accept)
+	}
+	if !this.Decline.Equal(that1.Decline) {
+		return fmt.Errorf("Decline this(%v) Not Equal that(%v)", this.Decline, that1.Decline)
+	}
+	if !this.AcceptInverseOffers.Equal(that1.AcceptInverseOffers) {
+		return fmt.Errorf("AcceptInverseOffers this(%v) Not Equal that(%v)", this.AcceptInverseOffers, that1.AcceptInverseOffers)
+	}
+	if !this.DeclineInverseOffers.Equal(that1.DeclineInverseOffers) {
+		return fmt.Errorf("DeclineInverseOffers this(%v) Not Equal that(%v)", this.DeclineInverseOffers, that1.DeclineInverseOffers)
+	}
+	if !this.Revive.Equal(that1.Revive) {
+		return fmt.Errorf("Revive this(%v) Not Equal that(%v)", this.Revive, that1.Revive)
+	}
+	if !this.Kill.Equal(that1.Kill) {
+		return fmt.Errorf("Kill this(%v) Not Equal that(%v)", this.Kill, that1.Kill)
+	}
+	if !this.Shutdown.Equal(that1.Shutdown) {
+		return fmt.Errorf("Shutdown this(%v) Not Equal that(%v)", this.Shutdown, that1.Shutdown)
+	}
+	if !this.Acknowledge.Equal(that1.Acknowledge) {
+		return fmt.Errorf("Acknowledge this(%v) Not Equal that(%v)", this.Acknowledge, that1.Acknowledge)
+	}
+	if !this.Reconcile.Equal(that1.Reconcile) {
+		return fmt.Errorf("Reconcile this(%v) Not Equal that(%v)", this.Reconcile, that1.Reconcile)
+	}
+	if !this.Message.Equal(that1.Message) {
+		return fmt.Errorf("Message this(%v) Not Equal that(%v)", this.Message, that1.Message)
+	}
+	if !this.Request.Equal(that1.Request) {
+		return fmt.Errorf("Request this(%v) Not Equal that(%v)", this.Request, that1.Request)
+	}
+	if !this.Suppress.Equal(that1.Suppress) {
+		return fmt.Errorf("Suppress this(%v) Not Equal that(%v)", this.Suppress, that1.Suppress)
+	}
+	return nil
 }
 func (this *Call) Equal(that interface{}) bool {
 	if that == nil {
@@ -1487,6 +1970,9 @@ func (this *Call) Equal(that interface{}) bool {
 	if !this.DeclineInverseOffers.Equal(that1.DeclineInverseOffers) {
 		return false
 	}
+	if !this.Revive.Equal(that1.Revive) {
+		return false
+	}
 	if !this.Kill.Equal(that1.Kill) {
 		return false
 	}
@@ -1505,7 +1991,40 @@ func (this *Call) Equal(that interface{}) bool {
 	if !this.Request.Equal(that1.Request) {
 		return false
 	}
+	if !this.Suppress.Equal(that1.Suppress) {
+		return false
+	}
 	return true
+}
+func (this *Call_Subscribe) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Subscribe)
+	if !ok {
+		that2, ok := that.(Call_Subscribe)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Subscribe")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Subscribe but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Subscribe but is not nil && this == nil")
+	}
+	if !this.FrameworkInfo.Equal(&that1.FrameworkInfo) {
+		return fmt.Errorf("FrameworkInfo this(%v) Not Equal that(%v)", this.FrameworkInfo, that1.FrameworkInfo)
+	}
+	return nil
 }
 func (this *Call_Subscribe) Equal(that interface{}) bool {
 	if that == nil {
@@ -1536,6 +2055,52 @@ func (this *Call_Subscribe) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_Accept) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Accept)
+	if !ok {
+		that2, ok := that.(Call_Accept)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Accept")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Accept but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Accept but is not nil && this == nil")
+	}
+	if len(this.OfferIDs) != len(that1.OfferIDs) {
+		return fmt.Errorf("OfferIDs this(%v) Not Equal that(%v)", len(this.OfferIDs), len(that1.OfferIDs))
+	}
+	for i := range this.OfferIDs {
+		if !this.OfferIDs[i].Equal(&that1.OfferIDs[i]) {
+			return fmt.Errorf("OfferIDs this[%v](%v) Not Equal that[%v](%v)", i, this.OfferIDs[i], i, that1.OfferIDs[i])
+		}
+	}
+	if len(this.Operations) != len(that1.Operations) {
+		return fmt.Errorf("Operations this(%v) Not Equal that(%v)", len(this.Operations), len(that1.Operations))
+	}
+	for i := range this.Operations {
+		if !this.Operations[i].Equal(&that1.Operations[i]) {
+			return fmt.Errorf("Operations this[%v](%v) Not Equal that[%v](%v)", i, this.Operations[i], i, that1.Operations[i])
+		}
+	}
+	if !this.Filters.Equal(that1.Filters) {
+		return fmt.Errorf("Filters this(%v) Not Equal that(%v)", this.Filters, that1.Filters)
+	}
+	return nil
 }
 func (this *Call_Accept) Equal(that interface{}) bool {
 	if that == nil {
@@ -1583,6 +2148,44 @@ func (this *Call_Accept) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_Decline) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Decline)
+	if !ok {
+		that2, ok := that.(Call_Decline)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Decline")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Decline but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Decline but is not nil && this == nil")
+	}
+	if len(this.OfferIDs) != len(that1.OfferIDs) {
+		return fmt.Errorf("OfferIDs this(%v) Not Equal that(%v)", len(this.OfferIDs), len(that1.OfferIDs))
+	}
+	for i := range this.OfferIDs {
+		if !this.OfferIDs[i].Equal(&that1.OfferIDs[i]) {
+			return fmt.Errorf("OfferIDs this[%v](%v) Not Equal that[%v](%v)", i, this.OfferIDs[i], i, that1.OfferIDs[i])
+		}
+	}
+	if !this.Filters.Equal(that1.Filters) {
+		return fmt.Errorf("Filters this(%v) Not Equal that(%v)", this.Filters, that1.Filters)
+	}
+	return nil
+}
 func (this *Call_Decline) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1620,6 +2223,44 @@ func (this *Call_Decline) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_AcceptInverseOffers) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_AcceptInverseOffers)
+	if !ok {
+		that2, ok := that.(Call_AcceptInverseOffers)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_AcceptInverseOffers")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_AcceptInverseOffers but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_AcceptInverseOffers but is not nil && this == nil")
+	}
+	if len(this.InverseOfferIDs) != len(that1.InverseOfferIDs) {
+		return fmt.Errorf("InverseOfferIDs this(%v) Not Equal that(%v)", len(this.InverseOfferIDs), len(that1.InverseOfferIDs))
+	}
+	for i := range this.InverseOfferIDs {
+		if !this.InverseOfferIDs[i].Equal(&that1.InverseOfferIDs[i]) {
+			return fmt.Errorf("InverseOfferIDs this[%v](%v) Not Equal that[%v](%v)", i, this.InverseOfferIDs[i], i, that1.InverseOfferIDs[i])
+		}
+	}
+	if !this.Filters.Equal(that1.Filters) {
+		return fmt.Errorf("Filters this(%v) Not Equal that(%v)", this.Filters, that1.Filters)
+	}
+	return nil
 }
 func (this *Call_AcceptInverseOffers) Equal(that interface{}) bool {
 	if that == nil {
@@ -1659,6 +2300,44 @@ func (this *Call_AcceptInverseOffers) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_DeclineInverseOffers) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_DeclineInverseOffers)
+	if !ok {
+		that2, ok := that.(Call_DeclineInverseOffers)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_DeclineInverseOffers")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_DeclineInverseOffers but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_DeclineInverseOffers but is not nil && this == nil")
+	}
+	if len(this.InverseOfferIDs) != len(that1.InverseOfferIDs) {
+		return fmt.Errorf("InverseOfferIDs this(%v) Not Equal that(%v)", len(this.InverseOfferIDs), len(that1.InverseOfferIDs))
+	}
+	for i := range this.InverseOfferIDs {
+		if !this.InverseOfferIDs[i].Equal(&that1.InverseOfferIDs[i]) {
+			return fmt.Errorf("InverseOfferIDs this[%v](%v) Not Equal that[%v](%v)", i, this.InverseOfferIDs[i], i, that1.InverseOfferIDs[i])
+		}
+	}
+	if !this.Filters.Equal(that1.Filters) {
+		return fmt.Errorf("Filters this(%v) Not Equal that(%v)", this.Filters, that1.Filters)
+	}
+	return nil
+}
 func (this *Call_DeclineInverseOffers) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1697,6 +2376,42 @@ func (this *Call_DeclineInverseOffers) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_Revive) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Revive)
+	if !ok {
+		that2, ok := that.(Call_Revive)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Revive")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Revive but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Revive but is not nil && this == nil")
+	}
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return fmt.Errorf("Role this(%v) Not Equal that(%v)", *this.Role, *that1.Role)
+		}
+	} else if this.Role != nil {
+		return fmt.Errorf("this.Role == nil && that.Role != nil")
+	} else if that1.Role != nil {
+		return fmt.Errorf("Role this(%v) Not Equal that(%v)", this.Role, that1.Role)
+	}
+	return nil
+}
 func (this *Call_Revive) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1722,10 +2437,52 @@ func (this *Call_Revive) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.Role != that1.Role {
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return false
+		}
+	} else if this.Role != nil {
+		return false
+	} else if that1.Role != nil {
 		return false
 	}
 	return true
+}
+func (this *Call_Kill) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Kill)
+	if !ok {
+		that2, ok := that.(Call_Kill)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Kill")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Kill but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Kill but is not nil && this == nil")
+	}
+	if !this.TaskID.Equal(&that1.TaskID) {
+		return fmt.Errorf("TaskID this(%v) Not Equal that(%v)", this.TaskID, that1.TaskID)
+	}
+	if !this.AgentID.Equal(that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if !this.KillPolicy.Equal(that1.KillPolicy) {
+		return fmt.Errorf("KillPolicy this(%v) Not Equal that(%v)", this.KillPolicy, that1.KillPolicy)
+	}
+	return nil
 }
 func (this *Call_Kill) Equal(that interface{}) bool {
 	if that == nil {
@@ -1763,6 +2520,39 @@ func (this *Call_Kill) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_Shutdown) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Shutdown)
+	if !ok {
+		that2, ok := that.(Call_Shutdown)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Shutdown")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Shutdown but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Shutdown but is not nil && this == nil")
+	}
+	if !this.ExecutorID.Equal(&that1.ExecutorID) {
+		return fmt.Errorf("ExecutorID this(%v) Not Equal that(%v)", this.ExecutorID, that1.ExecutorID)
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	return nil
+}
 func (this *Call_Shutdown) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1795,6 +2585,42 @@ func (this *Call_Shutdown) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_Acknowledge) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Acknowledge)
+	if !ok {
+		that2, ok := that.(Call_Acknowledge)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Acknowledge")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Acknowledge but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Acknowledge but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if !this.TaskID.Equal(&that1.TaskID) {
+		return fmt.Errorf("TaskID this(%v) Not Equal that(%v)", this.TaskID, that1.TaskID)
+	}
+	if !bytes.Equal(this.UUID, that1.UUID) {
+		return fmt.Errorf("UUID this(%v) Not Equal that(%v)", this.UUID, that1.UUID)
+	}
+	return nil
 }
 func (this *Call_Acknowledge) Equal(that interface{}) bool {
 	if that == nil {
@@ -1832,6 +2658,41 @@ func (this *Call_Acknowledge) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_Reconcile) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Reconcile)
+	if !ok {
+		that2, ok := that.(Call_Reconcile)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Reconcile")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Reconcile but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Reconcile but is not nil && this == nil")
+	}
+	if len(this.Tasks) != len(that1.Tasks) {
+		return fmt.Errorf("Tasks this(%v) Not Equal that(%v)", len(this.Tasks), len(that1.Tasks))
+	}
+	for i := range this.Tasks {
+		if !this.Tasks[i].Equal(&that1.Tasks[i]) {
+			return fmt.Errorf("Tasks this[%v](%v) Not Equal that[%v](%v)", i, this.Tasks[i], i, that1.Tasks[i])
+		}
+	}
+	return nil
+}
 func (this *Call_Reconcile) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1867,6 +2728,39 @@ func (this *Call_Reconcile) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_Reconcile_Task) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Reconcile_Task)
+	if !ok {
+		that2, ok := that.(Call_Reconcile_Task)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Reconcile_Task")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Reconcile_Task but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Reconcile_Task but is not nil && this == nil")
+	}
+	if !this.TaskID.Equal(&that1.TaskID) {
+		return fmt.Errorf("TaskID this(%v) Not Equal that(%v)", this.TaskID, that1.TaskID)
+	}
+	if !this.AgentID.Equal(that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	return nil
+}
 func (this *Call_Reconcile_Task) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1899,6 +2793,42 @@ func (this *Call_Reconcile_Task) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_Message) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Message)
+	if !ok {
+		that2, ok := that.(Call_Message)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Message")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Message but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Message but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if !this.ExecutorID.Equal(&that1.ExecutorID) {
+		return fmt.Errorf("ExecutorID this(%v) Not Equal that(%v)", this.ExecutorID, that1.ExecutorID)
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return fmt.Errorf("Data this(%v) Not Equal that(%v)", this.Data, that1.Data)
+	}
+	return nil
 }
 func (this *Call_Message) Equal(that interface{}) bool {
 	if that == nil {
@@ -1936,6 +2866,41 @@ func (this *Call_Message) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_Request) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Request)
+	if !ok {
+		that2, ok := that.(Call_Request)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Request")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Request but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Request but is not nil && this == nil")
+	}
+	if len(this.Requests) != len(that1.Requests) {
+		return fmt.Errorf("Requests this(%v) Not Equal that(%v)", len(this.Requests), len(that1.Requests))
+	}
+	for i := range this.Requests {
+		if !this.Requests[i].Equal(&that1.Requests[i]) {
+			return fmt.Errorf("Requests this[%v](%v) Not Equal that[%v](%v)", i, this.Requests[i], i, that1.Requests[i])
+		}
+	}
+	return nil
+}
 func (this *Call_Request) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1971,6 +2936,42 @@ func (this *Call_Request) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_Suppress) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_Suppress)
+	if !ok {
+		that2, ok := that.(Call_Suppress)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_Suppress")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_Suppress but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_Suppress but is not nil && this == nil")
+	}
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return fmt.Errorf("Role this(%v) Not Equal that(%v)", *this.Role, *that1.Role)
+		}
+	} else if this.Role != nil {
+		return fmt.Errorf("this.Role == nil && that.Role != nil")
+	} else if that1.Role != nil {
+		return fmt.Errorf("Role this(%v) Not Equal that(%v)", this.Role, that1.Role)
+	}
+	return nil
+}
 func (this *Call_Suppress) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1996,7 +2997,13 @@ func (this *Call_Suppress) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.Role != that1.Role {
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return false
+		}
+	} else if this.Role != nil {
+		return false
+	} else if that1.Role != nil {
 		return false
 	}
 	return true
@@ -2045,7 +3052,9 @@ func (this *Event_Subscribed) GoString() string {
 	s := make([]string, 0, 7)
 	s = append(s, "&scheduler.Event_Subscribed{")
 	s = append(s, "ID: "+strings.Replace(this.ID.GoString(), `&`, ``, 1)+",\n")
-	s = append(s, "HeartbeatIntervalSeconds: "+fmt.Sprintf("%#v", this.HeartbeatIntervalSeconds)+",\n")
+	if this.HeartbeatIntervalSeconds != nil {
+		s = append(s, "HeartbeatIntervalSeconds: "+valueToGoStringScheduler(this.HeartbeatIntervalSeconds, "float64")+",\n")
+	}
 	if this.MasterInfo != nil {
 		s = append(s, "MasterInfo: "+fmt.Sprintf("%#v", this.MasterInfo)+",\n")
 	}
@@ -2132,7 +3141,9 @@ func (this *Event_Failure) GoString() string {
 	if this.ExecutorID != nil {
 		s = append(s, "ExecutorID: "+fmt.Sprintf("%#v", this.ExecutorID)+",\n")
 	}
-	s = append(s, "Status: "+fmt.Sprintf("%#v", this.Status)+",\n")
+	if this.Status != nil {
+		s = append(s, "Status: "+valueToGoStringScheduler(this.Status, "int32")+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -2150,7 +3161,7 @@ func (this *Call) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 17)
+	s := make([]string, 0, 19)
 	s = append(s, "&scheduler.Call{")
 	if this.FrameworkID != nil {
 		s = append(s, "FrameworkID: "+fmt.Sprintf("%#v", this.FrameworkID)+",\n")
@@ -2171,6 +3182,9 @@ func (this *Call) GoString() string {
 	if this.DeclineInverseOffers != nil {
 		s = append(s, "DeclineInverseOffers: "+fmt.Sprintf("%#v", this.DeclineInverseOffers)+",\n")
 	}
+	if this.Revive != nil {
+		s = append(s, "Revive: "+fmt.Sprintf("%#v", this.Revive)+",\n")
+	}
 	if this.Kill != nil {
 		s = append(s, "Kill: "+fmt.Sprintf("%#v", this.Kill)+",\n")
 	}
@@ -2188,6 +3202,9 @@ func (this *Call) GoString() string {
 	}
 	if this.Request != nil {
 		s = append(s, "Request: "+fmt.Sprintf("%#v", this.Request)+",\n")
+	}
+	if this.Suppress != nil {
+		s = append(s, "Suppress: "+fmt.Sprintf("%#v", this.Suppress)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -2271,7 +3288,9 @@ func (this *Call_Revive) GoString() string {
 	}
 	s := make([]string, 0, 5)
 	s = append(s, "&scheduler.Call_Revive{")
-	s = append(s, "Role: "+fmt.Sprintf("%#v", this.Role)+",\n")
+	if this.Role != nil {
+		s = append(s, "Role: "+valueToGoStringScheduler(this.Role, "string")+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -2373,7 +3392,9 @@ func (this *Call_Suppress) GoString() string {
 	}
 	s := make([]string, 0, 5)
 	s = append(s, "&scheduler.Call_Suppress{")
-	s = append(s, "Role: "+fmt.Sprintf("%#v", this.Role)+",\n")
+	if this.Role != nil {
+		s = append(s, "Role: "+valueToGoStringScheduler(this.Role, "string")+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -2519,9 +3540,11 @@ func (m *Event_Subscribed) MarshalTo(dAtA []byte) (int, error) {
 		return 0, err
 	}
 	i += n10
-	dAtA[i] = 0x11
-	i++
-	i = encodeFixed64Scheduler(dAtA, i, uint64(math.Float64bits(float64(m.HeartbeatIntervalSeconds))))
+	if m.HeartbeatIntervalSeconds != nil {
+		dAtA[i] = 0x11
+		i++
+		i = encodeFixed64Scheduler(dAtA, i, uint64(math.Float64bits(float64(*m.HeartbeatIntervalSeconds))))
+	}
 	if m.MasterInfo != nil {
 		dAtA[i] = 0x1a
 		i++
@@ -2750,9 +3773,11 @@ func (m *Event_Failure) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n18
 	}
-	dAtA[i] = 0x18
-	i++
-	i = encodeVarintScheduler(dAtA, i, uint64(m.Status))
+	if m.Status != nil {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintScheduler(dAtA, i, uint64(*m.Status))
+	}
 	return i, nil
 }
 
@@ -2916,6 +3941,28 @@ func (m *Call) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n30
 	}
+	if m.Revive != nil {
+		dAtA[i] = 0x7a
+		i++
+		i = encodeVarintScheduler(dAtA, i, uint64(m.Revive.Size()))
+		n31, err := m.Revive.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n31
+	}
+	if m.Suppress != nil {
+		dAtA[i] = 0x82
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintScheduler(dAtA, i, uint64(m.Suppress.Size()))
+		n32, err := m.Suppress.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n32
+	}
 	return i, nil
 }
 
@@ -2937,11 +3984,11 @@ func (m *Call_Subscribe) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.FrameworkInfo.Size()))
-	n31, err := m.FrameworkInfo.MarshalTo(dAtA[i:])
+	n33, err := m.FrameworkInfo.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n31
+	i += n33
 	return i, nil
 }
 
@@ -2988,11 +4035,11 @@ func (m *Call_Accept) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintScheduler(dAtA, i, uint64(m.Filters.Size()))
-		n32, err := m.Filters.MarshalTo(dAtA[i:])
+		n34, err := m.Filters.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n32
+		i += n34
 	}
 	return i, nil
 }
@@ -3028,11 +4075,11 @@ func (m *Call_Decline) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintScheduler(dAtA, i, uint64(m.Filters.Size()))
-		n33, err := m.Filters.MarshalTo(dAtA[i:])
+		n35, err := m.Filters.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n33
+		i += n35
 	}
 	return i, nil
 }
@@ -3068,11 +4115,11 @@ func (m *Call_AcceptInverseOffers) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintScheduler(dAtA, i, uint64(m.Filters.Size()))
-		n34, err := m.Filters.MarshalTo(dAtA[i:])
+		n36, err := m.Filters.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n34
+		i += n36
 	}
 	return i, nil
 }
@@ -3108,11 +4155,11 @@ func (m *Call_DeclineInverseOffers) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintScheduler(dAtA, i, uint64(m.Filters.Size()))
-		n35, err := m.Filters.MarshalTo(dAtA[i:])
+		n37, err := m.Filters.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n35
+		i += n37
 	}
 	return i, nil
 }
@@ -3132,10 +4179,12 @@ func (m *Call_Revive) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintScheduler(dAtA, i, uint64(len(m.Role)))
-	i += copy(dAtA[i:], m.Role)
+	if m.Role != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintScheduler(dAtA, i, uint64(len(*m.Role)))
+		i += copy(dAtA[i:], *m.Role)
+	}
 	return i, nil
 }
 
@@ -3157,30 +4206,30 @@ func (m *Call_Kill) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.TaskID.Size()))
-	n36, err := m.TaskID.MarshalTo(dAtA[i:])
+	n38, err := m.TaskID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n36
+	i += n38
 	if m.AgentID != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintScheduler(dAtA, i, uint64(m.AgentID.Size()))
-		n37, err := m.AgentID.MarshalTo(dAtA[i:])
+		n39, err := m.AgentID.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n37
+		i += n39
 	}
 	if m.KillPolicy != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintScheduler(dAtA, i, uint64(m.KillPolicy.Size()))
-		n38, err := m.KillPolicy.MarshalTo(dAtA[i:])
+		n40, err := m.KillPolicy.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n38
+		i += n40
 	}
 	return i, nil
 }
@@ -3203,19 +4252,19 @@ func (m *Call_Shutdown) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.ExecutorID.Size()))
-	n39, err := m.ExecutorID.MarshalTo(dAtA[i:])
+	n41, err := m.ExecutorID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n39
+	i += n41
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.AgentID.Size()))
-	n40, err := m.AgentID.MarshalTo(dAtA[i:])
+	n42, err := m.AgentID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n40
+	i += n42
 	return i, nil
 }
 
@@ -3237,19 +4286,19 @@ func (m *Call_Acknowledge) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.AgentID.Size()))
-	n41, err := m.AgentID.MarshalTo(dAtA[i:])
+	n43, err := m.AgentID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n41
+	i += n43
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.TaskID.Size()))
-	n42, err := m.TaskID.MarshalTo(dAtA[i:])
+	n44, err := m.TaskID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n42
+	i += n44
 	if m.UUID == nil {
 		return 0, github_com_gogo_protobuf_proto.NewRequiredNotSetError("uuid")
 	} else {
@@ -3309,20 +4358,20 @@ func (m *Call_Reconcile_Task) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.TaskID.Size()))
-	n43, err := m.TaskID.MarshalTo(dAtA[i:])
+	n45, err := m.TaskID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n43
+	i += n45
 	if m.AgentID != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintScheduler(dAtA, i, uint64(m.AgentID.Size()))
-		n44, err := m.AgentID.MarshalTo(dAtA[i:])
+		n46, err := m.AgentID.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n44
+		i += n46
 	}
 	return i, nil
 }
@@ -3345,19 +4394,19 @@ func (m *Call_Message) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0xa
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.AgentID.Size()))
-	n45, err := m.AgentID.MarshalTo(dAtA[i:])
+	n47, err := m.AgentID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n45
+	i += n47
 	dAtA[i] = 0x12
 	i++
 	i = encodeVarintScheduler(dAtA, i, uint64(m.ExecutorID.Size()))
-	n46, err := m.ExecutorID.MarshalTo(dAtA[i:])
+	n48, err := m.ExecutorID.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
-	i += n46
+	i += n48
 	if m.Data == nil {
 		return 0, github_com_gogo_protobuf_proto.NewRequiredNotSetError("data")
 	} else {
@@ -3414,10 +4463,12 @@ func (m *Call_Suppress) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintScheduler(dAtA, i, uint64(len(m.Role)))
-	i += copy(dAtA[i:], m.Role)
+	if m.Role != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintScheduler(dAtA, i, uint64(len(*m.Role)))
+		i += copy(dAtA[i:], *m.Role)
+	}
 	return i, nil
 }
 
@@ -3496,7 +4547,9 @@ func (m *Event_Subscribed) Size() (n int) {
 	_ = l
 	l = m.ID.Size()
 	n += 1 + l + sovScheduler(uint64(l))
-	n += 9
+	if m.HeartbeatIntervalSeconds != nil {
+		n += 9
+	}
 	if m.MasterInfo != nil {
 		l = m.MasterInfo.Size()
 		n += 1 + l + sovScheduler(uint64(l))
@@ -3577,7 +4630,9 @@ func (m *Event_Failure) Size() (n int) {
 		l = m.ExecutorID.Size()
 		n += 1 + l + sovScheduler(uint64(l))
 	}
-	n += 1 + sovScheduler(uint64(m.Status))
+	if m.Status != nil {
+		n += 1 + sovScheduler(uint64(*m.Status))
+	}
 	return n
 }
 
@@ -3640,6 +4695,14 @@ func (m *Call) Size() (n int) {
 	if m.DeclineInverseOffers != nil {
 		l = m.DeclineInverseOffers.Size()
 		n += 1 + l + sovScheduler(uint64(l))
+	}
+	if m.Revive != nil {
+		l = m.Revive.Size()
+		n += 1 + l + sovScheduler(uint64(l))
+	}
+	if m.Suppress != nil {
+		l = m.Suppress.Size()
+		n += 2 + l + sovScheduler(uint64(l))
 	}
 	return n
 }
@@ -3725,8 +4788,10 @@ func (m *Call_DeclineInverseOffers) Size() (n int) {
 func (m *Call_Revive) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.Role)
-	n += 1 + l + sovScheduler(uint64(l))
+	if m.Role != nil {
+		l = len(*m.Role)
+		n += 1 + l + sovScheduler(uint64(l))
+	}
 	return n
 }
 
@@ -3823,8 +4888,10 @@ func (m *Call_Request) Size() (n int) {
 func (m *Call_Suppress) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.Role)
-	n += 1 + l + sovScheduler(uint64(l))
+	if m.Role != nil {
+		l = len(*m.Role)
+		n += 1 + l + sovScheduler(uint64(l))
+	}
 	return n
 }
 
@@ -3866,7 +4933,7 @@ func (this *Event_Subscribed) String() string {
 	}
 	s := strings.Join([]string{`&Event_Subscribed{`,
 		`ID:` + strings.Replace(strings.Replace(this.ID.String(), "FrameworkID", "mesos_v1.FrameworkID", 1), `&`, ``, 1) + `,`,
-		`HeartbeatIntervalSeconds:` + fmt.Sprintf("%v", this.HeartbeatIntervalSeconds) + `,`,
+		`HeartbeatIntervalSeconds:` + valueToStringScheduler(this.HeartbeatIntervalSeconds) + `,`,
 		`MasterInfo:` + strings.Replace(fmt.Sprintf("%v", this.MasterInfo), "MasterInfo", "mesos_v1.MasterInfo", 1) + `,`,
 		`}`,
 	}, "")
@@ -3941,7 +5008,7 @@ func (this *Event_Failure) String() string {
 	s := strings.Join([]string{`&Event_Failure{`,
 		`AgentID:` + strings.Replace(fmt.Sprintf("%v", this.AgentID), "AgentID", "mesos_v1.AgentID", 1) + `,`,
 		`ExecutorID:` + strings.Replace(fmt.Sprintf("%v", this.ExecutorID), "ExecutorID", "mesos_v1.ExecutorID", 1) + `,`,
-		`Status:` + fmt.Sprintf("%v", this.Status) + `,`,
+		`Status:` + valueToStringScheduler(this.Status) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3974,6 +5041,8 @@ func (this *Call) String() string {
 		`Request:` + strings.Replace(fmt.Sprintf("%v", this.Request), "Call_Request", "Call_Request", 1) + `,`,
 		`AcceptInverseOffers:` + strings.Replace(fmt.Sprintf("%v", this.AcceptInverseOffers), "Call_AcceptInverseOffers", "Call_AcceptInverseOffers", 1) + `,`,
 		`DeclineInverseOffers:` + strings.Replace(fmt.Sprintf("%v", this.DeclineInverseOffers), "Call_DeclineInverseOffers", "Call_DeclineInverseOffers", 1) + `,`,
+		`Revive:` + strings.Replace(fmt.Sprintf("%v", this.Revive), "Call_Revive", "Call_Revive", 1) + `,`,
+		`Suppress:` + strings.Replace(fmt.Sprintf("%v", this.Suppress), "Call_Suppress", "Call_Suppress", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -4038,7 +5107,7 @@ func (this *Call_Revive) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_Revive{`,
-		`Role:` + fmt.Sprintf("%v", this.Role) + `,`,
+		`Role:` + valueToStringScheduler(this.Role) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -4126,7 +5195,7 @@ func (this *Call_Suppress) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_Suppress{`,
-		`Role:` + fmt.Sprintf("%v", this.Role) + `,`,
+		`Role:` + valueToStringScheduler(this.Role) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -4583,7 +5652,8 @@ func (m *Event_Subscribed) Unmarshal(dAtA []byte) error {
 			v |= uint64(dAtA[iNdEx-3]) << 40
 			v |= uint64(dAtA[iNdEx-2]) << 48
 			v |= uint64(dAtA[iNdEx-1]) << 56
-			m.HeartbeatIntervalSeconds = float64(math.Float64frombits(v))
+			v2 := float64(math.Float64frombits(v))
+			m.HeartbeatIntervalSeconds = &v2
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field MasterInfo", wireType)
@@ -5311,7 +6381,7 @@ func (m *Event_Failure) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
 			}
-			m.Status = 0
+			var v int32
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowScheduler
@@ -5321,11 +6391,12 @@ func (m *Event_Failure) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Status |= (int32(b) & 0x7F) << shift
+				v |= (int32(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			m.Status = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipScheduler(dAtA[iNdEx:])
@@ -5872,6 +6943,72 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 				m.DeclineInverseOffers = &Call_DeclineInverseOffers{}
 			}
 			if err := m.DeclineInverseOffers.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 15:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Revive", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScheduler
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthScheduler
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Revive == nil {
+				m.Revive = &Call_Revive{}
+			}
+			if err := m.Revive.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 16:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Suppress", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowScheduler
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthScheduler
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Suppress == nil {
+				m.Suppress = &Call_Suppress{}
+			}
+			if err := m.Suppress.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -6524,7 +7661,8 @@ func (m *Call_Revive) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Role = string(dAtA[iNdEx:postIndex])
+			s := string(dAtA[iNdEx:postIndex])
+			m.Role = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -7461,7 +8599,8 @@ func (m *Call_Suppress) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Role = string(dAtA[iNdEx:postIndex])
+			s := string(dAtA[iNdEx:postIndex])
+			m.Role = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -7592,101 +8731,99 @@ var (
 func init() { proto.RegisterFile("scheduler/scheduler.proto", fileDescriptorScheduler) }
 
 var fileDescriptorScheduler = []byte{
-	// 1524 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xcc, 0x56, 0x4d, 0x6f, 0xdb, 0x46,
-	0x13, 0xf6, 0xca, 0xfa, 0x1c, 0xd9, 0x32, 0xb3, 0x89, 0x1d, 0x99, 0x78, 0x5f, 0xc9, 0x35, 0x52,
-	0xc4, 0xfd, 0xb0, 0x1c, 0x3b, 0x6e, 0xd3, 0x00, 0x29, 0x0a, 0x7d, 0xd0, 0x09, 0x11, 0xc7, 0x76,
-	0x49, 0xc9, 0x05, 0x72, 0x11, 0x68, 0x69, 0x25, 0xb3, 0xa6, 0x45, 0x95, 0xa4, 0x9c, 0xe6, 0xd4,
-	0xf4, 0xde, 0x43, 0xd1, 0x5b, 0xff, 0x40, 0x51, 0xa0, 0xf7, 0xfe, 0x84, 0x22, 0xc7, 0x1c, 0x7b,
-	0x12, 0x1a, 0xf5, 0x52, 0x14, 0x3d, 0xe4, 0xd6, 0x6b, 0xb1, 0xcb, 0xa5, 0x44, 0xca, 0x94, 0xe5,
-	0xe6, 0x10, 0xf4, 0xc6, 0xdd, 0x79, 0x9e, 0x99, 0xe1, 0xec, 0xee, 0x3c, 0x03, 0xcb, 0x76, 0xe3,
-	0x98, 0x34, 0x7b, 0x06, 0xb1, 0x36, 0x86, 0x5f, 0x85, 0xae, 0x65, 0x3a, 0x26, 0xc6, 0xa7, 0xc4,
-	0x36, 0xed, 0xc2, 0xd9, 0x66, 0x61, 0x68, 0x11, 0x37, 0xdb, 0xba, 0x73, 0xdc, 0x3b, 0x2a, 0x34,
-	0xcc, 0xd3, 0x0d, 0xb3, 0xd3, 0xb4, 0xc8, 0xe7, 0xeb, 0xf6, 0xa9, 0x69, 0x68, 0x1b, 0x0c, 0xbb,
-	0xde, 0x36, 0xd7, 0x8f, 0x1d, 0xa7, 0xeb, 0xae, 0x5c, 0x37, 0xe2, 0xba, 0x8f, 0xd2, 0x36, 0xdb,
-	0xe6, 0x06, 0xdb, 0x3e, 0xea, 0xb5, 0xd8, 0x8a, 0x2d, 0xd8, 0x97, 0x0b, 0x5f, 0xfd, 0x7b, 0x0e,
-	0x62, 0xd2, 0x19, 0xe9, 0x38, 0x78, 0x0b, 0xa2, 0xce, 0xd3, 0x2e, 0xc9, 0xa2, 0x15, 0xb4, 0x96,
-	0xd9, 0xca, 0x15, 0xce, 0xa7, 0x53, 0x60, 0xc0, 0x42, 0xf5, 0x69, 0x97, 0x94, 0xa2, 0xcf, 0xfb,
-	0xf9, 0x19, 0xfc, 0x11, 0x80, 0xdd, 0x3b, 0xb2, 0x1b, 0x96, 0x7e, 0x44, 0x9a, 0xd9, 0xc8, 0x0a,
-	0x5a, 0x4b, 0x6f, 0xdd, 0x98, 0xcc, 0x54, 0x87, 0x58, 0x7c, 0x0b, 0xe2, 0x66, 0xab, 0x45, 0x2c,
-	0x3b, 0x3b, 0xcb, 0x58, 0x2b, 0x93, 0x59, 0xfb, 0x0c, 0x87, 0xb7, 0x20, 0x61, 0x11, 0xbb, 0xa1,
-	0x77, 0x9a, 0xd9, 0x28, 0xa3, 0xbc, 0x35, 0x99, 0xa2, 0xb8, 0x40, 0x1a, 0xa5, 0xd7, 0x6d, 0x6a,
-	0x0e, 0xc9, 0xc6, 0xa6, 0x45, 0xa9, 0x31, 0x1c, 0x8d, 0x72, 0x4a, 0x6c, 0x5b, 0x6b, 0x93, 0x6c,
-	0x7c, 0x5a, 0x94, 0x47, 0x2e, 0x90, 0x72, 0x5a, 0x9a, 0x6e, 0xf4, 0x2c, 0x92, 0x4d, 0x4c, 0xe3,
-	0xec, 0xb8, 0x40, 0x5c, 0x80, 0x18, 0xb1, 0x2c, 0xd3, 0xca, 0x26, 0x19, 0x23, 0x3f, 0x99, 0x21,
-	0x51, 0x18, 0x56, 0x20, 0xa3, 0x77, 0xce, 0x88, 0x65, 0x93, 0x3a, 0xaf, 0x5b, 0x8a, 0x11, 0x6f,
-	0x4e, 0x26, 0xca, 0x2e, 0xde, 0x2d, 0x5f, 0xe9, 0xca, 0xa0, 0x9f, 0x9f, 0x0f, 0x6c, 0x61, 0x02,
-	0x8b, 0xbc, 0xa2, 0xf5, 0x80, 0xef, 0x2c, 0x30, 0xd7, 0xeb, 0x53, 0xeb, 0xeb, 0x77, 0x57, 0xba,
-	0x3e, 0xe8, 0xe7, 0xaf, 0x86, 0x18, 0xc4, 0x5f, 0x10, 0x80, 0xef, 0xe4, 0xef, 0xc0, 0x5c, 0xcb,
-	0xd2, 0x4e, 0xc9, 0x13, 0xd3, 0x3a, 0xa9, 0xeb, 0xcd, 0x2c, 0x5a, 0x89, 0xac, 0xa5, 0xb7, 0x16,
-	0x47, 0xc1, 0x76, 0x3c, 0xab, 0x5c, 0x29, 0x01, 0xbd, 0x66, 0x83, 0x7e, 0x3e, 0x22, 0x57, 0x70,
-	0x05, 0xc4, 0x63, 0xa2, 0x59, 0xce, 0x11, 0xd1, 0x9c, 0xba, 0xde, 0x71, 0x88, 0x75, 0xa6, 0x19,
-	0x75, 0x9b, 0x34, 0xcc, 0x4e, 0xd3, 0x66, 0x97, 0x0f, 0x95, 0x56, 0x38, 0x3e, 0xfb, 0xc0, 0x43,
-	0xca, 0x1c, 0xa8, 0xba, 0x38, 0x7c, 0x17, 0xd2, 0xa7, 0x9a, 0xed, 0x10, 0xab, 0xae, 0x77, 0x5a,
-	0x26, 0xbf, 0x7d, 0xd7, 0x46, 0xd1, 0x1f, 0x31, 0xa3, 0xdc, 0x69, 0x99, 0xa5, 0xcc, 0xa0, 0x9f,
-	0x87, 0xd1, 0x5a, 0xdc, 0x80, 0x38, 0xaf, 0xdc, 0xdb, 0xc3, 0xdb, 0x8b, 0x56, 0x66, 0xd7, 0xd2,
-	0x5b, 0x0b, 0x23, 0xbe, 0x5b, 0x0c, 0xf6, 0x3c, 0xc4, 0x43, 0x18, 0xab, 0xb8, 0x74, 0xee, 0x14,
-	0x5d, 0xfe, 0xd2, 0x88, 0x1f, 0xa8, 0xe9, 0x22, 0xff, 0x9d, 0xa0, 0x1b, 0xf1, 0x13, 0x48, 0x78,
-	0x37, 0x7c, 0x1b, 0x92, 0xcc, 0xd3, 0xa8, 0x92, 0x57, 0xc6, 0x72, 0x91, 0x2b, 0xa5, 0x05, 0xee,
-	0x26, 0xc1, 0x37, 0xc4, 0xc7, 0x10, 0x76, 0x52, 0xb8, 0x0c, 0x42, 0x20, 0xbd, 0x0b, 0x9d, 0x2e,
-	0x71, 0xa7, 0x19, 0xbf, 0x0b, 0xb9, 0x22, 0x6e, 0x43, 0x9c, 0xbf, 0xa5, 0x77, 0x21, 0x6e, 0x3b,
-	0x9a, 0xd3, 0xb3, 0xb9, 0x13, 0x5f, 0x95, 0xab, 0x9a, 0x7d, 0xa2, 0x32, 0x1b, 0x2f, 0xd5, 0x77,
-	0x08, 0x12, 0xde, 0x7b, 0xda, 0x86, 0xa4, 0xd6, 0x26, 0x1d, 0x27, 0x34, 0x7c, 0x91, 0x5a, 0xfc,
-	0xff, 0xc4, 0x37, 0xf0, 0xc7, 0x90, 0x26, 0x5f, 0x92, 0x46, 0xcf, 0x31, 0x59, 0xde, 0x91, 0xf1,
-	0x90, 0x12, 0x37, 0xca, 0x95, 0x12, 0xe6, 0x5c, 0x18, 0xed, 0x61, 0x0c, 0xd1, 0xa6, 0xe6, 0x68,
-	0xd9, 0xd9, 0x95, 0xc8, 0xda, 0x1c, 0x4b, 0x0a, 0x89, 0xdf, 0x20, 0x48, 0x78, 0x0f, 0xf6, 0x56,
-	0x20, 0x29, 0x14, 0x9e, 0x54, 0xda, 0x9f, 0xd0, 0xdd, 0xf1, 0x84, 0xd0, 0xc4, 0x84, 0x32, 0x63,
-	0xc9, 0x5c, 0x1b, 0x56, 0x8e, 0xde, 0xcf, 0x18, 0xaf, 0x51, 0x0e, 0x62, 0x6e, 0x33, 0x58, 0x1c,
-	0x35, 0x29, 0x5a, 0x9f, 0x94, 0x6b, 0x5f, 0xfd, 0x09, 0x41, 0x94, 0x36, 0x67, 0x9c, 0x86, 0x44,
-	0x6d, 0xef, 0xe1, 0xde, 0xfe, 0x67, 0x7b, 0xc2, 0x0c, 0xce, 0x00, 0xa8, 0xb5, 0x92, 0x5a, 0x56,
-	0xe4, 0x92, 0x54, 0x11, 0x10, 0x06, 0x88, 0xef, 0xef, 0xec, 0x48, 0x8a, 0x2a, 0x44, 0x30, 0x86,
-	0x8c, 0xbc, 0x77, 0x28, 0x29, 0xaa, 0x54, 0xe7, 0x7b, 0x29, 0x4a, 0x56, 0x24, 0xb5, 0x2c, 0xef,
-	0x55, 0x84, 0x59, 0xbc, 0x0c, 0x8b, 0x7c, 0x51, 0x0f, 0x00, 0x05, 0xa0, 0x7e, 0x6a, 0x07, 0x95,
-	0x62, 0x55, 0x12, 0xa2, 0x94, 0xf3, 0x48, 0x52, 0xd5, 0xe2, 0x7d, 0x49, 0x88, 0xd1, 0xc5, 0x4e,
-	0x51, 0xde, 0xad, 0x29, 0x92, 0x10, 0xc7, 0x29, 0x88, 0x49, 0x8a, 0xb2, 0xaf, 0x08, 0x09, 0x3c,
-	0x0f, 0xa9, 0x07, 0x52, 0x51, 0xa9, 0x96, 0xa4, 0x62, 0x55, 0x48, 0xae, 0xfe, 0x79, 0x15, 0xa2,
-	0x65, 0xcd, 0x30, 0xf0, 0xbd, 0x73, 0x0d, 0x01, 0x4d, 0x6e, 0x08, 0x0b, 0x83, 0x7e, 0x3e, 0xed,
-	0xdb, 0xc0, 0x9b, 0x5c, 0xb6, 0x22, 0x4c, 0xb6, 0xfe, 0x1f, 0xd6, 0xb3, 0x68, 0x14, 0xbf, 0x6a,
-	0x7d, 0x00, 0xa9, 0xa1, 0x6a, 0xf1, 0x06, 0xb0, 0x3a, 0x91, 0x37, 0xec, 0x5c, 0x78, 0x03, 0xe2,
-	0x5a, 0xa3, 0x41, 0xba, 0x0e, 0xd7, 0x9f, 0xfc, 0x44, 0x4e, 0x91, 0xc1, 0xf0, 0x26, 0x24, 0x9a,
-	0xa4, 0x61, 0xe8, 0x9d, 0x0b, 0xe5, 0x87, 0x31, 0x2a, 0x2e, 0x0e, 0xbf, 0x07, 0xd1, 0x13, 0xdd,
-	0x30, 0xb8, 0xf6, 0x4c, 0xfe, 0x9b, 0x87, 0xba, 0x61, 0xe0, 0xdb, 0x90, 0xb4, 0x8f, 0x7b, 0x4e,
-	0xd3, 0x7c, 0xd2, 0xb9, 0x48, 0x78, 0xdc, 0xdf, 0xe0, 0x40, 0x7a, 0x2b, 0xb5, 0xc6, 0x49, 0xc7,
-	0x7c, 0x62, 0x90, 0x66, 0x9b, 0x70, 0xf9, 0xb9, 0x71, 0xc1, 0xaf, 0x0c, 0xb1, 0xb4, 0x6e, 0x16,
-	0xed, 0xa2, 0x0d, 0xdd, 0x20, 0x5c, 0x7e, 0x26, 0xd7, 0x4d, 0xf1, 0x90, 0xb4, 0x0c, 0xde, 0x6d,
-	0x85, 0x29, 0x65, 0xf0, 0x3a, 0xc0, 0x26, 0xd5, 0xfa, 0x2f, 0x7a, 0xc4, 0x76, 0xb2, 0xe9, 0x29,
-	0x14, 0xc5, 0xc5, 0xe1, 0x26, 0x2c, 0xba, 0xa7, 0x53, 0x1f, 0xeb, 0xb0, 0xf3, 0xcc, 0xc1, 0xfb,
-	0x53, 0x0e, 0x2b, 0x28, 0x96, 0x4c, 0xcb, 0x42, 0x0c, 0xb8, 0x0d, 0x4b, 0xfc, 0x48, 0xc7, 0xc3,
-	0x64, 0x26, 0x6b, 0xa6, 0xff, 0x84, 0x83, 0x71, 0xb2, 0x83, 0x7e, 0xfe, 0x5a, 0x98, 0x45, 0x54,
-	0x21, 0x35, 0xba, 0x79, 0x3b, 0x90, 0xf1, 0xbd, 0x10, 0x2a, 0x5b, 0x6e, 0x5b, 0xbc, 0x1e, 0xf6,
-	0x46, 0xa8, 0x72, 0x0d, 0x75, 0x23, 0xb0, 0x2d, 0x7e, 0x8f, 0x20, 0xce, 0xef, 0xe6, 0x87, 0x90,
-	0xf2, 0x5a, 0xbc, 0x27, 0x42, 0x21, 0x3d, 0x5e, 0xe0, 0x7e, 0x92, 0x7c, 0xc3, 0xc6, 0xb7, 0x01,
-	0xcc, 0x2e, 0xb1, 0x34, 0x47, 0x37, 0x3b, 0x54, 0x74, 0x29, 0x71, 0x79, 0x8c, 0x58, 0xd8, 0xf7,
-	0x10, 0xfc, 0xc1, 0xad, 0x42, 0xa2, 0xa5, 0x1b, 0xce, 0x68, 0xda, 0xf3, 0x85, 0xda, 0x71, 0x0d,
-	0x22, 0x81, 0x84, 0xf7, 0x08, 0x5e, 0x37, 0x37, 0x5f, 0x98, 0xc8, 0xa4, 0x30, 0xcf, 0x10, 0x84,
-	0x1e, 0xac, 0x04, 0x57, 0xc6, 0xa5, 0xef, 0x82, 0xd8, 0xd7, 0x79, 0xec, 0x85, 0xa0, 0xf6, 0x5d,
-	0x2e, 0x85, 0xaf, 0x11, 0x84, 0x9e, 0xf9, 0x9b, 0xcc, 0xe1, 0x7f, 0x10, 0x57, 0xc8, 0x99, 0x7e,
-	0x46, 0xa8, 0xee, 0x59, 0xa6, 0xe1, 0x8e, 0xfd, 0x5c, 0x48, 0xc4, 0x1f, 0x10, 0x44, 0x59, 0x87,
-	0xd9, 0x84, 0x84, 0xa3, 0xd9, 0xbe, 0x31, 0x4d, 0x08, 0x4a, 0x38, 0x95, 0x2e, 0x9e, 0x46, 0xdc,
-	0x5d, 0x07, 0x74, 0x32, 0x72, 0x59, 0x9d, 0xa4, 0x3d, 0xaf, 0xde, 0x35, 0x0d, 0xbd, 0xf1, 0xf4,
-	0xfc, 0x44, 0x46, 0x33, 0x39, 0x60, 0x36, 0x57, 0x27, 0x47, 0x6b, 0xf1, 0x2b, 0x48, 0x0e, 0x1b,
-	0xdb, 0x98, 0xfe, 0xa3, 0x7f, 0xa9, 0xff, 0xdb, 0x81, 0xbc, 0x2f, 0x39, 0x74, 0xd0, 0xb1, 0x25,
-	0xed, 0x6f, 0x91, 0xaf, 0x37, 0xba, 0xf8, 0xca, 0x1c, 0xb9, 0x64, 0x99, 0x45, 0x88, 0xf6, 0x7a,
-	0x7a, 0x93, 0x8f, 0x2b, 0x73, 0x74, 0x5c, 0x19, 0xf4, 0xf3, 0xd1, 0x5a, 0x4d, 0xae, 0x88, 0x3f,
-	0x23, 0x48, 0x8d, 0xda, 0xef, 0x3d, 0x88, 0x51, 0xe7, 0xde, 0x4d, 0xba, 0x39, 0xbd, 0x63, 0xb3,
-	0x98, 0xfc, 0x2a, 0x9c, 0x40, 0x94, 0xae, 0xde, 0xc8, 0x4d, 0xf8, 0x6f, 0x0e, 0x81, 0xdb, 0x74,
-	0xd8, 0x76, 0x35, 0xe6, 0x1d, 0x48, 0x72, 0x59, 0x0a, 0x79, 0x97, 0x1c, 0x34, 0x9c, 0xd5, 0x92,
-	0x6a, 0xaf, 0xdb, 0xb5, 0x88, 0x6d, 0x87, 0x3d, 0xb1, 0xd5, 0xbf, 0x42, 0x67, 0xb5, 0x79, 0x48,
-	0x0d, 0x67, 0x35, 0x01, 0xe1, 0x39, 0x48, 0x56, 0xa5, 0xa2, 0x52, 0xa1, 0xc6, 0x08, 0x1d, 0xb8,
-	0x8a, 0xe5, 0xb2, 0x74, 0x50, 0x15, 0x66, 0x29, 0xab, 0x22, 0x95, 0x77, 0xe5, 0x3d, 0x3a, 0x7d,
-	0x2d, 0xc3, 0xa2, 0x6b, 0xa8, 0x8f, 0x0d, 0x73, 0xf3, 0x58, 0x84, 0x25, 0x8e, 0x1b, 0xb7, 0x65,
-	0xa8, 0x3f, 0x45, 0x3a, 0x94, 0x0f, 0xe9, 0xcc, 0x96, 0x84, 0xe8, 0x43, 0x79, 0x77, 0x57, 0x88,
-	0xd3, 0x98, 0xea, 0x83, 0x5a, 0x95, 0xc5, 0x4c, 0xe0, 0x05, 0x48, 0x17, 0xcb, 0x34, 0xbb, 0x5d,
-	0xa9, 0x72, 0x5f, 0x12, 0x92, 0x34, 0x43, 0x45, 0x2a, 0xef, 0xef, 0x95, 0xe5, 0x5d, 0xc9, 0x1d,
-	0x16, 0xbd, 0xc1, 0x0f, 0xdc, 0xc9, 0xf1, 0xd3, 0x9a, 0xa4, 0x56, 0x85, 0x34, 0xf3, 0x53, 0x3b,
-	0x38, 0x50, 0x24, 0x55, 0x15, 0xe6, 0x4a, 0x77, 0x5e, 0xbc, 0xcc, 0xa1, 0x5f, 0x5f, 0xe6, 0x66,
-	0x5e, 0xbd, 0xcc, 0xa1, 0x67, 0x83, 0x1c, 0xfa, 0x71, 0x90, 0x43, 0xcf, 0x07, 0x39, 0xf4, 0x62,
-	0x90, 0x43, 0xbf, 0x0d, 0x72, 0xe8, 0x8f, 0x41, 0x0e, 0xbd, 0x1a, 0xe4, 0x66, 0xbe, 0xfd, 0x3d,
-	0x37, 0xf3, 0x38, 0x35, 0xbc, 0x99, 0xff, 0x04, 0x00, 0x00, 0xff, 0xff, 0x05, 0x70, 0x7e, 0x63,
-	0x31, 0x11, 0x00, 0x00,
+	// 1496 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xcc, 0x56, 0x4d, 0x6f, 0xdb, 0x46,
+	0x13, 0xf6, 0xca, 0xd4, 0xd7, 0xd0, 0x96, 0x99, 0x4d, 0xec, 0xd0, 0x04, 0x5e, 0xd9, 0xaf, 0x91,
+	0x22, 0x4e, 0x5b, 0xcb, 0xb1, 0xe3, 0x34, 0x2d, 0x90, 0x22, 0xd0, 0x07, 0x9d, 0x10, 0xfe, 0x2c,
+	0x25, 0xa5, 0x40, 0x2e, 0x02, 0x2d, 0xad, 0x6c, 0xd6, 0x34, 0xa9, 0x92, 0x94, 0xd3, 0x9c, 0x9a,
+	0x5e, 0x7a, 0xea, 0xa1, 0x28, 0x8a, 0x02, 0xfd, 0x07, 0x05, 0x7a, 0xef, 0x6f, 0xc8, 0xb1, 0xc7,
+	0x9e, 0x8c, 0x44, 0xbd, 0x14, 0x45, 0x0f, 0xf9, 0x01, 0x3d, 0x14, 0xbb, 0x5c, 0x4a, 0x94, 0x2c,
+	0x59, 0x6e, 0x0e, 0x41, 0x6f, 0xdc, 0xdd, 0xe7, 0x99, 0x19, 0xce, 0xce, 0xce, 0x33, 0x30, 0xef,
+	0xd5, 0x8f, 0x48, 0xa3, 0x6d, 0x11, 0x77, 0xb5, 0xfb, 0x95, 0x6b, 0xb9, 0x8e, 0xef, 0x60, 0x7c,
+	0x42, 0x3c, 0xc7, 0xcb, 0x9d, 0xae, 0xe5, 0xba, 0x27, 0xca, 0xda, 0xa1, 0xe9, 0x1f, 0xb5, 0x0f,
+	0x72, 0x75, 0xe7, 0x64, 0xd5, 0xb1, 0x1b, 0x2e, 0xf9, 0x6c, 0xc5, 0x3b, 0x71, 0x2c, 0x63, 0x95,
+	0x61, 0x57, 0x0e, 0x9d, 0x95, 0x23, 0xdf, 0x6f, 0x05, 0xab, 0xc0, 0x8c, 0xb2, 0x12, 0xa1, 0x1c,
+	0x3a, 0x87, 0xce, 0x2a, 0xdb, 0x3e, 0x68, 0x37, 0xd9, 0x8a, 0x2d, 0xd8, 0x57, 0x00, 0x5f, 0xfa,
+	0x5b, 0x84, 0xb8, 0x7a, 0x4a, 0x6c, 0x1f, 0xaf, 0x83, 0xe0, 0x3f, 0x6b, 0x11, 0x19, 0x2d, 0xa2,
+	0xe5, 0xcc, 0x7a, 0x36, 0x77, 0x3e, 0x9c, 0x1c, 0x03, 0xe6, 0x2a, 0xcf, 0x5a, 0xa4, 0x20, 0xbc,
+	0x38, 0x5b, 0x98, 0xc0, 0x1f, 0x02, 0x78, 0xed, 0x03, 0xaf, 0xee, 0x9a, 0x07, 0xa4, 0x21, 0xc7,
+	0x16, 0xd1, 0xb2, 0xb8, 0x7e, 0x63, 0x34, 0xb3, 0xdc, 0xc5, 0xe2, 0xdb, 0x90, 0x70, 0x9a, 0x4d,
+	0xe2, 0x7a, 0xf2, 0x24, 0x63, 0x2d, 0x8e, 0x66, 0xed, 0x31, 0x1c, 0x5e, 0x87, 0xa4, 0x4b, 0xbc,
+	0xba, 0x69, 0x37, 0x64, 0x81, 0x51, 0xfe, 0x3f, 0x9a, 0xa2, 0x07, 0x40, 0xea, 0xa5, 0xdd, 0x6a,
+	0x18, 0x3e, 0x91, 0xe3, 0xe3, 0xbc, 0x54, 0x19, 0x8e, 0x7a, 0x39, 0x21, 0x9e, 0x67, 0x1c, 0x12,
+	0x39, 0x31, 0xce, 0xcb, 0x4e, 0x00, 0xa4, 0x9c, 0xa6, 0x61, 0x5a, 0x6d, 0x97, 0xc8, 0xc9, 0x71,
+	0x9c, 0xcd, 0x00, 0x88, 0x73, 0x10, 0x27, 0xae, 0xeb, 0xb8, 0x72, 0x8a, 0x31, 0x16, 0x46, 0x33,
+	0x54, 0x0a, 0xc3, 0x0f, 0x20, 0x63, 0xda, 0xa7, 0xc4, 0xf5, 0x48, 0x8d, 0xe7, 0x2d, 0xcd, 0x88,
+	0x37, 0x47, 0x13, 0xb5, 0x00, 0xcf, 0xd3, 0xb7, 0x0d, 0xb3, 0x3c, 0x7d, 0xb5, 0x3e, 0x43, 0x32,
+	0x30, 0x3b, 0x2b, 0x63, 0x93, 0x19, 0x35, 0xa7, 0x7c, 0x8f, 0x00, 0x22, 0xb7, 0x79, 0x0f, 0xa6,
+	0x9a, 0xae, 0x71, 0x42, 0x9e, 0x3a, 0xee, 0x71, 0xcd, 0x6c, 0xc8, 0x68, 0x31, 0xb6, 0x2c, 0xae,
+	0xcf, 0xf6, 0x6c, 0x6e, 0x86, 0xa7, 0x5a, 0xa9, 0x00, 0xb4, 0x74, 0x3a, 0x67, 0x0b, 0x31, 0xad,
+	0x84, 0x97, 0x40, 0x39, 0x22, 0x86, 0xeb, 0x1f, 0x10, 0xc3, 0xaf, 0x99, 0xb6, 0x4f, 0xdc, 0x53,
+	0xc3, 0xaa, 0x79, 0xa4, 0xee, 0xd8, 0x0d, 0x8f, 0x15, 0x14, 0xc2, 0xb7, 0x40, 0x3c, 0x31, 0x3c,
+	0x9f, 0xb8, 0x35, 0xd3, 0x6e, 0x3a, 0xbc, 0x5e, 0xae, 0xf5, 0x6c, 0xef, 0xb0, 0x43, 0xcd, 0x6e,
+	0x3a, 0xca, 0x2a, 0x24, 0xf8, 0xef, 0xbe, 0xd3, 0xad, 0x2f, 0xb4, 0x38, 0xb9, 0x2c, 0xae, 0xcf,
+	0xf4, 0xf0, 0x0c, 0x11, 0x14, 0xb0, 0xa2, 0xc2, 0x74, 0x7f, 0x9a, 0x36, 0xce, 0xe5, 0x39, 0xe0,
+	0xcf, 0xf5, 0xf8, 0x51, 0x02, 0x37, 0xf3, 0x00, 0x92, 0x61, 0xc9, 0x6d, 0x40, 0x8a, 0x11, 0x7b,
+	0x69, 0xb8, 0x32, 0xe0, 0x5a, 0x2b, 0x15, 0x66, 0x78, 0x0a, 0x92, 0x7c, 0x43, 0x79, 0x02, 0x57,
+	0x87, 0xa4, 0x19, 0x17, 0x41, 0xea, 0x8b, 0xe6, 0x42, 0xa3, 0x73, 0xdc, 0x68, 0x26, 0x6a, 0x42,
+	0x2b, 0x29, 0x1b, 0x90, 0xe0, 0xc5, 0xfd, 0x2e, 0x24, 0x3c, 0xdf, 0xf0, 0xdb, 0x1e, 0x37, 0x12,
+	0x49, 0x62, 0xc5, 0xf0, 0x8e, 0xcb, 0xec, 0x8c, 0xff, 0xd2, 0x37, 0x08, 0x92, 0x61, 0x81, 0x6f,
+	0x40, 0xca, 0x38, 0x24, 0xb6, 0x3f, 0xd4, 0x7d, 0x9e, 0x9e, 0x44, 0xff, 0x89, 0x6f, 0xe0, 0x8f,
+	0x41, 0x24, 0x5f, 0x90, 0x7a, 0xdb, 0x77, 0x58, 0xdc, 0xb1, 0x41, 0x97, 0x2a, 0x3f, 0xd4, 0x4a,
+	0x05, 0xcc, 0xb9, 0xd0, 0xdb, 0xc3, 0x53, 0x20, 0x34, 0x0c, 0xdf, 0x90, 0x27, 0x17, 0x63, 0xcb,
+	0x53, 0xca, 0xd7, 0x08, 0x92, 0xe1, 0xdb, 0xb9, 0xdd, 0x17, 0x0e, 0x1a, 0x1e, 0x8e, 0x18, 0x0d,
+	0xe5, 0xa3, 0xc1, 0x50, 0xd0, 0xc8, 0x50, 0x32, 0x03, 0x61, 0x64, 0xba, 0x39, 0xa3, 0x85, 0x17,
+	0x57, 0xb2, 0x10, 0x0f, 0x5e, 0xe4, 0x6c, 0xaf, 0x53, 0xd0, 0x9c, 0xa4, 0x83, 0xbc, 0x2d, 0xfd,
+	0x8c, 0x40, 0xa0, 0x1d, 0x12, 0x8b, 0x90, 0xac, 0xee, 0x6e, 0xed, 0xee, 0x7d, 0xba, 0x2b, 0x4d,
+	0xe0, 0x0c, 0x40, 0xb9, 0x5a, 0x28, 0x17, 0x75, 0xad, 0xa0, 0x96, 0x24, 0x84, 0x01, 0x12, 0x7b,
+	0x9b, 0x9b, 0xaa, 0x5e, 0x96, 0x62, 0x18, 0x43, 0x46, 0xdb, 0x7d, 0xac, 0xea, 0x65, 0xb5, 0xc6,
+	0xf7, 0xd2, 0x94, 0xac, 0xab, 0xe5, 0xa2, 0xb6, 0x5b, 0x92, 0x26, 0xf1, 0x3c, 0xcc, 0xf2, 0x45,
+	0xad, 0x0f, 0x28, 0x01, 0xb5, 0x53, 0xdd, 0x2f, 0xe5, 0x2b, 0xaa, 0x24, 0x50, 0xce, 0x8e, 0x5a,
+	0x2e, 0xe7, 0x1f, 0xaa, 0x52, 0x9c, 0x2e, 0x36, 0xf3, 0xda, 0x76, 0x55, 0x57, 0xa5, 0x04, 0x4e,
+	0x43, 0x5c, 0xd5, 0xf5, 0x3d, 0x5d, 0x4a, 0xe2, 0x69, 0x48, 0x3f, 0x52, 0xf3, 0x7a, 0xa5, 0xa0,
+	0xe6, 0x2b, 0x52, 0x6a, 0xe9, 0xcf, 0xab, 0x20, 0x14, 0x0d, 0xcb, 0xc2, 0xf7, 0xcf, 0xbd, 0x60,
+	0x34, 0xfa, 0x05, 0xcf, 0x74, 0xce, 0x16, 0xc4, 0xc8, 0x06, 0x5e, 0xe3, 0xda, 0x11, 0x63, 0xda,
+	0xf1, 0xbf, 0x61, 0xbd, 0x84, 0x7a, 0x89, 0x4a, 0xc7, 0x5d, 0x48, 0x77, 0xa5, 0x83, 0xbf, 0xe9,
+	0xa5, 0x91, 0xbc, 0x6e, 0xab, 0xc1, 0xab, 0x90, 0x30, 0xea, 0x75, 0xd2, 0xf2, 0xb9, 0x08, 0x2c,
+	0x8c, 0xe4, 0xe4, 0x19, 0x0c, 0xaf, 0x41, 0xb2, 0x41, 0xea, 0x96, 0x69, 0x5f, 0xa8, 0x01, 0x8c,
+	0x51, 0x0a, 0x70, 0xf8, 0x3d, 0x10, 0x8e, 0x4d, 0xcb, 0xe2, 0x02, 0x30, 0xfa, 0x6f, 0xb6, 0x4c,
+	0xcb, 0xc2, 0x77, 0x20, 0xe5, 0x1d, 0xb5, 0xfd, 0x86, 0xf3, 0xd4, 0xbe, 0xa8, 0xfb, 0x07, 0xbf,
+	0xc1, 0x81, 0xb4, 0x1e, 0x8d, 0xfa, 0xb1, 0xed, 0x3c, 0xb5, 0x48, 0xe3, 0x90, 0x70, 0x0d, 0xb8,
+	0x71, 0xc1, 0xaf, 0x74, 0xb1, 0x34, 0x6f, 0x2e, 0x6d, 0x8f, 0x75, 0xd3, 0x22, 0x5c, 0x03, 0x46,
+	0xe7, 0x4d, 0x0f, 0x91, 0x34, 0x0d, 0x61, 0xb5, 0xc2, 0x98, 0x34, 0x84, 0xaf, 0x7e, 0x8d, 0x0a,
+	0xee, 0xe7, 0x6d, 0xe2, 0xf9, 0xb2, 0x38, 0x86, 0xa2, 0x07, 0x38, 0xbc, 0x05, 0xb3, 0xc1, 0xed,
+	0xd4, 0x06, 0x9a, 0xe8, 0x34, 0x33, 0xf0, 0xfe, 0x98, 0xcb, 0xea, 0x6f, 0xc5, 0x3b, 0x30, 0xc7,
+	0x6f, 0x6e, 0xd0, 0x5a, 0x66, 0xb4, 0x64, 0x45, 0x2f, 0xb2, 0xdf, 0xdc, 0x2a, 0x24, 0x5c, 0x72,
+	0x6a, 0x9e, 0x12, 0x79, 0x66, 0x4c, 0xe5, 0xe8, 0x0c, 0xc6, 0x6e, 0xb6, 0xdd, 0x6a, 0xb9, 0xc4,
+	0xf3, 0x64, 0x69, 0xdc, 0xcd, 0x72, 0xa0, 0x52, 0x80, 0x74, 0xaf, 0x58, 0xef, 0x42, 0x26, 0xf2,
+	0xa8, 0xa8, 0x78, 0x05, 0xdd, 0xf3, 0xfa, 0xb0, 0x67, 0x65, 0x37, 0x1d, 0xde, 0x7a, 0x7f, 0x44,
+	0x90, 0xe0, 0xd5, 0xfb, 0x01, 0xa4, 0xc3, 0xc6, 0x1f, 0x2a, 0xd1, 0x90, 0xce, 0x2f, 0xf1, 0xf6,
+	0x99, 0xe2, 0x1b, 0x1e, 0xbe, 0x03, 0xe0, 0xb4, 0x88, 0x6b, 0xf8, 0xa6, 0x63, 0x53, 0x1d, 0xa5,
+	0xc4, 0xf9, 0x01, 0x62, 0x6e, 0x2f, 0x44, 0xf0, 0x27, 0xb9, 0x04, 0xc9, 0xa6, 0x69, 0xf9, 0xbd,
+	0xa1, 0x2c, 0xe2, 0x6a, 0x33, 0x38, 0x50, 0x08, 0x24, 0xc3, 0x67, 0xf2, 0xa6, 0xb1, 0x45, 0xdc,
+	0xc4, 0x46, 0xb9, 0x79, 0x8e, 0xe0, 0xea, 0xb0, 0x9a, 0x50, 0xe1, 0xca, 0xa0, 0x20, 0x5e, 0xe0,
+	0xfb, 0x3a, 0xf7, 0x3d, 0xd3, 0xaf, 0x88, 0x97, 0x0b, 0xe1, 0x2b, 0x04, 0xd7, 0x86, 0x16, 0xd2,
+	0x5b, 0x8c, 0x61, 0x0e, 0x12, 0xbc, 0x18, 0xa7, 0x40, 0x70, 0x1d, 0x2b, 0x98, 0xce, 0xd3, 0xca,
+	0x0f, 0x08, 0x04, 0xd6, 0x7d, 0xd6, 0x20, 0xe9, 0x1b, 0x5e, 0x64, 0xe6, 0x92, 0xfa, 0x25, 0x9d,
+	0x0a, 0x1a, 0x0f, 0x20, 0x11, 0xac, 0xfb, 0xd4, 0x33, 0x76, 0x29, 0xf5, 0xbc, 0x05, 0x22, 0xed,
+	0x87, 0xb5, 0x96, 0x63, 0x99, 0xf5, 0x67, 0xe7, 0x07, 0x30, 0x1a, 0xc9, 0x3e, 0x3b, 0x53, 0xbe,
+	0x84, 0x54, 0xb7, 0xc9, 0x0d, 0xe8, 0x3f, 0xfa, 0x97, 0xfa, 0xbf, 0xd1, 0x17, 0xe7, 0x25, 0x87,
+	0x0e, 0xe5, 0x3b, 0x04, 0x62, 0xb4, 0x5d, 0xbe, 0xd9, 0xe8, 0x12, 0x49, 0x6b, 0xec, 0x92, 0x69,
+	0x55, 0x40, 0x68, 0xb7, 0xcd, 0x46, 0x30, 0xae, 0x14, 0xa6, 0x5e, 0x9c, 0x2d, 0xa0, 0xce, 0xd9,
+	0x82, 0x50, 0xad, 0x6a, 0x25, 0xe5, 0x17, 0x04, 0xe9, 0x5e, 0x2b, 0xbe, 0x0f, 0x71, 0x6a, 0x3c,
+	0xac, 0x99, 0x9b, 0xe3, 0xbb, 0x37, 0xf3, 0xc9, 0x9b, 0xc3, 0x31, 0x08, 0x74, 0xf5, 0x56, 0x6e,
+	0xfe, 0xbf, 0x36, 0x04, 0x6e, 0xd0, 0x31, 0x3b, 0x50, 0x9a, 0x5b, 0x90, 0xe2, 0xe2, 0x34, 0xe4,
+	0xed, 0x71, 0x10, 0xcf, 0x98, 0x0c, 0xa9, 0xb0, 0x3d, 0xf7, 0x3f, 0xa3, 0xa5, 0xbf, 0x86, 0xce,
+	0x6a, 0xd3, 0x90, 0xee, 0xce, 0x6a, 0x12, 0xc2, 0x53, 0x90, 0xaa, 0xa8, 0x79, 0xbd, 0x44, 0x0f,
+	0x63, 0x74, 0xe0, 0xca, 0x17, 0x8b, 0xea, 0x7e, 0x45, 0x9a, 0xa4, 0xac, 0x92, 0x5a, 0xdc, 0xd6,
+	0x76, 0xe9, 0xf4, 0x35, 0x0f, 0xb3, 0xc1, 0x41, 0x6d, 0x60, 0x98, 0x9b, 0xc6, 0x0a, 0xcc, 0x71,
+	0xdc, 0xe0, 0x59, 0x86, 0xda, 0xd3, 0xd5, 0xc7, 0xda, 0x63, 0x3a, 0xb3, 0xa5, 0x40, 0xd8, 0xd2,
+	0xb6, 0xb7, 0xa5, 0x04, 0xf5, 0x59, 0x7e, 0x54, 0xad, 0x30, 0x9f, 0x49, 0x3c, 0x03, 0x62, 0xbe,
+	0x48, 0xa3, 0xdb, 0x56, 0x4b, 0x0f, 0x55, 0x29, 0x45, 0x23, 0xd4, 0xd5, 0xe2, 0xde, 0x6e, 0x51,
+	0xdb, 0x56, 0x83, 0x61, 0x31, 0x1c, 0xfc, 0x20, 0x98, 0x1c, 0x3f, 0xa9, 0xaa, 0xe5, 0x8a, 0x24,
+	0x32, 0x3b, 0xd5, 0xfd, 0x7d, 0x5d, 0x2d, 0x97, 0xa5, 0xa9, 0xc2, 0xbd, 0xdf, 0x5e, 0x65, 0x27,
+	0x5e, 0xbe, 0xca, 0xa2, 0xd7, 0xaf, 0xb2, 0xe8, 0x79, 0x27, 0x8b, 0x7e, 0xea, 0x64, 0xd1, 0x8b,
+	0x4e, 0x16, 0xfd, 0xda, 0xc9, 0xa2, 0x97, 0x9d, 0x2c, 0xfa, 0xa3, 0x93, 0x9d, 0x78, 0xdd, 0xc9,
+	0xa2, 0x6f, 0x7f, 0xcf, 0x4e, 0x3c, 0x49, 0x77, 0xab, 0xf1, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff,
+	0x37, 0xd5, 0x47, 0x6c, 0xb6, 0x10, 0x00, 0x00,
 }

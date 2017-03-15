@@ -42,9 +42,9 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 type QuotaInfo struct {
 	// Quota is granted per role and not per framework, similar to
 	// dynamic reservations.
-	Role string `protobuf:"bytes,1,opt,name=role" json:"role"`
+	Role *string `protobuf:"bytes,1,opt,name=role" json:"role,omitempty"`
 	// Principal which set the quota. Currently only operators can set quotas.
-	Principal string `protobuf:"bytes,2,opt,name=principal" json:"principal"`
+	Principal *string `protobuf:"bytes,2,opt,name=principal" json:"principal,omitempty"`
 	// The guarantee that these resources are allocatable for the above role.
 	// NOTE: `guarantee.role` should not specify any role except '*',
 	// because quota does not reserve specific resources.
@@ -56,15 +56,15 @@ func (*QuotaInfo) ProtoMessage()               {}
 func (*QuotaInfo) Descriptor() ([]byte, []int) { return fileDescriptorQuota, []int{0} }
 
 func (m *QuotaInfo) GetRole() string {
-	if m != nil {
-		return m.Role
+	if m != nil && m.Role != nil {
+		return *m.Role
 	}
 	return ""
 }
 
 func (m *QuotaInfo) GetPrincipal() string {
-	if m != nil {
-		return m.Principal
+	if m != nil && m.Principal != nil {
+		return *m.Principal
 	}
 	return ""
 }
@@ -82,7 +82,7 @@ type QuotaRequest struct {
 	// Disables the capacity heuristic check if set to `true`.
 	Force *bool `protobuf:"varint,1,opt,name=force,def=0" json:"force,omitempty"`
 	// The role for which to set quota.
-	Role string `protobuf:"bytes,2,opt,name=role" json:"role"`
+	Role *string `protobuf:"bytes,2,opt,name=role" json:"role,omitempty"`
 	// The requested guarantee that these resources will be allocatable for
 	// the above role.
 	Guarantee []mesos_v1.Resource `protobuf:"bytes,3,rep,name=guarantee" json:"guarantee"`
@@ -102,8 +102,8 @@ func (m *QuotaRequest) GetForce() bool {
 }
 
 func (m *QuotaRequest) GetRole() string {
-	if m != nil {
-		return m.Role
+	if m != nil && m.Role != nil {
+		return *m.Role
 	}
 	return ""
 }
@@ -139,6 +139,59 @@ func init() {
 	proto.RegisterType((*QuotaRequest)(nil), "mesos.v1.quota.QuotaRequest")
 	proto.RegisterType((*QuotaStatus)(nil), "mesos.v1.quota.QuotaStatus")
 }
+func (this *QuotaInfo) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*QuotaInfo)
+	if !ok {
+		that2, ok := that.(QuotaInfo)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *QuotaInfo")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *QuotaInfo but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *QuotaInfo but is not nil && this == nil")
+	}
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return fmt.Errorf("Role this(%v) Not Equal that(%v)", *this.Role, *that1.Role)
+		}
+	} else if this.Role != nil {
+		return fmt.Errorf("this.Role == nil && that.Role != nil")
+	} else if that1.Role != nil {
+		return fmt.Errorf("Role this(%v) Not Equal that(%v)", this.Role, that1.Role)
+	}
+	if this.Principal != nil && that1.Principal != nil {
+		if *this.Principal != *that1.Principal {
+			return fmt.Errorf("Principal this(%v) Not Equal that(%v)", *this.Principal, *that1.Principal)
+		}
+	} else if this.Principal != nil {
+		return fmt.Errorf("this.Principal == nil && that.Principal != nil")
+	} else if that1.Principal != nil {
+		return fmt.Errorf("Principal this(%v) Not Equal that(%v)", this.Principal, that1.Principal)
+	}
+	if len(this.Guarantee) != len(that1.Guarantee) {
+		return fmt.Errorf("Guarantee this(%v) Not Equal that(%v)", len(this.Guarantee), len(that1.Guarantee))
+	}
+	for i := range this.Guarantee {
+		if !this.Guarantee[i].Equal(&that1.Guarantee[i]) {
+			return fmt.Errorf("Guarantee this[%v](%v) Not Equal that[%v](%v)", i, this.Guarantee[i], i, that1.Guarantee[i])
+		}
+	}
+	return nil
+}
 func (this *QuotaInfo) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -164,10 +217,22 @@ func (this *QuotaInfo) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.Role != that1.Role {
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return false
+		}
+	} else if this.Role != nil {
+		return false
+	} else if that1.Role != nil {
 		return false
 	}
-	if this.Principal != that1.Principal {
+	if this.Principal != nil && that1.Principal != nil {
+		if *this.Principal != *that1.Principal {
+			return false
+		}
+	} else if this.Principal != nil {
+		return false
+	} else if that1.Principal != nil {
 		return false
 	}
 	if len(this.Guarantee) != len(that1.Guarantee) {
@@ -179,6 +244,59 @@ func (this *QuotaInfo) Equal(that interface{}) bool {
 		}
 	}
 	return true
+}
+func (this *QuotaRequest) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*QuotaRequest)
+	if !ok {
+		that2, ok := that.(QuotaRequest)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *QuotaRequest")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *QuotaRequest but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *QuotaRequest but is not nil && this == nil")
+	}
+	if this.Force != nil && that1.Force != nil {
+		if *this.Force != *that1.Force {
+			return fmt.Errorf("Force this(%v) Not Equal that(%v)", *this.Force, *that1.Force)
+		}
+	} else if this.Force != nil {
+		return fmt.Errorf("this.Force == nil && that.Force != nil")
+	} else if that1.Force != nil {
+		return fmt.Errorf("Force this(%v) Not Equal that(%v)", this.Force, that1.Force)
+	}
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return fmt.Errorf("Role this(%v) Not Equal that(%v)", *this.Role, *that1.Role)
+		}
+	} else if this.Role != nil {
+		return fmt.Errorf("this.Role == nil && that.Role != nil")
+	} else if that1.Role != nil {
+		return fmt.Errorf("Role this(%v) Not Equal that(%v)", this.Role, that1.Role)
+	}
+	if len(this.Guarantee) != len(that1.Guarantee) {
+		return fmt.Errorf("Guarantee this(%v) Not Equal that(%v)", len(this.Guarantee), len(that1.Guarantee))
+	}
+	for i := range this.Guarantee {
+		if !this.Guarantee[i].Equal(&that1.Guarantee[i]) {
+			return fmt.Errorf("Guarantee this[%v](%v) Not Equal that[%v](%v)", i, this.Guarantee[i], i, that1.Guarantee[i])
+		}
+	}
+	return nil
 }
 func (this *QuotaRequest) Equal(that interface{}) bool {
 	if that == nil {
@@ -214,7 +332,13 @@ func (this *QuotaRequest) Equal(that interface{}) bool {
 	} else if that1.Force != nil {
 		return false
 	}
-	if this.Role != that1.Role {
+	if this.Role != nil && that1.Role != nil {
+		if *this.Role != *that1.Role {
+			return false
+		}
+	} else if this.Role != nil {
+		return false
+	} else if that1.Role != nil {
 		return false
 	}
 	if len(this.Guarantee) != len(that1.Guarantee) {
@@ -226,6 +350,41 @@ func (this *QuotaRequest) Equal(that interface{}) bool {
 		}
 	}
 	return true
+}
+func (this *QuotaStatus) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*QuotaStatus)
+	if !ok {
+		that2, ok := that.(QuotaStatus)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *QuotaStatus")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *QuotaStatus but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *QuotaStatus but is not nil && this == nil")
+	}
+	if len(this.Infos) != len(that1.Infos) {
+		return fmt.Errorf("Infos this(%v) Not Equal that(%v)", len(this.Infos), len(that1.Infos))
+	}
+	for i := range this.Infos {
+		if !this.Infos[i].Equal(&that1.Infos[i]) {
+			return fmt.Errorf("Infos this[%v](%v) Not Equal that[%v](%v)", i, this.Infos[i], i, that1.Infos[i])
+		}
+	}
+	return nil
 }
 func (this *QuotaStatus) Equal(that interface{}) bool {
 	if that == nil {
@@ -268,8 +427,12 @@ func (this *QuotaInfo) GoString() string {
 	}
 	s := make([]string, 0, 7)
 	s = append(s, "&quota.QuotaInfo{")
-	s = append(s, "Role: "+fmt.Sprintf("%#v", this.Role)+",\n")
-	s = append(s, "Principal: "+fmt.Sprintf("%#v", this.Principal)+",\n")
+	if this.Role != nil {
+		s = append(s, "Role: "+valueToGoStringQuota(this.Role, "string")+",\n")
+	}
+	if this.Principal != nil {
+		s = append(s, "Principal: "+valueToGoStringQuota(this.Principal, "string")+",\n")
+	}
 	if this.Guarantee != nil {
 		s = append(s, "Guarantee: "+fmt.Sprintf("%#v", this.Guarantee)+",\n")
 	}
@@ -285,7 +448,9 @@ func (this *QuotaRequest) GoString() string {
 	if this.Force != nil {
 		s = append(s, "Force: "+valueToGoStringQuota(this.Force, "bool")+",\n")
 	}
-	s = append(s, "Role: "+fmt.Sprintf("%#v", this.Role)+",\n")
+	if this.Role != nil {
+		s = append(s, "Role: "+valueToGoStringQuota(this.Role, "string")+",\n")
+	}
 	if this.Guarantee != nil {
 		s = append(s, "Guarantee: "+fmt.Sprintf("%#v", this.Guarantee)+",\n")
 	}
@@ -327,14 +492,18 @@ func (m *QuotaInfo) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	dAtA[i] = 0xa
-	i++
-	i = encodeVarintQuota(dAtA, i, uint64(len(m.Role)))
-	i += copy(dAtA[i:], m.Role)
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintQuota(dAtA, i, uint64(len(m.Principal)))
-	i += copy(dAtA[i:], m.Principal)
+	if m.Role != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintQuota(dAtA, i, uint64(len(*m.Role)))
+		i += copy(dAtA[i:], *m.Role)
+	}
+	if m.Principal != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintQuota(dAtA, i, uint64(len(*m.Principal)))
+		i += copy(dAtA[i:], *m.Principal)
+	}
 	if len(m.Guarantee) > 0 {
 		for _, msg := range m.Guarantee {
 			dAtA[i] = 0x1a
@@ -375,10 +544,12 @@ func (m *QuotaRequest) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i++
 	}
-	dAtA[i] = 0x12
-	i++
-	i = encodeVarintQuota(dAtA, i, uint64(len(m.Role)))
-	i += copy(dAtA[i:], m.Role)
+	if m.Role != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintQuota(dAtA, i, uint64(len(*m.Role)))
+		i += copy(dAtA[i:], *m.Role)
+	}
 	if len(m.Guarantee) > 0 {
 		for _, msg := range m.Guarantee {
 			dAtA[i] = 0x1a
@@ -454,10 +625,14 @@ func encodeVarintQuota(dAtA []byte, offset int, v uint64) int {
 func (m *QuotaInfo) Size() (n int) {
 	var l int
 	_ = l
-	l = len(m.Role)
-	n += 1 + l + sovQuota(uint64(l))
-	l = len(m.Principal)
-	n += 1 + l + sovQuota(uint64(l))
+	if m.Role != nil {
+		l = len(*m.Role)
+		n += 1 + l + sovQuota(uint64(l))
+	}
+	if m.Principal != nil {
+		l = len(*m.Principal)
+		n += 1 + l + sovQuota(uint64(l))
+	}
 	if len(m.Guarantee) > 0 {
 		for _, e := range m.Guarantee {
 			l = e.Size()
@@ -473,8 +648,10 @@ func (m *QuotaRequest) Size() (n int) {
 	if m.Force != nil {
 		n += 2
 	}
-	l = len(m.Role)
-	n += 1 + l + sovQuota(uint64(l))
+	if m.Role != nil {
+		l = len(*m.Role)
+		n += 1 + l + sovQuota(uint64(l))
+	}
 	if len(m.Guarantee) > 0 {
 		for _, e := range m.Guarantee {
 			l = e.Size()
@@ -514,8 +691,8 @@ func (this *QuotaInfo) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&QuotaInfo{`,
-		`Role:` + fmt.Sprintf("%v", this.Role) + `,`,
-		`Principal:` + fmt.Sprintf("%v", this.Principal) + `,`,
+		`Role:` + valueToStringQuota(this.Role) + `,`,
+		`Principal:` + valueToStringQuota(this.Principal) + `,`,
 		`Guarantee:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Guarantee), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
@@ -527,7 +704,7 @@ func (this *QuotaRequest) String() string {
 	}
 	s := strings.Join([]string{`&QuotaRequest{`,
 		`Force:` + valueToStringQuota(this.Force) + `,`,
-		`Role:` + fmt.Sprintf("%v", this.Role) + `,`,
+		`Role:` + valueToStringQuota(this.Role) + `,`,
 		`Guarantee:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Guarantee), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
@@ -607,7 +784,8 @@ func (m *QuotaInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Role = string(dAtA[iNdEx:postIndex])
+			s := string(dAtA[iNdEx:postIndex])
+			m.Role = &s
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
@@ -636,7 +814,8 @@ func (m *QuotaInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Principal = string(dAtA[iNdEx:postIndex])
+			s := string(dAtA[iNdEx:postIndex])
+			m.Principal = &s
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -767,7 +946,8 @@ func (m *QuotaRequest) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Role = string(dAtA[iNdEx:postIndex])
+			s := string(dAtA[iNdEx:postIndex])
+			m.Role = &s
 			iNdEx = postIndex
 		case 3:
 			if wireType != 2 {
@@ -1011,24 +1191,24 @@ func init() { proto.RegisterFile("operator/quota/quota.proto", fileDescriptorQuo
 
 var fileDescriptorQuota = []byte{
 	// 312 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x9c, 0x90, 0xbd, 0x4e, 0xc3, 0x30,
-	0x14, 0x85, 0x63, 0xda, 0x48, 0xc4, 0x45, 0x0c, 0x11, 0x12, 0xa1, 0x83, 0xa9, 0x3a, 0x55, 0x42,
-	0x71, 0x54, 0xd8, 0x90, 0x58, 0xba, 0x31, 0x52, 0x36, 0x36, 0x37, 0xdc, 0xa4, 0x41, 0x69, 0x6e,
-	0xea, 0x1f, 0x66, 0x1e, 0x81, 0xc7, 0xe0, 0x51, 0x3a, 0x76, 0x64, 0x42, 0xd4, 0x2c, 0x8c, 0x7d,
-	0x04, 0x84, 0x2d, 0x55, 0x65, 0x65, 0xb1, 0x7c, 0xae, 0xcf, 0x39, 0x9f, 0x6d, 0xda, 0xc7, 0x16,
-	0xa4, 0xd0, 0x28, 0xb3, 0xa5, 0x41, 0x2d, 0xfc, 0xca, 0x5b, 0x89, 0x1a, 0xe3, 0xe3, 0x05, 0x28,
-	0x54, 0xfc, 0x79, 0xcc, 0xdd, 0xb4, 0x3f, 0x2e, 0x2b, 0x3d, 0x37, 0x33, 0x9e, 0xe3, 0x22, 0xc3,
-	0xe6, 0x51, 0xc2, 0x53, 0xaa, 0x16, 0x58, 0x8b, 0xcc, 0xf9, 0xd2, 0x12, 0xd3, 0xb9, 0xd6, 0xad,
-	0x57, 0xbe, 0xa2, 0x9f, 0xee, 0x45, 0x4a, 0x2c, 0x31, 0x73, 0xe3, 0x99, 0x29, 0x9c, 0x72, 0xc2,
-	0xed, 0xbc, 0x7d, 0x08, 0x34, 0xba, 0xfb, 0x45, 0xdd, 0x36, 0x05, 0xc6, 0x31, 0xed, 0x4a, 0xac,
-	0x21, 0x21, 0x03, 0x32, 0x8a, 0x26, 0xdd, 0xd5, 0xc7, 0x79, 0x10, 0x9f, 0xd2, 0xa8, 0x95, 0x55,
-	0x93, 0x57, 0xad, 0xa8, 0x93, 0x83, 0xbd, 0x83, 0x0b, 0x1a, 0x95, 0x46, 0x48, 0xd1, 0x68, 0x80,
-	0xa4, 0x33, 0xe8, 0x8c, 0x7a, 0x97, 0x31, 0xdf, 0xdd, 0x7f, 0x0a, 0x0a, 0x8d, 0xcc, 0xc1, 0x9b,
-	0x87, 0x40, 0x8f, 0x1c, 0x66, 0x0a, 0x4b, 0x03, 0x4a, 0xc7, 0x27, 0x34, 0x2c, 0x50, 0xe6, 0x1e,
-	0x75, 0x78, 0x1d, 0x16, 0xa2, 0x56, 0xb0, 0xe3, 0xff, 0x1b, 0x73, 0x43, 0x7b, 0x0e, 0x73, 0xaf,
-	0x85, 0x36, 0x2a, 0xe6, 0x34, 0xac, 0x9a, 0x02, 0x55, 0x42, 0x5c, 0xee, 0x8c, 0xff, 0xfd, 0x5e,
-	0xbe, 0x7b, 0xb9, 0x8f, 0x4f, 0xae, 0xd6, 0x1b, 0x46, 0xde, 0x37, 0x2c, 0xd8, 0x6e, 0x18, 0x79,
-	0xb1, 0x8c, 0xbc, 0x59, 0x46, 0x56, 0x96, 0x91, 0xb5, 0x65, 0xe4, 0xd3, 0x32, 0xf2, 0x6d, 0x19,
-	0xd9, 0x5a, 0x16, 0xbc, 0x7e, 0xb1, 0xe0, 0x21, 0x74, 0x25, 0x3f, 0x01, 0x00, 0x00, 0xff, 0xff,
-	0x63, 0x8e, 0x83, 0x44, 0xd0, 0x01, 0x00, 0x00,
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x90, 0xbd, 0x4e, 0xc3, 0x30,
+	0x14, 0x85, 0x63, 0xda, 0x48, 0xc4, 0xad, 0x90, 0xb0, 0x18, 0x42, 0x07, 0x53, 0x75, 0xaa, 0x84,
+	0xe2, 0xa8, 0xb0, 0x21, 0xb1, 0x74, 0x63, 0xa4, 0x4c, 0xb0, 0x20, 0x37, 0x38, 0x69, 0x50, 0x9a,
+	0x9b, 0xfa, 0x87, 0x99, 0x47, 0xe0, 0x31, 0x78, 0x94, 0x8e, 0x8c, 0x4c, 0xa8, 0x35, 0x0b, 0x63,
+	0x1f, 0x01, 0x61, 0x4b, 0x11, 0xac, 0x2c, 0x96, 0xcf, 0xd1, 0x3d, 0xe7, 0xb3, 0x2f, 0x1e, 0x40,
+	0x23, 0x24, 0xd7, 0x20, 0xd3, 0x95, 0x01, 0xcd, 0xfd, 0xc9, 0x1a, 0x09, 0x1a, 0xc8, 0xc1, 0x52,
+	0x28, 0x50, 0xec, 0x69, 0xc2, 0x9c, 0x3b, 0x98, 0x14, 0xa5, 0x5e, 0x98, 0x39, 0xcb, 0x60, 0x99,
+	0x42, 0xfd, 0x20, 0xc5, 0x63, 0xa2, 0x96, 0x50, 0xf1, 0xd4, 0xcd, 0x25, 0x05, 0x24, 0x0b, 0xad,
+	0x1b, 0xaf, 0x7c, 0xc5, 0x20, 0xf9, 0x15, 0x29, 0xa0, 0x80, 0xd4, 0xd9, 0x73, 0x93, 0x3b, 0xe5,
+	0x84, 0xbb, 0xf9, 0xf1, 0xd1, 0x2d, 0x8e, 0xae, 0x7f, 0x50, 0x57, 0x75, 0x0e, 0xa4, 0x8f, 0xbb,
+	0x12, 0x2a, 0x11, 0xa3, 0x21, 0x1a, 0x47, 0xe4, 0x10, 0x47, 0x8d, 0x2c, 0xeb, 0xac, 0x6c, 0x78,
+	0x15, 0xef, 0x39, 0xeb, 0x14, 0x47, 0x85, 0xe1, 0x92, 0xd7, 0x5a, 0x88, 0xb8, 0x33, 0xec, 0x8c,
+	0x7b, 0x67, 0x84, 0xb5, 0x6f, 0x9e, 0x09, 0x05, 0x46, 0x66, 0x62, 0xda, 0x5d, 0x7f, 0x9c, 0x04,
+	0xa3, 0x7b, 0xdc, 0x77, 0xd5, 0x33, 0xb1, 0x32, 0x42, 0x69, 0x72, 0x84, 0xc3, 0x1c, 0x64, 0xe6,
+	0xeb, 0xf7, 0x2f, 0xc2, 0x9c, 0x57, 0x4a, 0xb4, 0xcc, 0x7f, 0x00, 0x2e, 0x71, 0xcf, 0x01, 0x6e,
+	0x34, 0xd7, 0x46, 0x11, 0x86, 0xc3, 0xb2, 0xce, 0x41, 0xc5, 0xc8, 0xe5, 0x8e, 0xd9, 0xdf, 0x65,
+	0xb2, 0xf6, 0x9f, 0x3e, 0x3e, 0x3d, 0x7f, 0xdf, 0xd2, 0x60, 0xb3, 0xa5, 0x68, 0xb7, 0xa5, 0xe8,
+	0xd9, 0x52, 0xf4, 0x6a, 0x29, 0x5a, 0x5b, 0x8a, 0xde, 0x2c, 0x45, 0x1b, 0x4b, 0xd1, 0x97, 0xa5,
+	0xc1, 0xce, 0x52, 0xf4, 0xf2, 0x49, 0x83, 0xbb, 0xd0, 0x95, 0x7c, 0x07, 0x00, 0x00, 0xff, 0xff,
+	0xbc, 0x77, 0xa5, 0x5c, 0xbe, 0x01, 0x00, 0x00,
 }

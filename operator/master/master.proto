@@ -6,7 +6,7 @@
 // "License"); you may not use this file except in compliance
 // with the License.  You may obtain a copy of the License at
 //
-//   http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,9 +24,18 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "master";
 
-option (gogoproto.enum_stringer_all) = false;
-option (gogoproto.goproto_enum_prefix_all) = true;
-option (gogoproto.goproto_enum_stringer_all) = true;
+option (gogoproto.enum_stringer_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.goproto_enum_stringer_all) = false;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.gostring_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.verbose_equal_all) = true;
+
 
 
 /**
@@ -70,7 +79,7 @@ message Call {
 
     GET_MASTER = 17;        // Retrieves the master's information.
 
-    SUBSCRIBE = 18;          // Subscribes the master to receive events.
+    SUBSCRIBE = 18;         // Subscribes the master to receive events.
 
     RESERVE_RESOURCES = 19;
     UNRESERVE_RESOURCES = 20;
@@ -88,7 +97,7 @@ message Call {
 
     GET_QUOTA = 28;
     SET_QUOTA = 29;          // See 'SetQuota' below.
-    REMOVE_QUOTA = 30;
+    REMOVE_QUOTA = 30;       // See 'RemoveQuota' below.
   }
 
   // Provides a snapshot of the current metrics tracked by the master.
@@ -105,24 +114,24 @@ message Call {
   // level is set (by default it's 0, libprocess uses levels 1, 2, and 3).
   message SetLoggingLevel {
     // The verbosity level.
-    required uint32 level = 1;
+    required uint32 level = 1 [(gogoproto.nullable) = false];
     // The duration to keep verbosity level toggled. After this duration, the
     // verbosity level of log would revert to the original level.
-    required DurationInfo duration = 2;
+    required DurationInfo duration = 2 [(gogoproto.nullable) = false];
   }
 
   // Provides the file listing for a directory.
   message ListFiles {
-    required string path = 1;
+    required string path = 1 [(gogoproto.nullable) = false];
   }
 
   // Reads data from a file.
   message ReadFile {
     // The path of file.
-    required string path = 1;
+    required string path = 1 [(gogoproto.nullable) = false];
 
     // Initial offset in file to start reading from.
-    required uint64 offset = 2;
+    required uint64 offset = 2 [(gogoproto.nullable) = false];
 
     // The maximum number of bytes to read. The read length is capped at 16
     // memory pages.
@@ -130,7 +139,7 @@ message Call {
   }
 
   message UpdateWeights {
-    repeated WeightInfo weight_infos = 1;
+    repeated WeightInfo weight_infos = 1 [(gogoproto.nullable) = false];
   }
 
   // Reserve resources dynamically on a specific agent.
@@ -183,29 +192,29 @@ message Call {
 
   // Sets the quota for resources to be used by a particular role.
   message SetQuota {
-    required quota.QuotaRequest quota_request = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "QuotaRequest"];
+    required quota.QuotaRequest quota_request = 1 [(gogoproto.nullable) = false];
   }
 
   message RemoveQuota {
-    required string role = 1;
+    required string role = 1 [(gogoproto.nullable) = false];
   }
 
   optional Type type = 1 [(gogoproto.nullable) = false];
 
-  optional GetMetrics get_metrics = 2 [(gogoproto.customname) = "GetMetrics"];
-  optional SetLoggingLevel set_logging_level = 3 [(gogoproto.customname) = "SetLoggingLevel"];
-  optional ListFiles list_files = 4 [(gogoproto.customname) = "ListFiles"];
-  optional ReadFile read_file = 5 [(gogoproto.customname) = "ReadFile"];
-  optional UpdateWeights update_weights = 6 [(gogoproto.customname) = "UpdateWeights"];
-  optional ReserveResources reserve_resources = 7 [(gogoproto.customname) = "ReserveResources"];
-  optional UnreserveResources unreserve_resources = 8 [(gogoproto.customname) = "UnreserverResources"];
-  optional CreateVolumes create_volumes = 9 [(gogoproto.customname) = "CreateVolumes"];
-  optional DestroyVolumes destroy_volumes = 10 [(gogoproto.customname) = "DestroyVolumes"];
-  optional UpdateMaintenanceSchedule update_maintenance_schedule = 11 [(gogoproto.customname) = "UpdateMaintenanceSchedule"];
-  optional StartMaintenance start_maintenance = 12 [(gogoproto.customname) = "StartMaintenance"];
-  optional StopMaintenance stop_maintenance = 13 [(gogoproto.customname) = "StopMaintenance"];
-  optional SetQuota set_quota = 14 [(gogoproto.customname) = "SetQuota"];
-  optional RemoveQuota remove_quota = 15 [(gogoproto.customname) = "RemoveQuota"];
+  optional GetMetrics get_metrics = 2;
+  optional SetLoggingLevel set_logging_level = 3;
+  optional ListFiles list_files = 4;
+  optional ReadFile read_file = 5;
+  optional UpdateWeights update_weights = 6;
+  optional ReserveResources reserve_resources = 7;
+  optional UnreserveResources unreserve_resources = 8;
+  optional CreateVolumes create_volumes = 9;
+  optional DestroyVolumes destroy_volumes = 10;
+  optional UpdateMaintenanceSchedule update_maintenance_schedule = 11;
+  optional StartMaintenance start_maintenance = 12;
+  optional StopMaintenance stop_maintenance  = 13;
+  optional SetQuota set_quota = 14;
+  optional RemoveQuota remove_quota = 15;
 }
 
 
@@ -259,7 +268,7 @@ message Response {
 
   // Contains the version information of the master.
   message GetVersion {
-    required VersionInfo version_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "VersionInfo"];
+    required VersionInfo version_info = 1 [(gogoproto.nullable) = false];
   }
 
   // Contains a snapshot of the current metrics.
@@ -274,7 +283,7 @@ message Response {
 
   // Contains the file listing(similar to `ls -l`) for a directory.
   message ListFiles {
-    repeated FileInfo file_infos = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "FileInfos"];
+    repeated FileInfo file_infos = 1 [(gogoproto.nullable) = false];
   }
 
   // Contains the file data.
@@ -288,32 +297,35 @@ message Response {
   // Contains full state of the master i.e. information about the tasks,
   // agents, frameworks and executors running in the cluster.
   message GetState {
-    optional GetTasks get_tasks = 1 [(gogoproto.customname) = "GetTasks"];
-    optional GetExecutors get_executors = 2 [(gogoproto.customname) = "GetExecutors"];
-    optional GetFrameworks get_frameworks = 3 [(gogoproto.customname) = "GetFrameworks"];
-    optional GetAgents get_agents = 4 [(gogoproto.customname) = "GetAgents"];
+    optional GetTasks get_tasks = 1;
+    optional GetExecutors get_executors = 2;
+    optional GetFrameworks get_frameworks = 3;
+    optional GetAgents get_agents = 4;
   }
 
   message GetAgents {
     message Agent {
-      required AgentInfo agent_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "AgentInfo"];
+      required AgentInfo agent_info = 1 [(gogoproto.nullable) = false];
       required bool active = 2 [(gogoproto.nullable) = false];
       required string version = 3 [(gogoproto.nullable) = false];
 
-      optional string pid = 4;
-      optional TimeInfo registered_time = 5 [(gogoproto.customname) = "RegisteredTime"];
-      optional TimeInfo reregistered_time = 6 [(gogoproto.customname) = "ReregisteredTime"];
+      optional string pid = 4 [(gogoproto.customname) = "PID"];
+      optional TimeInfo registered_time = 5;
+      optional TimeInfo reregistered_time = 6;
 
       // Total resources (including oversubscribed resources) the agent
       // provides.
-      repeated Resource total_resources = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "TotalResources"];
+      repeated Resource total_resources = 7 [(gogoproto.nullable) = false];
 
-      repeated Resource allocated_resources = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "AllocatedResources"];
-      repeated Resource offered_resources = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "OfferedResources"];
+      repeated Resource allocated_resources = 8 [(gogoproto.nullable) = false];
+      repeated Resource offered_resources = 9 [(gogoproto.nullable) = false];
     }
 
     // Registered agents.
     repeated Agent agents = 1 [(gogoproto.nullable) = false];
+
+    // Agents which are recovered from registry but not reregistered yet.
+    repeated AgentInfo recovered_agents = 2 [(gogoproto.nullable) = false];
   }
 
   // Information about all the frameworks known to the master at the current
@@ -321,19 +333,27 @@ message Response {
   // on partitioned or unsubscribed agents.
   message GetFrameworks {
     message Framework {
-      required FrameworkInfo framework_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "FrameworkInfo"];
+      required FrameworkInfo framework_info = 1 [(gogoproto.nullable) = false];
       required bool active = 2 [(gogoproto.nullable) = false];
       required bool connected = 3 [(gogoproto.nullable) = false];
 
-      optional TimeInfo registered_time = 4 [(gogoproto.customname) = "RegisteredTime"];
-      optional TimeInfo reregistered_time = 5 [(gogoproto.customname) = "ReregisteredTime"];
-      optional TimeInfo unregistered_time = 6 [(gogoproto.customname) = "UnregisteredTime"];
+
+      // If true, this framework was previously subscribed but hasn't
+      // yet re-subscribed after a master failover. Recovered frameworks
+      // are only reported if one or more agents running a task or
+      // executor for the framework have re-registered after master
+      // failover.
+      required bool recovered = 11 [(gogoproto.nullable) = false];
+
+      optional TimeInfo registered_time = 4;
+      optional TimeInfo reregistered_time = 5;
+      optional TimeInfo unregistered_time = 6;
 
       repeated Offer offers = 7 [(gogoproto.nullable) = false];
-      repeated InverseOffer inverse_offers = 8 [(gogoproto.nullable) = false, (gogoproto.customname) = "InverseOffers"];
+      repeated InverseOffer inverse_offers = 8 [(gogoproto.nullable) = false];
 
-      repeated Resource allocated_resources = 9 [(gogoproto.nullable) = false, (gogoproto.customname) = "AllocatedResources"];
-      repeated Resource offered_resources = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "OfferedResources"];
+      repeated Resource allocated_resources = 9 [(gogoproto.nullable) = false];
+      repeated Resource offered_resources = 10 [(gogoproto.nullable) = false];
     }
 
     // Frameworks that have subscribed with the master. Note that this includes
@@ -341,11 +361,17 @@ message Response {
     repeated Framework frameworks = 1 [(gogoproto.nullable) = false];
 
     // Frameworks that have been teared down.
-    repeated Framework completed_frameworks = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "CompletedFrameworks"];
+    repeated Framework completed_frameworks = 2 [(gogoproto.nullable) = false];
 
-    // Frameworks that have previously subscribed but haven't yet subscribed
-    // after a master failover.
-    repeated FrameworkInfo recovered_frameworks = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "RecoveredFrameworks"];
+    // This field previously contained frameworks that previously
+    // subscribed but haven't yet re-subscribed after a master failover.
+    // As of Mesos 1.2, this field will always be empty; recovered
+    // frameworks are now reported in the `frameworks` list with the
+    // `recovered` field set to true.
+    //
+    // TODO(neilc): Remove this field after a deprecation cycle starting
+    // in Mesos 1.2.
+    repeated FrameworkInfo recovered_frameworks = 3 [(gogoproto.nullable) = false];
   }
 
   // Lists information about all the executors known to the master at the
@@ -353,33 +379,50 @@ message Response {
   // running on partitioned or unsubscribed agents.
   message GetExecutors {
     message Executor {
-      required ExecutorInfo executor_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "ExecutorInfo"];
-      required AgentID agent_id = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "AgentID"];
+      required ExecutorInfo executor_info = 1 [(gogoproto.nullable) = false];
+      required AgentID agent_id = 2 [(gogoproto.nullable) = false];
     }
 
     repeated Executor executors = 1 [(gogoproto.nullable) = false];
-    repeated Executor orphan_executors = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "OrphanExecutors"];
+
+    // As of Mesos 1.2, this field will always be empty.
+    //
+    // TODO(neilc): Remove this field after a deprecation cycle starting
+    // in Mesos 1.2.
+    repeated Executor orphan_executors = 2 [(gogoproto.nullable) = false];
   }
 
   // Lists information about all the tasks known to the master at the current
   // time. Note that there might be tasks unknown to the master running on
   // partitioned or unsubscribed agents.
   message GetTasks {
-    // Tasks that are an enqueued on the master waiting (e.g., authorizing)
+    // Tasks that are enqueued on the master waiting (e.g., authorizing)
     // to be launched.
-    repeated Task pending_tasks = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "PendingTasks"];
+    repeated Task pending_tasks = 1 [(gogoproto.nullable) = false];
 
-    // Tasks that have been forwarded to the agent for launch. This includes
-    // tasks that are running and reached terminal state.
+    // Tasks that have been forwarded to the agent for launch. This
+    // includes tasks that are staging or running; it also includes
+    // tasks that have reached a terminal state but the terminal status
+    // update has not yet been acknowledged by the scheduler.
     repeated Task tasks = 2 [(gogoproto.nullable) = false];
+
+    // Tasks that were running on agents that have become partitioned
+    // from the master. If/when the agent is no longer partitioned,
+    // tasks running on that agent will no longer be unreachable (they
+    // will either be running or completed). Note that the master only
+    // stores a limited number of unreachable tasks; information about
+    // unreachable tasks is also not preserved across master failover.
+    repeated Task unreachable_tasks = 5 [(gogoproto.nullable) = false];
 
     // Tasks that have reached terminal state and have all their updates
     // acknowledged by the scheduler.
-    repeated Task completed_tasks = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "CompletedTasks"];
+    repeated Task completed_tasks = 3 [(gogoproto.nullable) = false];
 
-    // Tasks belonging to frameworks that have not yet re-subscribed with
-    // master (e.g., immediately after master failover).
-    repeated Task orphan_tasks = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "OrphanTasks"];
+    // As of Mesos 1.2, this field will always be empty.
+    //
+    // TODO(neilc): Remove this field after a deprecation cycle starting
+    // in Mesos 1.2.
+    repeated Task orphan_tasks = 4;
   }
 
   // Provides information about every role that is on the role whitelist (if
@@ -391,12 +434,12 @@ message Response {
 
   // Provides the weight information about every role.
   message GetWeights {
-    repeated WeightInfo weight_infos = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "WeightInfos"];
+    repeated WeightInfo weight_infos = 1 [(gogoproto.nullable) = false];
   }
 
   // Contains the master's information.
   message GetMaster {
-    optional MasterInfo master_info = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "MasterInfo"];
+    optional MasterInfo master_info = 1 [(gogoproto.nullable) = false];
   }
 
   // Contains the cluster's maintenance status.
@@ -416,24 +459,24 @@ message Response {
 
   optional Type type = 1 [(gogoproto.nullable) = false];
 
-  optional GetHealth get_health = 2 [(gogoproto.customname) = "GetHealth"];
-  optional GetFlags get_flags = 3 [(gogoproto.customname) = "GetFlags"];
-  optional GetVersion get_version = 4 [(gogoproto.customname) = "GetVersion"];
-  optional GetMetrics get_metrics = 5 [(gogoproto.customname) = "GetMetrics"];
-  optional GetLoggingLevel get_logging_level = 6 [(gogoproto.customname) = "GetLoggingLevel"];
-  optional ListFiles list_files = 7 [(gogoproto.customname) = "ListFiles"];
-  optional ReadFile read_file = 8 [(gogoproto.customname) = "ReadFile"];
-  optional GetState get_state = 9 [(gogoproto.customname) = "GetState"];
-  optional GetAgents get_agents = 10 [(gogoproto.customname) = "GetAgents"];
-  optional GetFrameworks get_frameworks = 11 [(gogoproto.customname) = "GetFrameworks"];
-  optional GetExecutors get_executors = 12 [(gogoproto.customname) = "GetExecutors"];
-  optional GetTasks get_tasks = 13 [(gogoproto.customname) = "GetTasks"];
-  optional GetRoles get_roles = 14 [(gogoproto.customname) = "GetRoles"];
-  optional GetWeights get_weights = 15 [(gogoproto.customname) = "GetWeights"];
-  optional GetMaster get_master = 16 [(gogoproto.customname) = "GetMaster"];
-  optional GetMaintenanceStatus get_maintenance_status = 17 [(gogoproto.customname) = "GetMaintenanceStatus"];
-  optional GetMaintenanceSchedule get_maintenance_schedule = 18 [(gogoproto.customname) = "GetMaintenanceSchedule"];
-  optional GetQuota get_quota = 19 [(gogoproto.customname) = "GetQuota"];
+  optional GetHealth get_health = 2;
+  optional GetFlags get_flags = 3;
+  optional GetVersion get_version = 4;
+  optional GetMetrics get_metrics = 5;
+  optional GetLoggingLevel get_logging_level = 6;
+  optional ListFiles list_files = 7;
+  optional ReadFile read_file = 8;
+  optional GetState get_state = 9;
+  optional GetAgents get_agents = 10;
+  optional GetFrameworks get_frameworks = 11;
+  optional GetExecutors get_executors = 12;
+  optional GetTasks get_tasks = 13;
+  optional GetRoles get_roles = 14;
+  optional GetWeights get_weights = 15;
+  optional GetMaster get_master = 16;
+  optional GetMaintenanceStatus get_maintenance_status = 17;
+  optional GetMaintenanceSchedule get_maintenance_schedule = 18;
+  optional GetQuota get_quota = 19;
 }
 
 
@@ -456,7 +499,7 @@ message Event {
   message Subscribed {
     // Snapshot of the entire cluster state. Further updates to the
     // cluster state are sent as separate events on the stream.
-    optional Response.GetState get_state = 1 [(gogoproto.customname) = "GetState"];
+    optional Response.GetState get_state = 1;
   }
 
   // Forwarded by the master when a task becomes known to it. This can happen
@@ -501,8 +544,8 @@ message Event {
   optional Type type = 1 [(gogoproto.nullable) = false];
 
   optional Subscribed subscribed = 2;
-  optional TaskAdded task_added = 3 [(gogoproto.customname) = "TaskAdded"];
-  optional TaskUpdated task_updated = 4 [(gogoproto.customname) = "TaskUpdated"];
-  optional AgentAdded agent_added = 5 [(gogoproto.customname) = "AgentAdded"];
-  optional AgentRemoved agent_removed = 6 [(gogoproto.customname) = "AgentRemoved"];
+  optional TaskAdded task_added = 3;
+  optional TaskUpdated task_updated = 4;
+  optional AgentAdded agent_added = 5;
+  optional AgentRemoved agent_removed = 6;
 }

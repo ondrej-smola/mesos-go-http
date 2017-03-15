@@ -35,7 +35,7 @@ fmt:
 
 .PHONY: install-dependencies
 install-dependencies:
-	go get github.com/gogo/protobuf/protoc-gen-gogoslick
+	go get github.com/gogo/protobuf/protoc-gen-gogo
 
 .PHONY: install-test-dependencies
 install-test-dependencies:
@@ -44,13 +44,14 @@ install-test-dependencies:
 
 .PHONY: proto
 proto:
-	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) mesos.proto --gogoslick_out=.
-	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) scheduler/scheduler.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
-	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/agent/agent.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
-	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/master/master.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
-	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/allocator/allocator.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
-	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/maintenance/maintenance.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
-	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/quota/quota.proto --gogoslick_out=$(MESOS_PROTO_MAPPING):.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) mesos.proto --gogo_out=.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) scheduler/scheduler.proto --gogo_out=$(MESOS_PROTO_MAPPING):.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) executor/executor.proto --gogo_out=$(MESOS_PROTO_MAPPING):.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/agent/agent.proto --gogo_out=$(MESOS_PROTO_MAPPING):.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/master/master.proto --gogo_out=$(MESOS_PROTO_MAPPING):.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/allocator/allocator.proto --gogo_out=$(MESOS_PROTO_MAPPING):.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/maintenance/maintenance.proto --gogo_out=$(MESOS_PROTO_MAPPING):.
+	@$(PROTOC_2_BIN) $(PROTOC_INCLUDE) operator/quota/quota.proto --gogo_out=$(MESOS_PROTO_MAPPING):.
 
 .PHONY: binaries
 binaries:
@@ -61,6 +62,7 @@ binaries:
 proto-clean:
 	$(RM) mesos.pb.go
 	$(RM) scheduler$(PATHSEP)scheduler.pb.go
+	$(RM) executor$(PATHSEP)executor.pb.go
 	$(RM) operator$(PATHSEP)agent$(PATHSEP)agent.pb.go
 	$(RM) operator$(PATHSEP)allocator$(PATHSEP)allocator.pb.go
 	$(RM) operator$(PATHSEP)maintenance$(PATHSEP)maintenance.pb.go

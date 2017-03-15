@@ -19,6 +19,8 @@ func TestAck(t *testing.T) {
 
 var _ = Describe("FrameworkId stage", func() {
 
+	ptoFloat := func(f float64) *float64 { return &f }
+
 	It("Set deadling from subscribed event", func(done Done) {
 		fwId := New(WithMaxMissedHeartbeats(1))
 		sink := flow.NewTestFlow()
@@ -27,9 +29,10 @@ var _ = Describe("FrameworkId stage", func() {
 		go func() {
 			defer GinkgoRecover()
 			id := "5"
+
 			pull := sink.ExpectPull()
 			s := scheduler.TestSubscribed(id)
-			s.Subscribed.HeartbeatIntervalSeconds = 0.01 // 10 millis
+			s.Subscribed.HeartbeatIntervalSeconds = ptoFloat(0.01) // 10 millis
 			pull.Message(s)
 
 			// this pull times out
@@ -58,7 +61,7 @@ var _ = Describe("FrameworkId stage", func() {
 	})
 
 	It("Set deadling from configuration", func(done Done) {
-		fwId := New(WithMaxMissedHeartbeats(3), WithHeartbeatDeadline(10*time.Millisecond))
+		fwId := New(WithMaxMissedHeartbeats(3))
 		sink := flow.NewTestFlow()
 		fwId.Via(sink)
 
@@ -67,14 +70,14 @@ var _ = Describe("FrameworkId stage", func() {
 			id := "5"
 			pull := sink.ExpectPull()
 			s := scheduler.TestSubscribed(id)
-			s.Subscribed.HeartbeatIntervalSeconds = 0.005 // 5 millis - should be IGNORED
+			s.Subscribed.HeartbeatIntervalSeconds = ptoFloat(0.005) // 5 millis - should be IGNORED
 			pull.Message(s)
 
 			// this pull times out
 			pull = sink.ExpectPull()
 			start := time.Now()
 			<-pull.Ctx.Done()
-			Expect(time.Now().Sub(start)).To(BeNumerically(">=", 40*time.Millisecond, 10*time.Millisecond))
+			Expect(time.Now().Sub(start)).To(BeNumerically(">=", 20*time.Millisecond, 10*time.Millisecond))
 			pull.Error(pull.Ctx.Err())
 
 			// this pull does not

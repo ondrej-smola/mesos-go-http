@@ -22,9 +22,17 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "quota";
 
-option (gogoproto.enum_stringer_all) = false;
-option (gogoproto.goproto_enum_prefix_all) = true;
-option (gogoproto.goproto_enum_stringer_all) = true;
+option (gogoproto.enum_stringer_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.goproto_enum_stringer_all) = false;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.gostring_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.verbose_equal_all) = true;
 
 
 /**
@@ -52,7 +60,6 @@ message QuotaInfo {
   repeated Resource guarantee = 3 [(gogoproto.nullable) = false];
 }
 
-
 /**
  * `QuotaRequest` provides a schema for set quota JSON requests.
  */
@@ -67,7 +74,6 @@ message QuotaRequest {
   // the above role.
   repeated Resource guarantee = 3 [(gogoproto.nullable) = false];
 }
-
 
 /**
  * `QuotaStatus` describes the internal representation for the /quota/status
