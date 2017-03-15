@@ -123,7 +123,7 @@ func (a *Client) ReserveResources(req *Call_ReserveResources, ctx context.Contex
 }
 
 func (a *Client) UnreserveResources(req *Call_UnreserveResources, ctx context.Context) error {
-	return a.callNoResponse(&Call{Type: Call_UNRESERVE_RESOURCES, UnreserverResources: req}, ctx)
+	return a.callNoResponse(&Call{Type: Call_UNRESERVE_RESOURCES, UnreserveResources: req}, ctx)
 }
 
 func (a *Client) CreateVolumes(req *Call_CreateVolumes, ctx context.Context) error {

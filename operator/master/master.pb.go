@@ -23,6 +23,8 @@ import mesos_v1_quota "github.com/ondrej-smola/mesos-go-http/operator/quota"
 import mesos_v1_maintenance "github.com/ondrej-smola/mesos-go-http/operator/maintenance"
 import _ "github.com/gogo/protobuf/gogoproto"
 
+import strconv "strconv"
+
 import bytes "bytes"
 
 import strings "strings"
@@ -159,8 +161,8 @@ func (x Call_Type) Enum() *Call_Type {
 	*p = x
 	return p
 }
-func (x Call_Type) String() string {
-	return proto.EnumName(Call_Type_name, int32(x))
+func (x Call_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Call_Type_name, int32(x))
 }
 func (x *Call_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Call_Type_value, data, "Call_Type")
@@ -245,8 +247,8 @@ func (x Response_Type) Enum() *Response_Type {
 	*p = x
 	return p
 }
-func (x Response_Type) String() string {
-	return proto.EnumName(Response_Type_name, int32(x))
+func (x Response_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Response_Type_name, int32(x))
 }
 func (x *Response_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Response_Type_value, data, "Response_Type")
@@ -291,8 +293,8 @@ func (x Event_Type) Enum() *Event_Type {
 	*p = x
 	return p
 }
-func (x Event_Type) String() string {
-	return proto.EnumName(Event_Type_name, int32(x))
+func (x Event_Type) MarshalJSON() ([]byte, error) {
+	return proto.MarshalJSONEnum(Event_Type_name, int32(x))
 }
 func (x *Event_Type) UnmarshalJSON(data []byte) error {
 	value, err := proto.UnmarshalJSONEnum(Event_Type_value, data, "Event_Type")
@@ -318,7 +320,7 @@ type Call struct {
 	ReadFile                  *Call_ReadFile                  `protobuf:"bytes,5,opt,name=read_file" json:"read_file,omitempty"`
 	UpdateWeights             *Call_UpdateWeights             `protobuf:"bytes,6,opt,name=update_weights" json:"update_weights,omitempty"`
 	ReserveResources          *Call_ReserveResources          `protobuf:"bytes,7,opt,name=reserve_resources" json:"reserve_resources,omitempty"`
-	UnreserverResources       *Call_UnreserveResources        `protobuf:"bytes,8,opt,name=unreserve_resources" json:"unreserve_resources,omitempty"`
+	UnreserveResources        *Call_UnreserveResources        `protobuf:"bytes,8,opt,name=unreserve_resources" json:"unreserve_resources,omitempty"`
 	CreateVolumes             *Call_CreateVolumes             `protobuf:"bytes,9,opt,name=create_volumes" json:"create_volumes,omitempty"`
 	DestroyVolumes            *Call_DestroyVolumes            `protobuf:"bytes,10,opt,name=destroy_volumes" json:"destroy_volumes,omitempty"`
 	UpdateMaintenanceSchedule *Call_UpdateMaintenanceSchedule `protobuf:"bytes,11,opt,name=update_maintenance_schedule" json:"update_maintenance_schedule,omitempty"`
@@ -381,9 +383,9 @@ func (m *Call) GetReserveResources() *Call_ReserveResources {
 	return nil
 }
 
-func (m *Call) GetUnreserverResources() *Call_UnreserveResources {
+func (m *Call) GetUnreserveResources() *Call_UnreserveResources {
 	if m != nil {
-		return m.UnreserverResources
+		return m.UnreserveResources
 	}
 	return nil
 }
@@ -465,7 +467,7 @@ type Call_SetLoggingLevel struct {
 	Level uint32 `protobuf:"varint,1,req,name=level" json:"level"`
 	// The duration to keep verbosity level toggled. After this duration, the
 	// verbosity level of log would revert to the original level.
-	Duration *mesos_v1.DurationInfo `protobuf:"bytes,2,req,name=duration" json:"duration,omitempty"`
+	Duration mesos_v1.DurationInfo `protobuf:"bytes,2,req,name=duration" json:"duration"`
 }
 
 func (m *Call_SetLoggingLevel) Reset()                    { *m = Call_SetLoggingLevel{} }
@@ -479,11 +481,11 @@ func (m *Call_SetLoggingLevel) GetLevel() uint32 {
 	return 0
 }
 
-func (m *Call_SetLoggingLevel) GetDuration() *mesos_v1.DurationInfo {
+func (m *Call_SetLoggingLevel) GetDuration() mesos_v1.DurationInfo {
 	if m != nil {
 		return m.Duration
 	}
-	return nil
+	return mesos_v1.DurationInfo{}
 }
 
 // Provides the file listing for a directory.
@@ -510,7 +512,7 @@ type Call_ReadFile struct {
 	Offset uint64 `protobuf:"varint,2,req,name=offset" json:"offset"`
 	// The maximum number of bytes to read. The read length is capped at 16
 	// memory pages.
-	Length uint64 `protobuf:"varint,3,opt,name=length" json:"length"`
+	Length *uint64 `protobuf:"varint,3,opt,name=length" json:"length,omitempty"`
 }
 
 func (m *Call_ReadFile) Reset()                    { *m = Call_ReadFile{} }
@@ -532,21 +534,21 @@ func (m *Call_ReadFile) GetOffset() uint64 {
 }
 
 func (m *Call_ReadFile) GetLength() uint64 {
-	if m != nil {
-		return m.Length
+	if m != nil && m.Length != nil {
+		return *m.Length
 	}
 	return 0
 }
 
 type Call_UpdateWeights struct {
-	WeightInfos []*mesos_v1.WeightInfo `protobuf:"bytes,1,rep,name=weight_infos" json:"weight_infos,omitempty"`
+	WeightInfos []mesos_v1.WeightInfo `protobuf:"bytes,1,rep,name=weight_infos" json:"weight_infos"`
 }
 
 func (m *Call_UpdateWeights) Reset()                    { *m = Call_UpdateWeights{} }
 func (*Call_UpdateWeights) ProtoMessage()               {}
 func (*Call_UpdateWeights) Descriptor() ([]byte, []int) { return fileDescriptorMaster, []int{0, 4} }
 
-func (m *Call_UpdateWeights) GetWeightInfos() []*mesos_v1.WeightInfo {
+func (m *Call_UpdateWeights) GetWeightInfos() []mesos_v1.WeightInfo {
 	if m != nil {
 		return m.WeightInfos
 	}
@@ -1069,6 +1071,8 @@ func (m *Response_GetState) GetGetAgents() *Response_GetAgents {
 type Response_GetAgents struct {
 	// Registered agents.
 	Agents []Response_GetAgents_Agent `protobuf:"bytes,1,rep,name=agents" json:"agents"`
+	// Agents which are recovered from registry but not reregistered yet.
+	RecoveredAgents []mesos_v1.AgentInfo `protobuf:"bytes,2,rep,name=recovered_agents" json:"recovered_agents"`
 }
 
 func (m *Response_GetAgents) Reset()                    { *m = Response_GetAgents{} }
@@ -1082,11 +1086,18 @@ func (m *Response_GetAgents) GetAgents() []Response_GetAgents_Agent {
 	return nil
 }
 
+func (m *Response_GetAgents) GetRecoveredAgents() []mesos_v1.AgentInfo {
+	if m != nil {
+		return m.RecoveredAgents
+	}
+	return nil
+}
+
 type Response_GetAgents_Agent struct {
 	AgentInfo        mesos_v1.AgentInfo `protobuf:"bytes,1,req,name=agent_info" json:"agent_info"`
 	Active           bool               `protobuf:"varint,2,req,name=active" json:"active"`
 	Version          string             `protobuf:"bytes,3,req,name=version" json:"version"`
-	Pid              string             `protobuf:"bytes,4,opt,name=pid" json:"pid"`
+	PID              *string            `protobuf:"bytes,4,opt,name=pid" json:"pid,omitempty"`
 	RegisteredTime   *mesos_v1.TimeInfo `protobuf:"bytes,5,opt,name=registered_time" json:"registered_time,omitempty"`
 	ReregisteredTime *mesos_v1.TimeInfo `protobuf:"bytes,6,opt,name=reregistered_time" json:"reregistered_time,omitempty"`
 	// Total resources (including oversubscribed resources) the agent
@@ -1123,9 +1134,9 @@ func (m *Response_GetAgents_Agent) GetVersion() string {
 	return ""
 }
 
-func (m *Response_GetAgents_Agent) GetPid() string {
-	if m != nil {
-		return m.Pid
+func (m *Response_GetAgents_Agent) GetPID() string {
+	if m != nil && m.PID != nil {
+		return *m.PID
 	}
 	return ""
 }
@@ -1174,8 +1185,14 @@ type Response_GetFrameworks struct {
 	Frameworks []Response_GetFrameworks_Framework `protobuf:"bytes,1,rep,name=frameworks" json:"frameworks"`
 	// Frameworks that have been teared down.
 	CompletedFrameworks []Response_GetFrameworks_Framework `protobuf:"bytes,2,rep,name=completed_frameworks" json:"completed_frameworks"`
-	// Frameworks that have previously subscribed but haven't yet subscribed
-	// after a master failover.
+	// This field previously contained frameworks that previously
+	// subscribed but haven't yet re-subscribed after a master failover.
+	// As of Mesos 1.2, this field will always be empty; recovered
+	// frameworks are now reported in the `frameworks` list with the
+	// `recovered` field set to true.
+	//
+	// TODO(neilc): Remove this field after a deprecation cycle starting
+	// in Mesos 1.2.
 	RecoveredFrameworks []mesos_v1.FrameworkInfo `protobuf:"bytes,3,rep,name=recovered_frameworks" json:"recovered_frameworks"`
 }
 
@@ -1205,9 +1222,15 @@ func (m *Response_GetFrameworks) GetRecoveredFrameworks() []mesos_v1.FrameworkIn
 }
 
 type Response_GetFrameworks_Framework struct {
-	FrameworkInfo      mesos_v1.FrameworkInfo  `protobuf:"bytes,1,req,name=framework_info" json:"framework_info"`
-	Active             bool                    `protobuf:"varint,2,req,name=active" json:"active"`
-	Connected          bool                    `protobuf:"varint,3,req,name=connected" json:"connected"`
+	FrameworkInfo mesos_v1.FrameworkInfo `protobuf:"bytes,1,req,name=framework_info" json:"framework_info"`
+	Active        bool                   `protobuf:"varint,2,req,name=active" json:"active"`
+	Connected     bool                   `protobuf:"varint,3,req,name=connected" json:"connected"`
+	// If true, this framework was previously subscribed but hasn't
+	// yet re-subscribed after a master failover. Recovered frameworks
+	// are only reported if one or more agents running a task or
+	// executor for the framework have re-registered after master
+	// failover.
+	Recovered          bool                    `protobuf:"varint,11,req,name=recovered" json:"recovered"`
 	RegisteredTime     *mesos_v1.TimeInfo      `protobuf:"bytes,4,opt,name=registered_time" json:"registered_time,omitempty"`
 	ReregisteredTime   *mesos_v1.TimeInfo      `protobuf:"bytes,5,opt,name=reregistered_time" json:"reregistered_time,omitempty"`
 	UnregisteredTime   *mesos_v1.TimeInfo      `protobuf:"bytes,6,opt,name=unregistered_time" json:"unregistered_time,omitempty"`
@@ -1240,6 +1263,13 @@ func (m *Response_GetFrameworks_Framework) GetActive() bool {
 func (m *Response_GetFrameworks_Framework) GetConnected() bool {
 	if m != nil {
 		return m.Connected
+	}
+	return false
+}
+
+func (m *Response_GetFrameworks_Framework) GetRecovered() bool {
+	if m != nil {
+		return m.Recovered
 	}
 	return false
 }
@@ -1297,7 +1327,11 @@ func (m *Response_GetFrameworks_Framework) GetOfferedResources() []mesos_v1.Reso
 // current time. Note that there might be executors unknown to the master
 // running on partitioned or unsubscribed agents.
 type Response_GetExecutors struct {
-	Executors       []Response_GetExecutors_Executor `protobuf:"bytes,1,rep,name=executors" json:"executors"`
+	Executors []Response_GetExecutors_Executor `protobuf:"bytes,1,rep,name=executors" json:"executors"`
+	// As of Mesos 1.2, this field will always be empty.
+	//
+	// TODO(neilc): Remove this field after a deprecation cycle starting
+	// in Mesos 1.2.
 	OrphanExecutors []Response_GetExecutors_Executor `protobuf:"bytes,2,rep,name=orphan_executors" json:"orphan_executors"`
 }
 
@@ -1321,7 +1355,7 @@ func (m *Response_GetExecutors) GetOrphanExecutors() []Response_GetExecutors_Exe
 
 type Response_GetExecutors_Executor struct {
 	ExecutorInfo mesos_v1.ExecutorInfo `protobuf:"bytes,1,req,name=executor_info" json:"executor_info"`
-	AgentID      mesos_v1.AgentID      `protobuf:"bytes,2,req,name=agent_id" json:"agent_id"`
+	AgentId      mesos_v1.AgentID      `protobuf:"bytes,2,req,name=agent_id" json:"agent_id"`
 }
 
 func (m *Response_GetExecutors_Executor) Reset()      { *m = Response_GetExecutors_Executor{} }
@@ -1337,9 +1371,9 @@ func (m *Response_GetExecutors_Executor) GetExecutorInfo() mesos_v1.ExecutorInfo
 	return mesos_v1.ExecutorInfo{}
 }
 
-func (m *Response_GetExecutors_Executor) GetAgentID() mesos_v1.AgentID {
+func (m *Response_GetExecutors_Executor) GetAgentId() mesos_v1.AgentID {
 	if m != nil {
-		return m.AgentID
+		return m.AgentId
 	}
 	return mesos_v1.AgentID{}
 }
@@ -1348,18 +1382,29 @@ func (m *Response_GetExecutors_Executor) GetAgentID() mesos_v1.AgentID {
 // time. Note that there might be tasks unknown to the master running on
 // partitioned or unsubscribed agents.
 type Response_GetTasks struct {
-	// Tasks that are an enqueued on the master waiting (e.g., authorizing)
+	// Tasks that are enqueued on the master waiting (e.g., authorizing)
 	// to be launched.
 	PendingTasks []mesos_v1.Task `protobuf:"bytes,1,rep,name=pending_tasks" json:"pending_tasks"`
-	// Tasks that have been forwarded to the agent for launch. This includes
-	// tasks that are running and reached terminal state.
+	// Tasks that have been forwarded to the agent for launch. This
+	// includes tasks that are staging or running; it also includes
+	// tasks that have reached a terminal state but the terminal status
+	// update has not yet been acknowledged by the scheduler.
 	Tasks []mesos_v1.Task `protobuf:"bytes,2,rep,name=tasks" json:"tasks"`
+	// Tasks that were running on agents that have become partitioned
+	// from the master. If/when the agent is no longer partitioned,
+	// tasks running on that agent will no longer be unreachable (they
+	// will either be running or completed). Note that the master only
+	// stores a limited number of unreachable tasks; information about
+	// unreachable tasks is also not preserved across master failover.
+	UnreachableTasks []mesos_v1.Task `protobuf:"bytes,5,rep,name=unreachable_tasks" json:"unreachable_tasks"`
 	// Tasks that have reached terminal state and have all their updates
 	// acknowledged by the scheduler.
 	CompletedTasks []mesos_v1.Task `protobuf:"bytes,3,rep,name=completed_tasks" json:"completed_tasks"`
-	// Tasks belonging to frameworks that have not yet re-subscribed with
-	// master (e.g., immediately after master failover).
-	OrphanTasks []mesos_v1.Task `protobuf:"bytes,4,rep,name=orphan_tasks" json:"orphan_tasks"`
+	// As of Mesos 1.2, this field will always be empty.
+	//
+	// TODO(neilc): Remove this field after a deprecation cycle starting
+	// in Mesos 1.2.
+	OrphanTasks []*mesos_v1.Task `protobuf:"bytes,4,rep,name=orphan_tasks" json:"orphan_tasks,omitempty"`
 }
 
 func (m *Response_GetTasks) Reset()                    { *m = Response_GetTasks{} }
@@ -1380,6 +1425,13 @@ func (m *Response_GetTasks) GetTasks() []mesos_v1.Task {
 	return nil
 }
 
+func (m *Response_GetTasks) GetUnreachableTasks() []mesos_v1.Task {
+	if m != nil {
+		return m.UnreachableTasks
+	}
+	return nil
+}
+
 func (m *Response_GetTasks) GetCompletedTasks() []mesos_v1.Task {
 	if m != nil {
 		return m.CompletedTasks
@@ -1387,7 +1439,7 @@ func (m *Response_GetTasks) GetCompletedTasks() []mesos_v1.Task {
 	return nil
 }
 
-func (m *Response_GetTasks) GetOrphanTasks() []mesos_v1.Task {
+func (m *Response_GetTasks) GetOrphanTasks() []*mesos_v1.Task {
 	if m != nil {
 		return m.OrphanTasks
 	}
@@ -1714,6 +1766,99 @@ func init() {
 	proto.RegisterEnum("mesos.v1.master.Response_Type", Response_Type_name, Response_Type_value)
 	proto.RegisterEnum("mesos.v1.master.Event_Type", Event_Type_name, Event_Type_value)
 }
+func (x Call_Type) String() string {
+	s, ok := Call_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x Response_Type) String() string {
+	s, ok := Response_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (x Event_Type) String() string {
+	s, ok := Event_Type_name[int32(x)]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(x))
+}
+func (this *Call) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call)
+	if !ok {
+		that2, ok := that.(Call)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.GetMetrics.Equal(that1.GetMetrics) {
+		return fmt.Errorf("GetMetrics this(%v) Not Equal that(%v)", this.GetMetrics, that1.GetMetrics)
+	}
+	if !this.SetLoggingLevel.Equal(that1.SetLoggingLevel) {
+		return fmt.Errorf("SetLoggingLevel this(%v) Not Equal that(%v)", this.SetLoggingLevel, that1.SetLoggingLevel)
+	}
+	if !this.ListFiles.Equal(that1.ListFiles) {
+		return fmt.Errorf("ListFiles this(%v) Not Equal that(%v)", this.ListFiles, that1.ListFiles)
+	}
+	if !this.ReadFile.Equal(that1.ReadFile) {
+		return fmt.Errorf("ReadFile this(%v) Not Equal that(%v)", this.ReadFile, that1.ReadFile)
+	}
+	if !this.UpdateWeights.Equal(that1.UpdateWeights) {
+		return fmt.Errorf("UpdateWeights this(%v) Not Equal that(%v)", this.UpdateWeights, that1.UpdateWeights)
+	}
+	if !this.ReserveResources.Equal(that1.ReserveResources) {
+		return fmt.Errorf("ReserveResources this(%v) Not Equal that(%v)", this.ReserveResources, that1.ReserveResources)
+	}
+	if !this.UnreserveResources.Equal(that1.UnreserveResources) {
+		return fmt.Errorf("UnreserveResources this(%v) Not Equal that(%v)", this.UnreserveResources, that1.UnreserveResources)
+	}
+	if !this.CreateVolumes.Equal(that1.CreateVolumes) {
+		return fmt.Errorf("CreateVolumes this(%v) Not Equal that(%v)", this.CreateVolumes, that1.CreateVolumes)
+	}
+	if !this.DestroyVolumes.Equal(that1.DestroyVolumes) {
+		return fmt.Errorf("DestroyVolumes this(%v) Not Equal that(%v)", this.DestroyVolumes, that1.DestroyVolumes)
+	}
+	if !this.UpdateMaintenanceSchedule.Equal(that1.UpdateMaintenanceSchedule) {
+		return fmt.Errorf("UpdateMaintenanceSchedule this(%v) Not Equal that(%v)", this.UpdateMaintenanceSchedule, that1.UpdateMaintenanceSchedule)
+	}
+	if !this.StartMaintenance.Equal(that1.StartMaintenance) {
+		return fmt.Errorf("StartMaintenance this(%v) Not Equal that(%v)", this.StartMaintenance, that1.StartMaintenance)
+	}
+	if !this.StopMaintenance.Equal(that1.StopMaintenance) {
+		return fmt.Errorf("StopMaintenance this(%v) Not Equal that(%v)", this.StopMaintenance, that1.StopMaintenance)
+	}
+	if !this.SetQuota.Equal(that1.SetQuota) {
+		return fmt.Errorf("SetQuota this(%v) Not Equal that(%v)", this.SetQuota, that1.SetQuota)
+	}
+	if !this.RemoveQuota.Equal(that1.RemoveQuota) {
+		return fmt.Errorf("RemoveQuota this(%v) Not Equal that(%v)", this.RemoveQuota, that1.RemoveQuota)
+	}
+	return nil
+}
 func (this *Call) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1760,7 +1905,7 @@ func (this *Call) Equal(that interface{}) bool {
 	if !this.ReserveResources.Equal(that1.ReserveResources) {
 		return false
 	}
-	if !this.UnreserverResources.Equal(that1.UnreserverResources) {
+	if !this.UnreserveResources.Equal(that1.UnreserveResources) {
 		return false
 	}
 	if !this.CreateVolumes.Equal(that1.CreateVolumes) {
@@ -1785,6 +1930,36 @@ func (this *Call) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_GetMetrics) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_GetMetrics)
+	if !ok {
+		that2, ok := that.(Call_GetMetrics)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_GetMetrics")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_GetMetrics but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_GetMetrics but is not nil && this == nil")
+	}
+	if !this.Timeout.Equal(that1.Timeout) {
+		return fmt.Errorf("Timeout this(%v) Not Equal that(%v)", this.Timeout, that1.Timeout)
+	}
+	return nil
 }
 func (this *Call_GetMetrics) Equal(that interface{}) bool {
 	if that == nil {
@@ -1816,6 +1991,39 @@ func (this *Call_GetMetrics) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_SetLoggingLevel) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_SetLoggingLevel)
+	if !ok {
+		that2, ok := that.(Call_SetLoggingLevel)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_SetLoggingLevel")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_SetLoggingLevel but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_SetLoggingLevel but is not nil && this == nil")
+	}
+	if this.Level != that1.Level {
+		return fmt.Errorf("Level this(%v) Not Equal that(%v)", this.Level, that1.Level)
+	}
+	if !this.Duration.Equal(&that1.Duration) {
+		return fmt.Errorf("Duration this(%v) Not Equal that(%v)", this.Duration, that1.Duration)
+	}
+	return nil
+}
 func (this *Call_SetLoggingLevel) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -1844,10 +2052,40 @@ func (this *Call_SetLoggingLevel) Equal(that interface{}) bool {
 	if this.Level != that1.Level {
 		return false
 	}
-	if !this.Duration.Equal(that1.Duration) {
+	if !this.Duration.Equal(&that1.Duration) {
 		return false
 	}
 	return true
+}
+func (this *Call_ListFiles) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_ListFiles)
+	if !ok {
+		that2, ok := that.(Call_ListFiles)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_ListFiles")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_ListFiles but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_ListFiles but is not nil && this == nil")
+	}
+	if this.Path != that1.Path {
+		return fmt.Errorf("Path this(%v) Not Equal that(%v)", this.Path, that1.Path)
+	}
+	return nil
 }
 func (this *Call_ListFiles) Equal(that interface{}) bool {
 	if that == nil {
@@ -1878,6 +2116,48 @@ func (this *Call_ListFiles) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_ReadFile) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_ReadFile)
+	if !ok {
+		that2, ok := that.(Call_ReadFile)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_ReadFile")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_ReadFile but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_ReadFile but is not nil && this == nil")
+	}
+	if this.Path != that1.Path {
+		return fmt.Errorf("Path this(%v) Not Equal that(%v)", this.Path, that1.Path)
+	}
+	if this.Offset != that1.Offset {
+		return fmt.Errorf("Offset this(%v) Not Equal that(%v)", this.Offset, that1.Offset)
+	}
+	if this.Length != nil && that1.Length != nil {
+		if *this.Length != *that1.Length {
+			return fmt.Errorf("Length this(%v) Not Equal that(%v)", *this.Length, *that1.Length)
+		}
+	} else if this.Length != nil {
+		return fmt.Errorf("this.Length == nil && that.Length != nil")
+	} else if that1.Length != nil {
+		return fmt.Errorf("Length this(%v) Not Equal that(%v)", this.Length, that1.Length)
+	}
+	return nil
 }
 func (this *Call_ReadFile) Equal(that interface{}) bool {
 	if that == nil {
@@ -1910,10 +2190,51 @@ func (this *Call_ReadFile) Equal(that interface{}) bool {
 	if this.Offset != that1.Offset {
 		return false
 	}
-	if this.Length != that1.Length {
+	if this.Length != nil && that1.Length != nil {
+		if *this.Length != *that1.Length {
+			return false
+		}
+	} else if this.Length != nil {
+		return false
+	} else if that1.Length != nil {
 		return false
 	}
 	return true
+}
+func (this *Call_UpdateWeights) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_UpdateWeights)
+	if !ok {
+		that2, ok := that.(Call_UpdateWeights)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_UpdateWeights")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_UpdateWeights but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_UpdateWeights but is not nil && this == nil")
+	}
+	if len(this.WeightInfos) != len(that1.WeightInfos) {
+		return fmt.Errorf("WeightInfos this(%v) Not Equal that(%v)", len(this.WeightInfos), len(that1.WeightInfos))
+	}
+	for i := range this.WeightInfos {
+		if !this.WeightInfos[i].Equal(&that1.WeightInfos[i]) {
+			return fmt.Errorf("WeightInfos this[%v](%v) Not Equal that[%v](%v)", i, this.WeightInfos[i], i, that1.WeightInfos[i])
+		}
+	}
+	return nil
 }
 func (this *Call_UpdateWeights) Equal(that interface{}) bool {
 	if that == nil {
@@ -1944,11 +2265,49 @@ func (this *Call_UpdateWeights) Equal(that interface{}) bool {
 		return false
 	}
 	for i := range this.WeightInfos {
-		if !this.WeightInfos[i].Equal(that1.WeightInfos[i]) {
+		if !this.WeightInfos[i].Equal(&that1.WeightInfos[i]) {
 			return false
 		}
 	}
 	return true
+}
+func (this *Call_ReserveResources) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_ReserveResources)
+	if !ok {
+		that2, ok := that.(Call_ReserveResources)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_ReserveResources")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_ReserveResources but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_ReserveResources but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if len(this.Resources) != len(that1.Resources) {
+		return fmt.Errorf("Resources this(%v) Not Equal that(%v)", len(this.Resources), len(that1.Resources))
+	}
+	for i := range this.Resources {
+		if !this.Resources[i].Equal(&that1.Resources[i]) {
+			return fmt.Errorf("Resources this[%v](%v) Not Equal that[%v](%v)", i, this.Resources[i], i, that1.Resources[i])
+		}
+	}
+	return nil
 }
 func (this *Call_ReserveResources) Equal(that interface{}) bool {
 	if that == nil {
@@ -1988,6 +2347,44 @@ func (this *Call_ReserveResources) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_UnreserveResources) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_UnreserveResources)
+	if !ok {
+		that2, ok := that.(Call_UnreserveResources)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_UnreserveResources")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_UnreserveResources but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_UnreserveResources but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if len(this.Resources) != len(that1.Resources) {
+		return fmt.Errorf("Resources this(%v) Not Equal that(%v)", len(this.Resources), len(that1.Resources))
+	}
+	for i := range this.Resources {
+		if !this.Resources[i].Equal(&that1.Resources[i]) {
+			return fmt.Errorf("Resources this[%v](%v) Not Equal that[%v](%v)", i, this.Resources[i], i, that1.Resources[i])
+		}
+	}
+	return nil
+}
 func (this *Call_UnreserveResources) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2025,6 +2422,44 @@ func (this *Call_UnreserveResources) Equal(that interface{}) bool {
 		}
 	}
 	return true
+}
+func (this *Call_CreateVolumes) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_CreateVolumes)
+	if !ok {
+		that2, ok := that.(Call_CreateVolumes)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_CreateVolumes")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_CreateVolumes but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_CreateVolumes but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if len(this.Volumes) != len(that1.Volumes) {
+		return fmt.Errorf("Volumes this(%v) Not Equal that(%v)", len(this.Volumes), len(that1.Volumes))
+	}
+	for i := range this.Volumes {
+		if !this.Volumes[i].Equal(&that1.Volumes[i]) {
+			return fmt.Errorf("Volumes this[%v](%v) Not Equal that[%v](%v)", i, this.Volumes[i], i, that1.Volumes[i])
+		}
+	}
+	return nil
 }
 func (this *Call_CreateVolumes) Equal(that interface{}) bool {
 	if that == nil {
@@ -2064,6 +2499,44 @@ func (this *Call_CreateVolumes) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_DestroyVolumes) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_DestroyVolumes)
+	if !ok {
+		that2, ok := that.(Call_DestroyVolumes)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_DestroyVolumes")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_DestroyVolumes but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_DestroyVolumes but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	if len(this.Volumes) != len(that1.Volumes) {
+		return fmt.Errorf("Volumes this(%v) Not Equal that(%v)", len(this.Volumes), len(that1.Volumes))
+	}
+	for i := range this.Volumes {
+		if !this.Volumes[i].Equal(&that1.Volumes[i]) {
+			return fmt.Errorf("Volumes this[%v](%v) Not Equal that[%v](%v)", i, this.Volumes[i], i, that1.Volumes[i])
+		}
+	}
+	return nil
+}
 func (this *Call_DestroyVolumes) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2102,6 +2575,36 @@ func (this *Call_DestroyVolumes) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_UpdateMaintenanceSchedule) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_UpdateMaintenanceSchedule)
+	if !ok {
+		that2, ok := that.(Call_UpdateMaintenanceSchedule)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_UpdateMaintenanceSchedule")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_UpdateMaintenanceSchedule but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_UpdateMaintenanceSchedule but is not nil && this == nil")
+	}
+	if !this.Schedule.Equal(&that1.Schedule) {
+		return fmt.Errorf("Schedule this(%v) Not Equal that(%v)", this.Schedule, that1.Schedule)
+	}
+	return nil
+}
 func (this *Call_UpdateMaintenanceSchedule) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2131,6 +2634,41 @@ func (this *Call_UpdateMaintenanceSchedule) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Call_StartMaintenance) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_StartMaintenance)
+	if !ok {
+		that2, ok := that.(Call_StartMaintenance)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_StartMaintenance")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_StartMaintenance but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_StartMaintenance but is not nil && this == nil")
+	}
+	if len(this.Machines) != len(that1.Machines) {
+		return fmt.Errorf("Machines this(%v) Not Equal that(%v)", len(this.Machines), len(that1.Machines))
+	}
+	for i := range this.Machines {
+		if !this.Machines[i].Equal(&that1.Machines[i]) {
+			return fmt.Errorf("Machines this[%v](%v) Not Equal that[%v](%v)", i, this.Machines[i], i, that1.Machines[i])
+		}
+	}
+	return nil
 }
 func (this *Call_StartMaintenance) Equal(that interface{}) bool {
 	if that == nil {
@@ -2167,6 +2705,41 @@ func (this *Call_StartMaintenance) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_StopMaintenance) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_StopMaintenance)
+	if !ok {
+		that2, ok := that.(Call_StopMaintenance)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_StopMaintenance")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_StopMaintenance but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_StopMaintenance but is not nil && this == nil")
+	}
+	if len(this.Machines) != len(that1.Machines) {
+		return fmt.Errorf("Machines this(%v) Not Equal that(%v)", len(this.Machines), len(that1.Machines))
+	}
+	for i := range this.Machines {
+		if !this.Machines[i].Equal(&that1.Machines[i]) {
+			return fmt.Errorf("Machines this[%v](%v) Not Equal that[%v](%v)", i, this.Machines[i], i, that1.Machines[i])
+		}
+	}
+	return nil
+}
 func (this *Call_StopMaintenance) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2202,6 +2775,36 @@ func (this *Call_StopMaintenance) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_SetQuota) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_SetQuota)
+	if !ok {
+		that2, ok := that.(Call_SetQuota)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_SetQuota")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_SetQuota but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_SetQuota but is not nil && this == nil")
+	}
+	if !this.QuotaRequest.Equal(&that1.QuotaRequest) {
+		return fmt.Errorf("QuotaRequest this(%v) Not Equal that(%v)", this.QuotaRequest, that1.QuotaRequest)
+	}
+	return nil
+}
 func (this *Call_SetQuota) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2232,6 +2835,36 @@ func (this *Call_SetQuota) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Call_RemoveQuota) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Call_RemoveQuota)
+	if !ok {
+		that2, ok := that.(Call_RemoveQuota)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Call_RemoveQuota")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Call_RemoveQuota but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Call_RemoveQuota but is not nil && this == nil")
+	}
+	if this.Role != that1.Role {
+		return fmt.Errorf("Role this(%v) Not Equal that(%v)", this.Role, that1.Role)
+	}
+	return nil
+}
 func (this *Call_RemoveQuota) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2261,6 +2894,90 @@ func (this *Call_RemoveQuota) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response)
+	if !ok {
+		that2, ok := that.(Response)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.GetHealth.Equal(that1.GetHealth) {
+		return fmt.Errorf("GetHealth this(%v) Not Equal that(%v)", this.GetHealth, that1.GetHealth)
+	}
+	if !this.GetFlags.Equal(that1.GetFlags) {
+		return fmt.Errorf("GetFlags this(%v) Not Equal that(%v)", this.GetFlags, that1.GetFlags)
+	}
+	if !this.GetVersion.Equal(that1.GetVersion) {
+		return fmt.Errorf("GetVersion this(%v) Not Equal that(%v)", this.GetVersion, that1.GetVersion)
+	}
+	if !this.GetMetrics.Equal(that1.GetMetrics) {
+		return fmt.Errorf("GetMetrics this(%v) Not Equal that(%v)", this.GetMetrics, that1.GetMetrics)
+	}
+	if !this.GetLoggingLevel.Equal(that1.GetLoggingLevel) {
+		return fmt.Errorf("GetLoggingLevel this(%v) Not Equal that(%v)", this.GetLoggingLevel, that1.GetLoggingLevel)
+	}
+	if !this.ListFiles.Equal(that1.ListFiles) {
+		return fmt.Errorf("ListFiles this(%v) Not Equal that(%v)", this.ListFiles, that1.ListFiles)
+	}
+	if !this.ReadFile.Equal(that1.ReadFile) {
+		return fmt.Errorf("ReadFile this(%v) Not Equal that(%v)", this.ReadFile, that1.ReadFile)
+	}
+	if !this.GetState.Equal(that1.GetState) {
+		return fmt.Errorf("GetState this(%v) Not Equal that(%v)", this.GetState, that1.GetState)
+	}
+	if !this.GetAgents.Equal(that1.GetAgents) {
+		return fmt.Errorf("GetAgents this(%v) Not Equal that(%v)", this.GetAgents, that1.GetAgents)
+	}
+	if !this.GetFrameworks.Equal(that1.GetFrameworks) {
+		return fmt.Errorf("GetFrameworks this(%v) Not Equal that(%v)", this.GetFrameworks, that1.GetFrameworks)
+	}
+	if !this.GetExecutors.Equal(that1.GetExecutors) {
+		return fmt.Errorf("GetExecutors this(%v) Not Equal that(%v)", this.GetExecutors, that1.GetExecutors)
+	}
+	if !this.GetTasks.Equal(that1.GetTasks) {
+		return fmt.Errorf("GetTasks this(%v) Not Equal that(%v)", this.GetTasks, that1.GetTasks)
+	}
+	if !this.GetRoles.Equal(that1.GetRoles) {
+		return fmt.Errorf("GetRoles this(%v) Not Equal that(%v)", this.GetRoles, that1.GetRoles)
+	}
+	if !this.GetWeights.Equal(that1.GetWeights) {
+		return fmt.Errorf("GetWeights this(%v) Not Equal that(%v)", this.GetWeights, that1.GetWeights)
+	}
+	if !this.GetMaster.Equal(that1.GetMaster) {
+		return fmt.Errorf("GetMaster this(%v) Not Equal that(%v)", this.GetMaster, that1.GetMaster)
+	}
+	if !this.GetMaintenanceStatus.Equal(that1.GetMaintenanceStatus) {
+		return fmt.Errorf("GetMaintenanceStatus this(%v) Not Equal that(%v)", this.GetMaintenanceStatus, that1.GetMaintenanceStatus)
+	}
+	if !this.GetMaintenanceSchedule.Equal(that1.GetMaintenanceSchedule) {
+		return fmt.Errorf("GetMaintenanceSchedule this(%v) Not Equal that(%v)", this.GetMaintenanceSchedule, that1.GetMaintenanceSchedule)
+	}
+	if !this.GetQuota.Equal(that1.GetQuota) {
+		return fmt.Errorf("GetQuota this(%v) Not Equal that(%v)", this.GetQuota, that1.GetQuota)
+	}
+	return nil
 }
 func (this *Response) Equal(that interface{}) bool {
 	if that == nil {
@@ -2346,6 +3063,36 @@ func (this *Response) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetHealth) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetHealth)
+	if !ok {
+		that2, ok := that.(Response_GetHealth)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetHealth")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetHealth but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetHealth but is not nil && this == nil")
+	}
+	if this.Healthy != that1.Healthy {
+		return fmt.Errorf("Healthy this(%v) Not Equal that(%v)", this.Healthy, that1.Healthy)
+	}
+	return nil
+}
 func (this *Response_GetHealth) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2375,6 +3122,41 @@ func (this *Response_GetHealth) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetFlags) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetFlags)
+	if !ok {
+		that2, ok := that.(Response_GetFlags)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetFlags")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetFlags but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetFlags but is not nil && this == nil")
+	}
+	if len(this.Flags) != len(that1.Flags) {
+		return fmt.Errorf("Flags this(%v) Not Equal that(%v)", len(this.Flags), len(that1.Flags))
+	}
+	for i := range this.Flags {
+		if !this.Flags[i].Equal(&that1.Flags[i]) {
+			return fmt.Errorf("Flags this[%v](%v) Not Equal that[%v](%v)", i, this.Flags[i], i, that1.Flags[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetFlags) Equal(that interface{}) bool {
 	if that == nil {
@@ -2411,6 +3193,36 @@ func (this *Response_GetFlags) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetVersion) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetVersion)
+	if !ok {
+		that2, ok := that.(Response_GetVersion)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetVersion")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetVersion but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetVersion but is not nil && this == nil")
+	}
+	if !this.VersionInfo.Equal(&that1.VersionInfo) {
+		return fmt.Errorf("VersionInfo this(%v) Not Equal that(%v)", this.VersionInfo, that1.VersionInfo)
+	}
+	return nil
+}
 func (this *Response_GetVersion) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2440,6 +3252,41 @@ func (this *Response_GetVersion) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetMetrics) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetMetrics)
+	if !ok {
+		that2, ok := that.(Response_GetMetrics)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetMetrics")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetMetrics but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetMetrics but is not nil && this == nil")
+	}
+	if len(this.Metrics) != len(that1.Metrics) {
+		return fmt.Errorf("Metrics this(%v) Not Equal that(%v)", len(this.Metrics), len(that1.Metrics))
+	}
+	for i := range this.Metrics {
+		if !this.Metrics[i].Equal(&that1.Metrics[i]) {
+			return fmt.Errorf("Metrics this[%v](%v) Not Equal that[%v](%v)", i, this.Metrics[i], i, that1.Metrics[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetMetrics) Equal(that interface{}) bool {
 	if that == nil {
@@ -2476,6 +3323,36 @@ func (this *Response_GetMetrics) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetLoggingLevel) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetLoggingLevel)
+	if !ok {
+		that2, ok := that.(Response_GetLoggingLevel)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetLoggingLevel")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetLoggingLevel but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetLoggingLevel but is not nil && this == nil")
+	}
+	if this.Level != that1.Level {
+		return fmt.Errorf("Level this(%v) Not Equal that(%v)", this.Level, that1.Level)
+	}
+	return nil
+}
 func (this *Response_GetLoggingLevel) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2505,6 +3382,41 @@ func (this *Response_GetLoggingLevel) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_ListFiles) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_ListFiles)
+	if !ok {
+		that2, ok := that.(Response_ListFiles)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_ListFiles")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_ListFiles but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_ListFiles but is not nil && this == nil")
+	}
+	if len(this.FileInfos) != len(that1.FileInfos) {
+		return fmt.Errorf("FileInfos this(%v) Not Equal that(%v)", len(this.FileInfos), len(that1.FileInfos))
+	}
+	for i := range this.FileInfos {
+		if !this.FileInfos[i].Equal(&that1.FileInfos[i]) {
+			return fmt.Errorf("FileInfos this[%v](%v) Not Equal that[%v](%v)", i, this.FileInfos[i], i, that1.FileInfos[i])
+		}
+	}
+	return nil
 }
 func (this *Response_ListFiles) Equal(that interface{}) bool {
 	if that == nil {
@@ -2541,6 +3453,39 @@ func (this *Response_ListFiles) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_ReadFile) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_ReadFile)
+	if !ok {
+		that2, ok := that.(Response_ReadFile)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_ReadFile")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_ReadFile but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_ReadFile but is not nil && this == nil")
+	}
+	if this.Size_ != that1.Size_ {
+		return fmt.Errorf("Size_ this(%v) Not Equal that(%v)", this.Size_, that1.Size_)
+	}
+	if !bytes.Equal(this.Data, that1.Data) {
+		return fmt.Errorf("Data this(%v) Not Equal that(%v)", this.Data, that1.Data)
+	}
+	return nil
+}
 func (this *Response_ReadFile) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2573,6 +3518,45 @@ func (this *Response_ReadFile) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetState) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetState)
+	if !ok {
+		that2, ok := that.(Response_GetState)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetState")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetState but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetState but is not nil && this == nil")
+	}
+	if !this.GetTasks.Equal(that1.GetTasks) {
+		return fmt.Errorf("GetTasks this(%v) Not Equal that(%v)", this.GetTasks, that1.GetTasks)
+	}
+	if !this.GetExecutors.Equal(that1.GetExecutors) {
+		return fmt.Errorf("GetExecutors this(%v) Not Equal that(%v)", this.GetExecutors, that1.GetExecutors)
+	}
+	if !this.GetFrameworks.Equal(that1.GetFrameworks) {
+		return fmt.Errorf("GetFrameworks this(%v) Not Equal that(%v)", this.GetFrameworks, that1.GetFrameworks)
+	}
+	if !this.GetAgents.Equal(that1.GetAgents) {
+		return fmt.Errorf("GetAgents this(%v) Not Equal that(%v)", this.GetAgents, that1.GetAgents)
+	}
+	return nil
 }
 func (this *Response_GetState) Equal(that interface{}) bool {
 	if that == nil {
@@ -2613,6 +3597,49 @@ func (this *Response_GetState) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetAgents) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetAgents)
+	if !ok {
+		that2, ok := that.(Response_GetAgents)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetAgents")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetAgents but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetAgents but is not nil && this == nil")
+	}
+	if len(this.Agents) != len(that1.Agents) {
+		return fmt.Errorf("Agents this(%v) Not Equal that(%v)", len(this.Agents), len(that1.Agents))
+	}
+	for i := range this.Agents {
+		if !this.Agents[i].Equal(&that1.Agents[i]) {
+			return fmt.Errorf("Agents this[%v](%v) Not Equal that[%v](%v)", i, this.Agents[i], i, that1.Agents[i])
+		}
+	}
+	if len(this.RecoveredAgents) != len(that1.RecoveredAgents) {
+		return fmt.Errorf("RecoveredAgents this(%v) Not Equal that(%v)", len(this.RecoveredAgents), len(that1.RecoveredAgents))
+	}
+	for i := range this.RecoveredAgents {
+		if !this.RecoveredAgents[i].Equal(&that1.RecoveredAgents[i]) {
+			return fmt.Errorf("RecoveredAgents this[%v](%v) Not Equal that[%v](%v)", i, this.RecoveredAgents[i], i, that1.RecoveredAgents[i])
+		}
+	}
+	return nil
+}
 func (this *Response_GetAgents) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2646,7 +3673,90 @@ func (this *Response_GetAgents) Equal(that interface{}) bool {
 			return false
 		}
 	}
+	if len(this.RecoveredAgents) != len(that1.RecoveredAgents) {
+		return false
+	}
+	for i := range this.RecoveredAgents {
+		if !this.RecoveredAgents[i].Equal(&that1.RecoveredAgents[i]) {
+			return false
+		}
+	}
 	return true
+}
+func (this *Response_GetAgents_Agent) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetAgents_Agent)
+	if !ok {
+		that2, ok := that.(Response_GetAgents_Agent)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetAgents_Agent")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetAgents_Agent but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetAgents_Agent but is not nil && this == nil")
+	}
+	if !this.AgentInfo.Equal(&that1.AgentInfo) {
+		return fmt.Errorf("AgentInfo this(%v) Not Equal that(%v)", this.AgentInfo, that1.AgentInfo)
+	}
+	if this.Active != that1.Active {
+		return fmt.Errorf("Active this(%v) Not Equal that(%v)", this.Active, that1.Active)
+	}
+	if this.Version != that1.Version {
+		return fmt.Errorf("Version this(%v) Not Equal that(%v)", this.Version, that1.Version)
+	}
+	if this.PID != nil && that1.PID != nil {
+		if *this.PID != *that1.PID {
+			return fmt.Errorf("PID this(%v) Not Equal that(%v)", *this.PID, *that1.PID)
+		}
+	} else if this.PID != nil {
+		return fmt.Errorf("this.PID == nil && that.PID != nil")
+	} else if that1.PID != nil {
+		return fmt.Errorf("PID this(%v) Not Equal that(%v)", this.PID, that1.PID)
+	}
+	if !this.RegisteredTime.Equal(that1.RegisteredTime) {
+		return fmt.Errorf("RegisteredTime this(%v) Not Equal that(%v)", this.RegisteredTime, that1.RegisteredTime)
+	}
+	if !this.ReregisteredTime.Equal(that1.ReregisteredTime) {
+		return fmt.Errorf("ReregisteredTime this(%v) Not Equal that(%v)", this.ReregisteredTime, that1.ReregisteredTime)
+	}
+	if len(this.TotalResources) != len(that1.TotalResources) {
+		return fmt.Errorf("TotalResources this(%v) Not Equal that(%v)", len(this.TotalResources), len(that1.TotalResources))
+	}
+	for i := range this.TotalResources {
+		if !this.TotalResources[i].Equal(&that1.TotalResources[i]) {
+			return fmt.Errorf("TotalResources this[%v](%v) Not Equal that[%v](%v)", i, this.TotalResources[i], i, that1.TotalResources[i])
+		}
+	}
+	if len(this.AllocatedResources) != len(that1.AllocatedResources) {
+		return fmt.Errorf("AllocatedResources this(%v) Not Equal that(%v)", len(this.AllocatedResources), len(that1.AllocatedResources))
+	}
+	for i := range this.AllocatedResources {
+		if !this.AllocatedResources[i].Equal(&that1.AllocatedResources[i]) {
+			return fmt.Errorf("AllocatedResources this[%v](%v) Not Equal that[%v](%v)", i, this.AllocatedResources[i], i, that1.AllocatedResources[i])
+		}
+	}
+	if len(this.OfferedResources) != len(that1.OfferedResources) {
+		return fmt.Errorf("OfferedResources this(%v) Not Equal that(%v)", len(this.OfferedResources), len(that1.OfferedResources))
+	}
+	for i := range this.OfferedResources {
+		if !this.OfferedResources[i].Equal(&that1.OfferedResources[i]) {
+			return fmt.Errorf("OfferedResources this[%v](%v) Not Equal that[%v](%v)", i, this.OfferedResources[i], i, that1.OfferedResources[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetAgents_Agent) Equal(that interface{}) bool {
 	if that == nil {
@@ -2682,7 +3792,13 @@ func (this *Response_GetAgents_Agent) Equal(that interface{}) bool {
 	if this.Version != that1.Version {
 		return false
 	}
-	if this.Pid != that1.Pid {
+	if this.PID != nil && that1.PID != nil {
+		if *this.PID != *that1.PID {
+			return false
+		}
+	} else if this.PID != nil {
+		return false
+	} else if that1.PID != nil {
 		return false
 	}
 	if !this.RegisteredTime.Equal(that1.RegisteredTime) {
@@ -2716,6 +3832,57 @@ func (this *Response_GetAgents_Agent) Equal(that interface{}) bool {
 		}
 	}
 	return true
+}
+func (this *Response_GetFrameworks) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetFrameworks)
+	if !ok {
+		that2, ok := that.(Response_GetFrameworks)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetFrameworks")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetFrameworks but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetFrameworks but is not nil && this == nil")
+	}
+	if len(this.Frameworks) != len(that1.Frameworks) {
+		return fmt.Errorf("Frameworks this(%v) Not Equal that(%v)", len(this.Frameworks), len(that1.Frameworks))
+	}
+	for i := range this.Frameworks {
+		if !this.Frameworks[i].Equal(&that1.Frameworks[i]) {
+			return fmt.Errorf("Frameworks this[%v](%v) Not Equal that[%v](%v)", i, this.Frameworks[i], i, that1.Frameworks[i])
+		}
+	}
+	if len(this.CompletedFrameworks) != len(that1.CompletedFrameworks) {
+		return fmt.Errorf("CompletedFrameworks this(%v) Not Equal that(%v)", len(this.CompletedFrameworks), len(that1.CompletedFrameworks))
+	}
+	for i := range this.CompletedFrameworks {
+		if !this.CompletedFrameworks[i].Equal(&that1.CompletedFrameworks[i]) {
+			return fmt.Errorf("CompletedFrameworks this[%v](%v) Not Equal that[%v](%v)", i, this.CompletedFrameworks[i], i, that1.CompletedFrameworks[i])
+		}
+	}
+	if len(this.RecoveredFrameworks) != len(that1.RecoveredFrameworks) {
+		return fmt.Errorf("RecoveredFrameworks this(%v) Not Equal that(%v)", len(this.RecoveredFrameworks), len(that1.RecoveredFrameworks))
+	}
+	for i := range this.RecoveredFrameworks {
+		if !this.RecoveredFrameworks[i].Equal(&that1.RecoveredFrameworks[i]) {
+			return fmt.Errorf("RecoveredFrameworks this[%v](%v) Not Equal that[%v](%v)", i, this.RecoveredFrameworks[i], i, that1.RecoveredFrameworks[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetFrameworks) Equal(that interface{}) bool {
 	if that == nil {
@@ -2768,6 +3935,86 @@ func (this *Response_GetFrameworks) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetFrameworks_Framework) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetFrameworks_Framework)
+	if !ok {
+		that2, ok := that.(Response_GetFrameworks_Framework)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetFrameworks_Framework")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetFrameworks_Framework but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetFrameworks_Framework but is not nil && this == nil")
+	}
+	if !this.FrameworkInfo.Equal(&that1.FrameworkInfo) {
+		return fmt.Errorf("FrameworkInfo this(%v) Not Equal that(%v)", this.FrameworkInfo, that1.FrameworkInfo)
+	}
+	if this.Active != that1.Active {
+		return fmt.Errorf("Active this(%v) Not Equal that(%v)", this.Active, that1.Active)
+	}
+	if this.Connected != that1.Connected {
+		return fmt.Errorf("Connected this(%v) Not Equal that(%v)", this.Connected, that1.Connected)
+	}
+	if this.Recovered != that1.Recovered {
+		return fmt.Errorf("Recovered this(%v) Not Equal that(%v)", this.Recovered, that1.Recovered)
+	}
+	if !this.RegisteredTime.Equal(that1.RegisteredTime) {
+		return fmt.Errorf("RegisteredTime this(%v) Not Equal that(%v)", this.RegisteredTime, that1.RegisteredTime)
+	}
+	if !this.ReregisteredTime.Equal(that1.ReregisteredTime) {
+		return fmt.Errorf("ReregisteredTime this(%v) Not Equal that(%v)", this.ReregisteredTime, that1.ReregisteredTime)
+	}
+	if !this.UnregisteredTime.Equal(that1.UnregisteredTime) {
+		return fmt.Errorf("UnregisteredTime this(%v) Not Equal that(%v)", this.UnregisteredTime, that1.UnregisteredTime)
+	}
+	if len(this.Offers) != len(that1.Offers) {
+		return fmt.Errorf("Offers this(%v) Not Equal that(%v)", len(this.Offers), len(that1.Offers))
+	}
+	for i := range this.Offers {
+		if !this.Offers[i].Equal(&that1.Offers[i]) {
+			return fmt.Errorf("Offers this[%v](%v) Not Equal that[%v](%v)", i, this.Offers[i], i, that1.Offers[i])
+		}
+	}
+	if len(this.InverseOffers) != len(that1.InverseOffers) {
+		return fmt.Errorf("InverseOffers this(%v) Not Equal that(%v)", len(this.InverseOffers), len(that1.InverseOffers))
+	}
+	for i := range this.InverseOffers {
+		if !this.InverseOffers[i].Equal(&that1.InverseOffers[i]) {
+			return fmt.Errorf("InverseOffers this[%v](%v) Not Equal that[%v](%v)", i, this.InverseOffers[i], i, that1.InverseOffers[i])
+		}
+	}
+	if len(this.AllocatedResources) != len(that1.AllocatedResources) {
+		return fmt.Errorf("AllocatedResources this(%v) Not Equal that(%v)", len(this.AllocatedResources), len(that1.AllocatedResources))
+	}
+	for i := range this.AllocatedResources {
+		if !this.AllocatedResources[i].Equal(&that1.AllocatedResources[i]) {
+			return fmt.Errorf("AllocatedResources this[%v](%v) Not Equal that[%v](%v)", i, this.AllocatedResources[i], i, that1.AllocatedResources[i])
+		}
+	}
+	if len(this.OfferedResources) != len(that1.OfferedResources) {
+		return fmt.Errorf("OfferedResources this(%v) Not Equal that(%v)", len(this.OfferedResources), len(that1.OfferedResources))
+	}
+	for i := range this.OfferedResources {
+		if !this.OfferedResources[i].Equal(&that1.OfferedResources[i]) {
+			return fmt.Errorf("OfferedResources this[%v](%v) Not Equal that[%v](%v)", i, this.OfferedResources[i], i, that1.OfferedResources[i])
+		}
+	}
+	return nil
+}
 func (this *Response_GetFrameworks_Framework) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2800,6 +4047,9 @@ func (this *Response_GetFrameworks_Framework) Equal(that interface{}) bool {
 		return false
 	}
 	if this.Connected != that1.Connected {
+		return false
+	}
+	if this.Recovered != that1.Recovered {
 		return false
 	}
 	if !this.RegisteredTime.Equal(that1.RegisteredTime) {
@@ -2845,6 +4095,49 @@ func (this *Response_GetFrameworks_Framework) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetExecutors) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetExecutors)
+	if !ok {
+		that2, ok := that.(Response_GetExecutors)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetExecutors")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetExecutors but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetExecutors but is not nil && this == nil")
+	}
+	if len(this.Executors) != len(that1.Executors) {
+		return fmt.Errorf("Executors this(%v) Not Equal that(%v)", len(this.Executors), len(that1.Executors))
+	}
+	for i := range this.Executors {
+		if !this.Executors[i].Equal(&that1.Executors[i]) {
+			return fmt.Errorf("Executors this[%v](%v) Not Equal that[%v](%v)", i, this.Executors[i], i, that1.Executors[i])
+		}
+	}
+	if len(this.OrphanExecutors) != len(that1.OrphanExecutors) {
+		return fmt.Errorf("OrphanExecutors this(%v) Not Equal that(%v)", len(this.OrphanExecutors), len(that1.OrphanExecutors))
+	}
+	for i := range this.OrphanExecutors {
+		if !this.OrphanExecutors[i].Equal(&that1.OrphanExecutors[i]) {
+			return fmt.Errorf("OrphanExecutors this[%v](%v) Not Equal that[%v](%v)", i, this.OrphanExecutors[i], i, that1.OrphanExecutors[i])
+		}
+	}
+	return nil
+}
 func (this *Response_GetExecutors) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2888,6 +4181,39 @@ func (this *Response_GetExecutors) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetExecutors_Executor) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetExecutors_Executor)
+	if !ok {
+		that2, ok := that.(Response_GetExecutors_Executor)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetExecutors_Executor")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetExecutors_Executor but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetExecutors_Executor but is not nil && this == nil")
+	}
+	if !this.ExecutorInfo.Equal(&that1.ExecutorInfo) {
+		return fmt.Errorf("ExecutorInfo this(%v) Not Equal that(%v)", this.ExecutorInfo, that1.ExecutorInfo)
+	}
+	if !this.AgentId.Equal(&that1.AgentId) {
+		return fmt.Errorf("AgentId this(%v) Not Equal that(%v)", this.AgentId, that1.AgentId)
+	}
+	return nil
+}
 func (this *Response_GetExecutors_Executor) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -2916,10 +4242,77 @@ func (this *Response_GetExecutors_Executor) Equal(that interface{}) bool {
 	if !this.ExecutorInfo.Equal(&that1.ExecutorInfo) {
 		return false
 	}
-	if !this.AgentID.Equal(&that1.AgentID) {
+	if !this.AgentId.Equal(&that1.AgentId) {
 		return false
 	}
 	return true
+}
+func (this *Response_GetTasks) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetTasks)
+	if !ok {
+		that2, ok := that.(Response_GetTasks)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetTasks")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetTasks but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetTasks but is not nil && this == nil")
+	}
+	if len(this.PendingTasks) != len(that1.PendingTasks) {
+		return fmt.Errorf("PendingTasks this(%v) Not Equal that(%v)", len(this.PendingTasks), len(that1.PendingTasks))
+	}
+	for i := range this.PendingTasks {
+		if !this.PendingTasks[i].Equal(&that1.PendingTasks[i]) {
+			return fmt.Errorf("PendingTasks this[%v](%v) Not Equal that[%v](%v)", i, this.PendingTasks[i], i, that1.PendingTasks[i])
+		}
+	}
+	if len(this.Tasks) != len(that1.Tasks) {
+		return fmt.Errorf("Tasks this(%v) Not Equal that(%v)", len(this.Tasks), len(that1.Tasks))
+	}
+	for i := range this.Tasks {
+		if !this.Tasks[i].Equal(&that1.Tasks[i]) {
+			return fmt.Errorf("Tasks this[%v](%v) Not Equal that[%v](%v)", i, this.Tasks[i], i, that1.Tasks[i])
+		}
+	}
+	if len(this.UnreachableTasks) != len(that1.UnreachableTasks) {
+		return fmt.Errorf("UnreachableTasks this(%v) Not Equal that(%v)", len(this.UnreachableTasks), len(that1.UnreachableTasks))
+	}
+	for i := range this.UnreachableTasks {
+		if !this.UnreachableTasks[i].Equal(&that1.UnreachableTasks[i]) {
+			return fmt.Errorf("UnreachableTasks this[%v](%v) Not Equal that[%v](%v)", i, this.UnreachableTasks[i], i, that1.UnreachableTasks[i])
+		}
+	}
+	if len(this.CompletedTasks) != len(that1.CompletedTasks) {
+		return fmt.Errorf("CompletedTasks this(%v) Not Equal that(%v)", len(this.CompletedTasks), len(that1.CompletedTasks))
+	}
+	for i := range this.CompletedTasks {
+		if !this.CompletedTasks[i].Equal(&that1.CompletedTasks[i]) {
+			return fmt.Errorf("CompletedTasks this[%v](%v) Not Equal that[%v](%v)", i, this.CompletedTasks[i], i, that1.CompletedTasks[i])
+		}
+	}
+	if len(this.OrphanTasks) != len(that1.OrphanTasks) {
+		return fmt.Errorf("OrphanTasks this(%v) Not Equal that(%v)", len(this.OrphanTasks), len(that1.OrphanTasks))
+	}
+	for i := range this.OrphanTasks {
+		if !this.OrphanTasks[i].Equal(that1.OrphanTasks[i]) {
+			return fmt.Errorf("OrphanTasks this[%v](%v) Not Equal that[%v](%v)", i, this.OrphanTasks[i], i, that1.OrphanTasks[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetTasks) Equal(that interface{}) bool {
 	if that == nil {
@@ -2962,6 +4355,14 @@ func (this *Response_GetTasks) Equal(that interface{}) bool {
 			return false
 		}
 	}
+	if len(this.UnreachableTasks) != len(that1.UnreachableTasks) {
+		return false
+	}
+	for i := range this.UnreachableTasks {
+		if !this.UnreachableTasks[i].Equal(&that1.UnreachableTasks[i]) {
+			return false
+		}
+	}
 	if len(this.CompletedTasks) != len(that1.CompletedTasks) {
 		return false
 	}
@@ -2974,11 +4375,46 @@ func (this *Response_GetTasks) Equal(that interface{}) bool {
 		return false
 	}
 	for i := range this.OrphanTasks {
-		if !this.OrphanTasks[i].Equal(&that1.OrphanTasks[i]) {
+		if !this.OrphanTasks[i].Equal(that1.OrphanTasks[i]) {
 			return false
 		}
 	}
 	return true
+}
+func (this *Response_GetRoles) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetRoles)
+	if !ok {
+		that2, ok := that.(Response_GetRoles)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetRoles")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetRoles but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetRoles but is not nil && this == nil")
+	}
+	if len(this.Roles) != len(that1.Roles) {
+		return fmt.Errorf("Roles this(%v) Not Equal that(%v)", len(this.Roles), len(that1.Roles))
+	}
+	for i := range this.Roles {
+		if !this.Roles[i].Equal(&that1.Roles[i]) {
+			return fmt.Errorf("Roles this[%v](%v) Not Equal that[%v](%v)", i, this.Roles[i], i, that1.Roles[i])
+		}
+	}
+	return nil
 }
 func (this *Response_GetRoles) Equal(that interface{}) bool {
 	if that == nil {
@@ -3015,6 +4451,41 @@ func (this *Response_GetRoles) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetWeights) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetWeights)
+	if !ok {
+		that2, ok := that.(Response_GetWeights)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetWeights")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetWeights but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetWeights but is not nil && this == nil")
+	}
+	if len(this.WeightInfos) != len(that1.WeightInfos) {
+		return fmt.Errorf("WeightInfos this(%v) Not Equal that(%v)", len(this.WeightInfos), len(that1.WeightInfos))
+	}
+	for i := range this.WeightInfos {
+		if !this.WeightInfos[i].Equal(&that1.WeightInfos[i]) {
+			return fmt.Errorf("WeightInfos this[%v](%v) Not Equal that[%v](%v)", i, this.WeightInfos[i], i, that1.WeightInfos[i])
+		}
+	}
+	return nil
+}
 func (this *Response_GetWeights) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -3050,6 +4521,36 @@ func (this *Response_GetWeights) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetMaster) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetMaster)
+	if !ok {
+		that2, ok := that.(Response_GetMaster)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetMaster")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetMaster but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetMaster but is not nil && this == nil")
+	}
+	if !this.MasterInfo.Equal(&that1.MasterInfo) {
+		return fmt.Errorf("MasterInfo this(%v) Not Equal that(%v)", this.MasterInfo, that1.MasterInfo)
+	}
+	return nil
+}
 func (this *Response_GetMaster) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -3079,6 +4580,36 @@ func (this *Response_GetMaster) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Response_GetMaintenanceStatus) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetMaintenanceStatus)
+	if !ok {
+		that2, ok := that.(Response_GetMaintenanceStatus)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetMaintenanceStatus")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetMaintenanceStatus but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetMaintenanceStatus but is not nil && this == nil")
+	}
+	if !this.Status.Equal(&that1.Status) {
+		return fmt.Errorf("Status this(%v) Not Equal that(%v)", this.Status, that1.Status)
+	}
+	return nil
 }
 func (this *Response_GetMaintenanceStatus) Equal(that interface{}) bool {
 	if that == nil {
@@ -3110,6 +4641,36 @@ func (this *Response_GetMaintenanceStatus) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetMaintenanceSchedule) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetMaintenanceSchedule)
+	if !ok {
+		that2, ok := that.(Response_GetMaintenanceSchedule)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetMaintenanceSchedule")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetMaintenanceSchedule but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetMaintenanceSchedule but is not nil && this == nil")
+	}
+	if !this.Schedule.Equal(&that1.Schedule) {
+		return fmt.Errorf("Schedule this(%v) Not Equal that(%v)", this.Schedule, that1.Schedule)
+	}
+	return nil
+}
 func (this *Response_GetMaintenanceSchedule) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -3140,6 +4701,36 @@ func (this *Response_GetMaintenanceSchedule) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Response_GetQuota) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Response_GetQuota)
+	if !ok {
+		that2, ok := that.(Response_GetQuota)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Response_GetQuota")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Response_GetQuota but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Response_GetQuota but is not nil && this == nil")
+	}
+	if !this.Status.Equal(&that1.Status) {
+		return fmt.Errorf("Status this(%v) Not Equal that(%v)", this.Status, that1.Status)
+	}
+	return nil
+}
 func (this *Response_GetQuota) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -3169,6 +4760,51 @@ func (this *Response_GetQuota) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Event) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event)
+	if !ok {
+		that2, ok := that.(Event)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event but is not nil && this == nil")
+	}
+	if this.Type != that1.Type {
+		return fmt.Errorf("Type this(%v) Not Equal that(%v)", this.Type, that1.Type)
+	}
+	if !this.Subscribed.Equal(that1.Subscribed) {
+		return fmt.Errorf("Subscribed this(%v) Not Equal that(%v)", this.Subscribed, that1.Subscribed)
+	}
+	if !this.TaskAdded.Equal(that1.TaskAdded) {
+		return fmt.Errorf("TaskAdded this(%v) Not Equal that(%v)", this.TaskAdded, that1.TaskAdded)
+	}
+	if !this.TaskUpdated.Equal(that1.TaskUpdated) {
+		return fmt.Errorf("TaskUpdated this(%v) Not Equal that(%v)", this.TaskUpdated, that1.TaskUpdated)
+	}
+	if !this.AgentAdded.Equal(that1.AgentAdded) {
+		return fmt.Errorf("AgentAdded this(%v) Not Equal that(%v)", this.AgentAdded, that1.AgentAdded)
+	}
+	if !this.AgentRemoved.Equal(that1.AgentRemoved) {
+		return fmt.Errorf("AgentRemoved this(%v) Not Equal that(%v)", this.AgentRemoved, that1.AgentRemoved)
+	}
+	return nil
 }
 func (this *Event) Equal(that interface{}) bool {
 	if that == nil {
@@ -3215,6 +4851,36 @@ func (this *Event) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_Subscribed) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_Subscribed)
+	if !ok {
+		that2, ok := that.(Event_Subscribed)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_Subscribed")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_Subscribed but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_Subscribed but is not nil && this == nil")
+	}
+	if !this.GetState.Equal(that1.GetState) {
+		return fmt.Errorf("GetState this(%v) Not Equal that(%v)", this.GetState, that1.GetState)
+	}
+	return nil
+}
 func (this *Event_Subscribed) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -3245,6 +4911,36 @@ func (this *Event_Subscribed) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_TaskAdded) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_TaskAdded)
+	if !ok {
+		that2, ok := that.(Event_TaskAdded)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_TaskAdded")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_TaskAdded but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_TaskAdded but is not nil && this == nil")
+	}
+	if !this.Task.Equal(&that1.Task) {
+		return fmt.Errorf("Task this(%v) Not Equal that(%v)", this.Task, that1.Task)
+	}
+	return nil
+}
 func (this *Event_TaskAdded) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -3274,6 +4970,48 @@ func (this *Event_TaskAdded) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Event_TaskUpdated) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_TaskUpdated)
+	if !ok {
+		that2, ok := that.(Event_TaskUpdated)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_TaskUpdated")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_TaskUpdated but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_TaskUpdated but is not nil && this == nil")
+	}
+	if !this.FrameworkID.Equal(&that1.FrameworkID) {
+		return fmt.Errorf("FrameworkID this(%v) Not Equal that(%v)", this.FrameworkID, that1.FrameworkID)
+	}
+	if !this.Status.Equal(&that1.Status) {
+		return fmt.Errorf("Status this(%v) Not Equal that(%v)", this.Status, that1.Status)
+	}
+	if this.State != nil && that1.State != nil {
+		if *this.State != *that1.State {
+			return fmt.Errorf("State this(%v) Not Equal that(%v)", *this.State, *that1.State)
+		}
+	} else if this.State != nil {
+		return fmt.Errorf("this.State == nil && that.State != nil")
+	} else if that1.State != nil {
+		return fmt.Errorf("State this(%v) Not Equal that(%v)", this.State, that1.State)
+	}
+	return nil
 }
 func (this *Event_TaskUpdated) Equal(that interface{}) bool {
 	if that == nil {
@@ -3317,6 +5055,36 @@ func (this *Event_TaskUpdated) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *Event_AgentAdded) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_AgentAdded)
+	if !ok {
+		that2, ok := that.(Event_AgentAdded)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_AgentAdded")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_AgentAdded but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_AgentAdded but is not nil && this == nil")
+	}
+	if !this.Agent.Equal(&that1.Agent) {
+		return fmt.Errorf("Agent this(%v) Not Equal that(%v)", this.Agent, that1.Agent)
+	}
+	return nil
+}
 func (this *Event_AgentAdded) Equal(that interface{}) bool {
 	if that == nil {
 		if this == nil {
@@ -3346,6 +5114,36 @@ func (this *Event_AgentAdded) Equal(that interface{}) bool {
 		return false
 	}
 	return true
+}
+func (this *Event_AgentRemoved) VerboseEqual(that interface{}) error {
+	if that == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that == nil && this != nil")
+	}
+
+	that1, ok := that.(*Event_AgentRemoved)
+	if !ok {
+		that2, ok := that.(Event_AgentRemoved)
+		if ok {
+			that1 = &that2
+		} else {
+			return fmt.Errorf("that is not of type *Event_AgentRemoved")
+		}
+	}
+	if that1 == nil {
+		if this == nil {
+			return nil
+		}
+		return fmt.Errorf("that is type *Event_AgentRemoved but is nil && this != nil")
+	} else if this == nil {
+		return fmt.Errorf("that is type *Event_AgentRemoved but is not nil && this == nil")
+	}
+	if !this.AgentID.Equal(&that1.AgentID) {
+		return fmt.Errorf("AgentID this(%v) Not Equal that(%v)", this.AgentID, that1.AgentID)
+	}
+	return nil
 }
 func (this *Event_AgentRemoved) Equal(that interface{}) bool {
 	if that == nil {
@@ -3402,8 +5200,8 @@ func (this *Call) GoString() string {
 	if this.ReserveResources != nil {
 		s = append(s, "ReserveResources: "+fmt.Sprintf("%#v", this.ReserveResources)+",\n")
 	}
-	if this.UnreserverResources != nil {
-		s = append(s, "UnreserverResources: "+fmt.Sprintf("%#v", this.UnreserverResources)+",\n")
+	if this.UnreserveResources != nil {
+		s = append(s, "UnreserveResources: "+fmt.Sprintf("%#v", this.UnreserveResources)+",\n")
 	}
 	if this.CreateVolumes != nil {
 		s = append(s, "CreateVolumes: "+fmt.Sprintf("%#v", this.CreateVolumes)+",\n")
@@ -3448,9 +5246,7 @@ func (this *Call_SetLoggingLevel) GoString() string {
 	s := make([]string, 0, 6)
 	s = append(s, "&master.Call_SetLoggingLevel{")
 	s = append(s, "Level: "+fmt.Sprintf("%#v", this.Level)+",\n")
-	if this.Duration != nil {
-		s = append(s, "Duration: "+fmt.Sprintf("%#v", this.Duration)+",\n")
-	}
+	s = append(s, "Duration: "+strings.Replace(this.Duration.GoString(), `&`, ``, 1)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -3472,7 +5268,9 @@ func (this *Call_ReadFile) GoString() string {
 	s = append(s, "&master.Call_ReadFile{")
 	s = append(s, "Path: "+fmt.Sprintf("%#v", this.Path)+",\n")
 	s = append(s, "Offset: "+fmt.Sprintf("%#v", this.Offset)+",\n")
-	s = append(s, "Length: "+fmt.Sprintf("%#v", this.Length)+",\n")
+	if this.Length != nil {
+		s = append(s, "Length: "+valueToGoStringMaster(this.Length, "uint64")+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -3762,10 +5560,13 @@ func (this *Response_GetAgents) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 5)
+	s := make([]string, 0, 6)
 	s = append(s, "&master.Response_GetAgents{")
 	if this.Agents != nil {
 		s = append(s, "Agents: "+fmt.Sprintf("%#v", this.Agents)+",\n")
+	}
+	if this.RecoveredAgents != nil {
+		s = append(s, "RecoveredAgents: "+fmt.Sprintf("%#v", this.RecoveredAgents)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -3779,7 +5580,9 @@ func (this *Response_GetAgents_Agent) GoString() string {
 	s = append(s, "AgentInfo: "+strings.Replace(this.AgentInfo.GoString(), `&`, ``, 1)+",\n")
 	s = append(s, "Active: "+fmt.Sprintf("%#v", this.Active)+",\n")
 	s = append(s, "Version: "+fmt.Sprintf("%#v", this.Version)+",\n")
-	s = append(s, "Pid: "+fmt.Sprintf("%#v", this.Pid)+",\n")
+	if this.PID != nil {
+		s = append(s, "PID: "+valueToGoStringMaster(this.PID, "string")+",\n")
+	}
 	if this.RegisteredTime != nil {
 		s = append(s, "RegisteredTime: "+fmt.Sprintf("%#v", this.RegisteredTime)+",\n")
 	}
@@ -3820,11 +5623,12 @@ func (this *Response_GetFrameworks_Framework) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 14)
+	s := make([]string, 0, 15)
 	s = append(s, "&master.Response_GetFrameworks_Framework{")
 	s = append(s, "FrameworkInfo: "+strings.Replace(this.FrameworkInfo.GoString(), `&`, ``, 1)+",\n")
 	s = append(s, "Active: "+fmt.Sprintf("%#v", this.Active)+",\n")
 	s = append(s, "Connected: "+fmt.Sprintf("%#v", this.Connected)+",\n")
+	s = append(s, "Recovered: "+fmt.Sprintf("%#v", this.Recovered)+",\n")
 	if this.RegisteredTime != nil {
 		s = append(s, "RegisteredTime: "+fmt.Sprintf("%#v", this.RegisteredTime)+",\n")
 	}
@@ -3871,7 +5675,7 @@ func (this *Response_GetExecutors_Executor) GoString() string {
 	s := make([]string, 0, 6)
 	s = append(s, "&master.Response_GetExecutors_Executor{")
 	s = append(s, "ExecutorInfo: "+strings.Replace(this.ExecutorInfo.GoString(), `&`, ``, 1)+",\n")
-	s = append(s, "AgentID: "+strings.Replace(this.AgentID.GoString(), `&`, ``, 1)+",\n")
+	s = append(s, "AgentId: "+strings.Replace(this.AgentId.GoString(), `&`, ``, 1)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -3879,13 +5683,16 @@ func (this *Response_GetTasks) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 8)
+	s := make([]string, 0, 9)
 	s = append(s, "&master.Response_GetTasks{")
 	if this.PendingTasks != nil {
 		s = append(s, "PendingTasks: "+fmt.Sprintf("%#v", this.PendingTasks)+",\n")
 	}
 	if this.Tasks != nil {
 		s = append(s, "Tasks: "+fmt.Sprintf("%#v", this.Tasks)+",\n")
+	}
+	if this.UnreachableTasks != nil {
+		s = append(s, "UnreachableTasks: "+fmt.Sprintf("%#v", this.UnreachableTasks)+",\n")
 	}
 	if this.CompletedTasks != nil {
 		s = append(s, "CompletedTasks: "+fmt.Sprintf("%#v", this.CompletedTasks)+",\n")
@@ -4127,11 +5934,11 @@ func (m *Call) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n6
 	}
-	if m.UnreserverResources != nil {
+	if m.UnreserveResources != nil {
 		dAtA[i] = 0x42
 		i++
-		i = encodeVarintMaster(dAtA, i, uint64(m.UnreserverResources.Size()))
-		n7, err := m.UnreserverResources.MarshalTo(dAtA[i:])
+		i = encodeVarintMaster(dAtA, i, uint64(m.UnreserveResources.Size()))
+		n7, err := m.UnreserveResources.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -4256,18 +6063,14 @@ func (m *Call_SetLoggingLevel) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x8
 	i++
 	i = encodeVarintMaster(dAtA, i, uint64(m.Level))
-	if m.Duration == nil {
-		return 0, github_com_gogo_protobuf_proto.NewRequiredNotSetError("duration")
-	} else {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintMaster(dAtA, i, uint64(m.Duration.Size()))
-		n16, err := m.Duration.MarshalTo(dAtA[i:])
-		if err != nil {
-			return 0, err
-		}
-		i += n16
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintMaster(dAtA, i, uint64(m.Duration.Size()))
+	n16, err := m.Duration.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
 	}
+	i += n16
 	return i, nil
 }
 
@@ -4315,9 +6118,11 @@ func (m *Call_ReadFile) MarshalTo(dAtA []byte) (int, error) {
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintMaster(dAtA, i, uint64(m.Offset))
-	dAtA[i] = 0x18
-	i++
-	i = encodeVarintMaster(dAtA, i, uint64(m.Length))
+	if m.Length != nil {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintMaster(dAtA, i, uint64(*m.Length))
+	}
 	return i, nil
 }
 
@@ -5123,6 +6928,18 @@ func (m *Response_GetAgents) MarshalTo(dAtA []byte) (int, error) {
 			i += n
 		}
 	}
+	if len(m.RecoveredAgents) > 0 {
+		for _, msg := range m.RecoveredAgents {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintMaster(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
 	return i, nil
 }
 
@@ -5161,10 +6978,12 @@ func (m *Response_GetAgents_Agent) MarshalTo(dAtA []byte) (int, error) {
 	i++
 	i = encodeVarintMaster(dAtA, i, uint64(len(m.Version)))
 	i += copy(dAtA[i:], m.Version)
-	dAtA[i] = 0x22
-	i++
-	i = encodeVarintMaster(dAtA, i, uint64(len(m.Pid)))
-	i += copy(dAtA[i:], m.Pid)
+	if m.PID != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintMaster(dAtA, i, uint64(len(*m.PID)))
+		i += copy(dAtA[i:], *m.PID)
+	}
 	if m.RegisteredTime != nil {
 		dAtA[i] = 0x2a
 		i++
@@ -5395,6 +7214,14 @@ func (m *Response_GetFrameworks_Framework) MarshalTo(dAtA []byte) (int, error) {
 			i += n
 		}
 	}
+	dAtA[i] = 0x58
+	i++
+	if m.Recovered {
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
+	}
+	i++
 	return i, nil
 }
 
@@ -5465,8 +7292,8 @@ func (m *Response_GetExecutors_Executor) MarshalTo(dAtA []byte) (int, error) {
 	i += n53
 	dAtA[i] = 0x12
 	i++
-	i = encodeVarintMaster(dAtA, i, uint64(m.AgentID.Size()))
-	n54, err := m.AgentID.MarshalTo(dAtA[i:])
+	i = encodeVarintMaster(dAtA, i, uint64(m.AgentId.Size()))
+	n54, err := m.AgentId.MarshalTo(dAtA[i:])
 	if err != nil {
 		return 0, err
 	}
@@ -5528,6 +7355,18 @@ func (m *Response_GetTasks) MarshalTo(dAtA []byte) (int, error) {
 	if len(m.OrphanTasks) > 0 {
 		for _, msg := range m.OrphanTasks {
 			dAtA[i] = 0x22
+			i++
+			i = encodeVarintMaster(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.UnreachableTasks) > 0 {
+		for _, msg := range m.UnreachableTasks {
+			dAtA[i] = 0x2a
 			i++
 			i = encodeVarintMaster(dAtA, i, uint64(msg.Size()))
 			n, err := msg.MarshalTo(dAtA[i:])
@@ -5977,8 +7816,8 @@ func (m *Call) Size() (n int) {
 		l = m.ReserveResources.Size()
 		n += 1 + l + sovMaster(uint64(l))
 	}
-	if m.UnreserverResources != nil {
-		l = m.UnreserverResources.Size()
+	if m.UnreserveResources != nil {
+		l = m.UnreserveResources.Size()
 		n += 1 + l + sovMaster(uint64(l))
 	}
 	if m.CreateVolumes != nil {
@@ -6026,10 +7865,8 @@ func (m *Call_SetLoggingLevel) Size() (n int) {
 	var l int
 	_ = l
 	n += 1 + sovMaster(uint64(m.Level))
-	if m.Duration != nil {
-		l = m.Duration.Size()
-		n += 1 + l + sovMaster(uint64(l))
-	}
+	l = m.Duration.Size()
+	n += 1 + l + sovMaster(uint64(l))
 	return n
 }
 
@@ -6047,7 +7884,9 @@ func (m *Call_ReadFile) Size() (n int) {
 	l = len(m.Path)
 	n += 1 + l + sovMaster(uint64(l))
 	n += 1 + sovMaster(uint64(m.Offset))
-	n += 1 + sovMaster(uint64(m.Length))
+	if m.Length != nil {
+		n += 1 + sovMaster(uint64(*m.Length))
+	}
 	return n
 }
 
@@ -6346,6 +8185,12 @@ func (m *Response_GetAgents) Size() (n int) {
 			n += 1 + l + sovMaster(uint64(l))
 		}
 	}
+	if len(m.RecoveredAgents) > 0 {
+		for _, e := range m.RecoveredAgents {
+			l = e.Size()
+			n += 1 + l + sovMaster(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -6357,8 +8202,10 @@ func (m *Response_GetAgents_Agent) Size() (n int) {
 	n += 2
 	l = len(m.Version)
 	n += 1 + l + sovMaster(uint64(l))
-	l = len(m.Pid)
-	n += 1 + l + sovMaster(uint64(l))
+	if m.PID != nil {
+		l = len(*m.PID)
+		n += 1 + l + sovMaster(uint64(l))
+	}
 	if m.RegisteredTime != nil {
 		l = m.RegisteredTime.Size()
 		n += 1 + l + sovMaster(uint64(l))
@@ -6455,6 +8302,7 @@ func (m *Response_GetFrameworks_Framework) Size() (n int) {
 			n += 1 + l + sovMaster(uint64(l))
 		}
 	}
+	n += 2
 	return n
 }
 
@@ -6481,7 +8329,7 @@ func (m *Response_GetExecutors_Executor) Size() (n int) {
 	_ = l
 	l = m.ExecutorInfo.Size()
 	n += 1 + l + sovMaster(uint64(l))
-	l = m.AgentID.Size()
+	l = m.AgentId.Size()
 	n += 1 + l + sovMaster(uint64(l))
 	return n
 }
@@ -6509,6 +8357,12 @@ func (m *Response_GetTasks) Size() (n int) {
 	}
 	if len(m.OrphanTasks) > 0 {
 		for _, e := range m.OrphanTasks {
+			l = e.Size()
+			n += 1 + l + sovMaster(uint64(l))
+		}
+	}
+	if len(m.UnreachableTasks) > 0 {
+		for _, e := range m.UnreachableTasks {
 			l = e.Size()
 			n += 1 + l + sovMaster(uint64(l))
 		}
@@ -6671,7 +8525,7 @@ func (this *Call) String() string {
 		`ReadFile:` + strings.Replace(fmt.Sprintf("%v", this.ReadFile), "Call_ReadFile", "Call_ReadFile", 1) + `,`,
 		`UpdateWeights:` + strings.Replace(fmt.Sprintf("%v", this.UpdateWeights), "Call_UpdateWeights", "Call_UpdateWeights", 1) + `,`,
 		`ReserveResources:` + strings.Replace(fmt.Sprintf("%v", this.ReserveResources), "Call_ReserveResources", "Call_ReserveResources", 1) + `,`,
-		`UnreserverResources:` + strings.Replace(fmt.Sprintf("%v", this.UnreserverResources), "Call_UnreserveResources", "Call_UnreserveResources", 1) + `,`,
+		`UnreserveResources:` + strings.Replace(fmt.Sprintf("%v", this.UnreserveResources), "Call_UnreserveResources", "Call_UnreserveResources", 1) + `,`,
 		`CreateVolumes:` + strings.Replace(fmt.Sprintf("%v", this.CreateVolumes), "Call_CreateVolumes", "Call_CreateVolumes", 1) + `,`,
 		`DestroyVolumes:` + strings.Replace(fmt.Sprintf("%v", this.DestroyVolumes), "Call_DestroyVolumes", "Call_DestroyVolumes", 1) + `,`,
 		`UpdateMaintenanceSchedule:` + strings.Replace(fmt.Sprintf("%v", this.UpdateMaintenanceSchedule), "Call_UpdateMaintenanceSchedule", "Call_UpdateMaintenanceSchedule", 1) + `,`,
@@ -6699,7 +8553,7 @@ func (this *Call_SetLoggingLevel) String() string {
 	}
 	s := strings.Join([]string{`&Call_SetLoggingLevel{`,
 		`Level:` + fmt.Sprintf("%v", this.Level) + `,`,
-		`Duration:` + strings.Replace(fmt.Sprintf("%v", this.Duration), "DurationInfo", "mesos_v1.DurationInfo", 1) + `,`,
+		`Duration:` + strings.Replace(strings.Replace(this.Duration.String(), "DurationInfo", "mesos_v1.DurationInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6721,7 +8575,7 @@ func (this *Call_ReadFile) String() string {
 	s := strings.Join([]string{`&Call_ReadFile{`,
 		`Path:` + fmt.Sprintf("%v", this.Path) + `,`,
 		`Offset:` + fmt.Sprintf("%v", this.Offset) + `,`,
-		`Length:` + fmt.Sprintf("%v", this.Length) + `,`,
+		`Length:` + valueToStringMaster(this.Length) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6731,7 +8585,7 @@ func (this *Call_UpdateWeights) String() string {
 		return "nil"
 	}
 	s := strings.Join([]string{`&Call_UpdateWeights{`,
-		`WeightInfos:` + strings.Replace(fmt.Sprintf("%v", this.WeightInfos), "WeightInfo", "mesos_v1.WeightInfo", 1) + `,`,
+		`WeightInfos:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.WeightInfos), "WeightInfo", "mesos_v1.WeightInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6948,6 +8802,7 @@ func (this *Response_GetAgents) String() string {
 	}
 	s := strings.Join([]string{`&Response_GetAgents{`,
 		`Agents:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Agents), "Response_GetAgents_Agent", "Response_GetAgents_Agent", 1), `&`, ``, 1) + `,`,
+		`RecoveredAgents:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.RecoveredAgents), "AgentInfo", "mesos_v1.AgentInfo", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -6960,7 +8815,7 @@ func (this *Response_GetAgents_Agent) String() string {
 		`AgentInfo:` + strings.Replace(strings.Replace(this.AgentInfo.String(), "AgentInfo", "mesos_v1.AgentInfo", 1), `&`, ``, 1) + `,`,
 		`Active:` + fmt.Sprintf("%v", this.Active) + `,`,
 		`Version:` + fmt.Sprintf("%v", this.Version) + `,`,
-		`Pid:` + fmt.Sprintf("%v", this.Pid) + `,`,
+		`PID:` + valueToStringMaster(this.PID) + `,`,
 		`RegisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.RegisteredTime), "TimeInfo", "mesos_v1.TimeInfo", 1) + `,`,
 		`ReregisteredTime:` + strings.Replace(fmt.Sprintf("%v", this.ReregisteredTime), "TimeInfo", "mesos_v1.TimeInfo", 1) + `,`,
 		`TotalResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.TotalResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
@@ -6997,6 +8852,7 @@ func (this *Response_GetFrameworks_Framework) String() string {
 		`InverseOffers:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.InverseOffers), "InverseOffer", "mesos_v1.InverseOffer", 1), `&`, ``, 1) + `,`,
 		`AllocatedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.AllocatedResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
 		`OfferedResources:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OfferedResources), "Resource", "mesos_v1.Resource", 1), `&`, ``, 1) + `,`,
+		`Recovered:` + fmt.Sprintf("%v", this.Recovered) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7018,7 +8874,7 @@ func (this *Response_GetExecutors_Executor) String() string {
 	}
 	s := strings.Join([]string{`&Response_GetExecutors_Executor{`,
 		`ExecutorInfo:` + strings.Replace(strings.Replace(this.ExecutorInfo.String(), "ExecutorInfo", "mesos_v1.ExecutorInfo", 1), `&`, ``, 1) + `,`,
-		`AgentID:` + strings.Replace(strings.Replace(this.AgentID.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
+		`AgentId:` + strings.Replace(strings.Replace(this.AgentId.String(), "AgentID", "mesos_v1.AgentID", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7031,7 +8887,8 @@ func (this *Response_GetTasks) String() string {
 		`PendingTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.PendingTasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
 		`Tasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.Tasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
 		`CompletedTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.CompletedTasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
-		`OrphanTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.OrphanTasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
+		`OrphanTasks:` + strings.Replace(fmt.Sprintf("%v", this.OrphanTasks), "Task", "mesos_v1.Task", 1) + `,`,
+		`UnreachableTasks:` + strings.Replace(strings.Replace(fmt.Sprintf("%v", this.UnreachableTasks), "Task", "mesos_v1.Task", 1), `&`, ``, 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -7419,7 +9276,7 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field UnreserverResources", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field UnreserveResources", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -7443,10 +9300,10 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.UnreserverResources == nil {
-				m.UnreserverResources = &Call_UnreserveResources{}
+			if m.UnreserveResources == nil {
+				m.UnreserveResources = &Call_UnreserveResources{}
 			}
-			if err := m.UnreserverResources.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.UnreserveResources.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7861,9 +9718,6 @@ func (m *Call_SetLoggingLevel) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.Duration == nil {
-				m.Duration = &mesos_v1.DurationInfo{}
-			}
 			if err := m.Duration.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -8064,7 +9918,7 @@ func (m *Call_ReadFile) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Length", wireType)
 			}
-			m.Length = 0
+			var v uint64
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMaster
@@ -8074,11 +9928,12 @@ func (m *Call_ReadFile) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Length |= (uint64(b) & 0x7F) << shift
+				v |= (uint64(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			m.Length = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMaster(dAtA[iNdEx:])
@@ -8161,7 +10016,7 @@ func (m *Call_UpdateWeights) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.WeightInfos = append(m.WeightInfos, &mesos_v1.WeightInfo{})
+			m.WeightInfos = append(m.WeightInfos, mesos_v1.WeightInfo{})
 			if err := m.WeightInfos[len(m.WeightInfos)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -10558,6 +12413,37 @@ func (m *Response_GetAgents) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RecoveredAgents", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMaster
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RecoveredAgents = append(m.RecoveredAgents, mesos_v1.AgentInfo{})
+			if err := m.RecoveredAgents[len(m.RecoveredAgents)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMaster(dAtA[iNdEx:])
@@ -10693,7 +12579,7 @@ func (m *Response_GetAgents_Agent) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000004)
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Pid", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PID", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -10718,7 +12604,8 @@ func (m *Response_GetAgents_Agent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Pid = string(dAtA[iNdEx:postIndex])
+			s := string(dAtA[iNdEx:postIndex])
+			m.PID = &s
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
@@ -11378,6 +13265,27 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 11:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Recovered", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Recovered = bool(v != 0)
+			hasFields[0] |= uint64(0x00000008)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMaster(dAtA[iNdEx:])
@@ -11401,6 +13309,9 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 	}
 	if hasFields[0]&uint64(0x00000004) == 0 {
 		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("connected")
+	}
+	if hasFields[0]&uint64(0x00000008) == 0 {
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("recovered")
 	}
 
 	if iNdEx > l {
@@ -11583,7 +13494,7 @@ func (m *Response_GetExecutors_Executor) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000001)
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentID", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field AgentId", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -11607,7 +13518,7 @@ func (m *Response_GetExecutors_Executor) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := m.AgentID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.AgentId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -11787,8 +13698,39 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.OrphanTasks = append(m.OrphanTasks, mesos_v1.Task{})
+			m.OrphanTasks = append(m.OrphanTasks, &mesos_v1.Task{})
 			if err := m.OrphanTasks[len(m.OrphanTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UnreachableTasks", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMaster
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMaster
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.UnreachableTasks = append(m.UnreachableTasks, mesos_v1.Task{})
+			if err := m.UnreachableTasks[len(m.UnreachableTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -13133,178 +15075,163 @@ var (
 func init() { proto.RegisterFile("operator/master/master.proto", fileDescriptorMaster) }
 
 var fileDescriptorMaster = []byte{
-	// 2757 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0xbc, 0x59, 0x4b, 0x73, 0x1b, 0xc7,
-	0xf1, 0x17, 0x40, 0x80, 0x24, 0x1a, 0xaf, 0xc5, 0x90, 0xa2, 0xe0, 0x95, 0x0c, 0xc8, 0xd4, 0xdf,
-	0x36, 0x6d, 0x97, 0xc8, 0xbf, 0x58, 0x76, 0xaa, 0x1c, 0x97, 0x2d, 0xe3, 0xb1, 0x24, 0x61, 0x81,
-	0x80, 0xb4, 0x0b, 0x50, 0x71, 0x0e, 0x41, 0xad, 0x80, 0x21, 0x88, 0x18, 0xc0, 0xc2, 0xbb, 0x0b,
-	0x3a, 0xca, 0x29, 0x97, 0xdc, 0xf3, 0x25, 0x52, 0x95, 0x7b, 0xae, 0x39, 0xe4, 0x90, 0x83, 0x8f,
-	0xce, 0xcd, 0x95, 0x03, 0x2a, 0x46, 0x72, 0x70, 0x6e, 0xae, 0x7c, 0x82, 0xd4, 0xbc, 0x76, 0x67,
-	0xf1, 0x12, 0x45, 0x25, 0xbe, 0x48, 0x9c, 0x9e, 0xee, 0x5f, 0xcf, 0xce, 0x4c, 0xff, 0xa6, 0xbb,
-	0x01, 0x77, 0xac, 0x11, 0xb6, 0x4d, 0xd7, 0xb2, 0x0f, 0x06, 0xa6, 0xe3, 0x62, 0xf1, 0xdf, 0xfe,
-	0xc8, 0xb6, 0x5c, 0x0b, 0xa5, 0x07, 0xd8, 0xb1, 0x9c, 0xfd, 0xcb, 0x07, 0xfb, 0x4c, 0xac, 0x3e,
-	0xe8, 0xf6, 0xdc, 0x8b, 0xf1, 0xb3, 0xfd, 0xb6, 0x35, 0x38, 0xb0, 0x86, 0x1d, 0x1b, 0xff, 0xf2,
-	0xbe, 0x33, 0xb0, 0xfa, 0xe6, 0x01, 0x55, 0xbc, 0xdf, 0xb5, 0xee, 0x5f, 0xb8, 0xee, 0x88, 0x8d,
-	0x18, 0x86, 0xfa, 0xe9, 0xd5, 0x4c, 0xbc, 0x75, 0x7c, 0x39, 0xb6, 0x5c, 0x93, 0xfd, 0xcb, 0x11,
-	0xaa, 0x2f, 0x89, 0x30, 0x30, 0x7b, 0x43, 0x17, 0x0f, 0xcd, 0x61, 0x1b, 0xcb, 0x7f, 0x73, 0xb4,
-	0xfb, 0x12, 0x5a, 0xd7, 0xea, 0x5a, 0x07, 0x54, 0xfc, 0x6c, 0x7c, 0x4e, 0x47, 0x74, 0x40, 0xff,
-	0x62, 0xea, 0xbb, 0xff, 0xda, 0x81, 0x48, 0xc9, 0xec, 0xf7, 0xd1, 0x3e, 0x44, 0xdc, 0xe7, 0x23,
-	0x9c, 0x0d, 0xdd, 0x0d, 0xed, 0xa5, 0x0e, 0xd5, 0xfd, 0x99, 0xad, 0xd9, 0x27, 0x4a, 0xfb, 0x8d,
-	0xe7, 0x23, 0x5c, 0x8c, 0x7c, 0x3d, 0xc9, 0xdf, 0x40, 0x1a, 0xc4, 0xbb, 0xd8, 0x6d, 0x0d, 0xb0,
-	0x6b, 0xf7, 0xda, 0x4e, 0x36, 0x7c, 0x37, 0xb4, 0x17, 0x3f, 0xbc, 0xbb, 0xd8, 0xec, 0x18, 0xbb,
-	0xa7, 0x4c, 0xaf, 0x98, 0x9a, 0x4e, 0xf2, 0xe0, 0x8f, 0x51, 0x13, 0x32, 0x0e, 0x76, 0x5b, 0x7d,
-	0xab, 0xdb, 0xed, 0x0d, 0xbb, 0xad, 0x3e, 0xbe, 0xc4, 0xfd, 0xec, 0x1a, 0x05, 0x7b, 0x73, 0x31,
-	0x98, 0x81, 0xdd, 0x2a, 0xd3, 0xae, 0x12, 0xe5, 0xe2, 0xd6, 0x74, 0x92, 0x4f, 0xcf, 0x08, 0x51,
-	0x11, 0xa0, 0xdf, 0x73, 0xdc, 0xd6, 0x79, 0xaf, 0x8f, 0x9d, 0x6c, 0x84, 0xe2, 0xe5, 0x17, 0xe3,
-	0x55, 0x7b, 0x8e, 0x7b, 0x44, 0xd4, 0x8a, 0xc9, 0xe9, 0x24, 0x1f, 0xf3, 0x86, 0xe8, 0x21, 0xc4,
-	0x6c, 0x6c, 0x76, 0x28, 0x46, 0x36, 0x4a, 0x21, 0x72, 0x8b, 0x21, 0x74, 0x6c, 0x76, 0x88, 0x4d,
-	0x31, 0x31, 0x9d, 0xe4, 0x37, 0xc5, 0x08, 0xd5, 0x20, 0x35, 0x1e, 0x75, 0x4c, 0x17, 0xb7, 0xbe,
-	0xc2, 0xbd, 0xee, 0x85, 0xeb, 0x64, 0xd7, 0x29, 0xca, 0xbd, 0xc5, 0x28, 0x4d, 0xaa, 0xfb, 0x94,
-	0xa9, 0x16, 0x33, 0xd3, 0x49, 0x3e, 0x19, 0x10, 0xa1, 0xa7, 0x90, 0xb1, 0xb1, 0x83, 0xed, 0x4b,
-	0xdc, 0xb2, 0xb1, 0x63, 0x8d, 0xed, 0x36, 0x76, 0xb2, 0x1b, 0x14, 0xf2, 0xad, 0x65, 0x0b, 0xa3,
-	0xea, 0xba, 0xd0, 0x2e, 0x6e, 0x4f, 0x27, 0x79, 0x65, 0x56, 0x8a, 0x7e, 0x01, 0x5b, 0xe3, 0xe1,
-	0x3c, 0xf4, 0x26, 0x85, 0xde, 0x5b, 0xb2, 0x5a, 0x61, 0xe0, 0x83, 0xdf, 0x9a, 0x4e, 0xf2, 0x5b,
-	0x9e, 0xdc, 0xf6, 0xf1, 0x6b, 0x90, 0x6a, 0xdb, 0x98, 0x6c, 0xc4, 0xa5, 0xd5, 0x1f, 0x0f, 0xb0,
-	0x93, 0x8d, 0xad, 0xda, 0x88, 0x12, 0xd5, 0x3d, 0x63, 0xaa, 0x6c, 0x23, 0x02, 0x22, 0xf4, 0x04,
-	0xd2, 0x1d, 0xec, 0xb8, 0xb6, 0xf5, 0xdc, 0x03, 0x04, 0x0a, 0xf8, 0x7f, 0x8b, 0x01, 0xcb, 0x4c,
-	0x59, 0x20, 0xa2, 0xe9, 0x24, 0x9f, 0x0a, 0xca, 0x90, 0x03, 0xb7, 0xf9, 0x59, 0x49, 0x21, 0xd5,
-	0x72, 0xda, 0x17, 0xb8, 0x33, 0xee, 0xe3, 0x6c, 0x9c, 0xc2, 0x1f, 0xac, 0x3a, 0xb8, 0x53, 0xdf,
-	0xce, 0xe0, 0x66, 0xc5, 0xd7, 0xa7, 0x93, 0xfc, 0x6b, 0x4b, 0xa7, 0xc9, 0x81, 0x3a, 0xae, 0x69,
-	0xbb, 0xb2, 0xcf, 0x6c, 0x62, 0xd5, 0x81, 0x1a, 0x44, 0x5d, 0x82, 0x62, 0x07, 0x3a, 0x2b, 0x45,
-	0x0d, 0x50, 0x1c, 0xd7, 0x1a, 0x05, 0x70, 0x93, 0x2b, 0x83, 0xca, 0xb5, 0x46, 0x32, 0x2c, 0x0b,
-	0xaa, 0xa0, 0x90, 0x04, 0x04, 0x89, 0x55, 0xca, 0x5d, 0xd9, 0xd4, 0xaa, 0x80, 0x30, 0xb0, 0xfb,
-	0x84, 0x68, 0xb1, 0x80, 0x10, 0x23, 0x74, 0x02, 0x09, 0x1b, 0x0f, 0xac, 0x4b, 0xcc, 0x31, 0xd2,
-	0x14, 0xe3, 0x8d, 0x65, 0x77, 0x97, 0x68, 0x32, 0x98, 0xf4, 0x74, 0x92, 0x8f, 0x4b, 0x02, 0xf5,
-	0x03, 0x90, 0x49, 0xe4, 0x6d, 0xd8, 0x70, 0x7b, 0x03, 0x6c, 0x8d, 0x5d, 0x4a, 0x5f, 0xf1, 0xc3,
-	0x1d, 0x1f, 0xb2, 0x3c, 0xb6, 0x4d, 0xb7, 0x67, 0x0d, 0x2b, 0xc3, 0x73, 0x4b, 0x7d, 0x0c, 0x73,
-	0x4c, 0xb1, 0x05, 0x51, 0x46, 0x3a, 0xa1, 0xbb, 0xe1, 0xbd, 0x24, 0x27, 0xb7, 0x3d, 0xd8, 0xec,
-	0x70, 0xbb, 0x6c, 0xf8, 0x6e, 0x78, 0x05, 0x62, 0x1e, 0x24, 0xc6, 0x40, 0x10, 0x19, 0x99, 0xee,
-	0x05, 0x85, 0x8a, 0x31, 0x28, 0xf5, 0x33, 0xf0, 0x09, 0x61, 0xc1, 0x3c, 0xda, 0x86, 0x75, 0xeb,
-	0xfc, 0xdc, 0xc1, 0x2e, 0x75, 0x14, 0xf1, 0xa5, 0x7d, 0x3c, 0xec, 0xba, 0x17, 0x94, 0x0b, 0xb9,
-	0x54, 0xfd, 0x08, 0x66, 0x18, 0xe1, 0x5d, 0x48, 0x30, 0x6a, 0x69, 0xf5, 0x86, 0xe7, 0x96, 0x93,
-	0x0d, 0xdd, 0x5d, 0xdb, 0x8b, 0x1f, 0x6e, 0xfb, 0x6b, 0x65, 0x8a, 0x74, 0xa5, 0x63, 0x98, 0x0f,
-	0xfc, 0xf7, 0x61, 0xd3, 0xec, 0xe2, 0xa1, 0xdb, 0xea, 0x75, 0xe8, 0xa2, 0xe2, 0x87, 0x19, 0xdf,
-	0xb6, 0x40, 0x66, 0x2a, 0xe5, 0x62, 0x9a, 0xf8, 0x9e, 0x4e, 0xf2, 0x1b, 0x5c, 0x80, 0xde, 0x23,
-	0xc4, 0x28, 0x48, 0x22, 0x4c, 0x5d, 0x22, 0xdf, 0x4c, 0xa0, 0xf3, 0x35, 0x7f, 0x05, 0x68, 0x9e,
-	0x2a, 0x7e, 0x0c, 0xc7, 0x23, 0x98, 0x61, 0x8d, 0xeb, 0xf9, 0x7c, 0x07, 0x36, 0x04, 0xc7, 0xbc,
-	0xc8, 0xe3, 0x97, 0x30, 0xcb, 0x2a, 0xff, 0x73, 0x97, 0x06, 0xac, 0xa0, 0x97, 0x9f, 0xc0, 0xa6,
-	0x47, 0x60, 0xcc, 0x7b, 0x20, 0x5c, 0xfd, 0xcc, 0xc1, 0xe3, 0x2b, 0x06, 0xfa, 0x10, 0xe6, 0x19,
-	0xe5, 0x3d, 0xd8, 0x1c, 0x98, 0xed, 0x8b, 0xde, 0x10, 0x8b, 0x5b, 0xb6, 0xe5, 0x63, 0x9d, 0xb2,
-	0x99, 0x4a, 0x99, 0x03, 0x7c, 0x02, 0x73, 0xdc, 0xf1, 0x52, 0xf6, 0x4d, 0xf0, 0x39, 0xa3, 0x02,
-	0x49, 0x4a, 0x16, 0x2d, 0x1b, 0x7f, 0x39, 0xc6, 0x8e, 0xcb, 0xbf, 0xe4, 0x8e, 0x6f, 0xcd, 0x72,
-	0x29, 0xaa, 0xad, 0x33, 0x9d, 0xe2, 0x36, 0xdf, 0xd2, 0x84, 0x2c, 0x55, 0xdf, 0x00, 0x99, 0x43,
-	0x48, 0x34, 0xda, 0x16, 0xdf, 0x1a, 0x1e, 0x8d, 0xbb, 0x7f, 0x8b, 0x40, 0x84, 0x24, 0x39, 0x28,
-	0x0e, 0x1b, 0xcd, 0xda, 0xa3, 0x5a, 0xfd, 0x69, 0x4d, 0xb9, 0x81, 0x52, 0x00, 0xc7, 0x5a, 0xa3,
-	0x75, 0xa2, 0x15, 0xaa, 0x8d, 0x13, 0x25, 0x84, 0x92, 0x10, 0x23, 0xe3, 0xa3, 0x6a, 0xe1, 0xd8,
-	0x50, 0xc2, 0x28, 0x0d, 0x71, 0x32, 0x3c, 0xd3, 0x74, 0xa3, 0x52, 0xaf, 0x29, 0x6b, 0x42, 0x70,
-	0xaa, 0x35, 0xf4, 0x4a, 0xc9, 0x50, 0x22, 0xe8, 0x26, 0x64, 0x88, 0xa0, 0x5a, 0x3f, 0x3e, 0xae,
-	0xd4, 0x8e, 0x5b, 0x55, 0xed, 0x4c, 0xab, 0x2a, 0x51, 0x22, 0x36, 0xe6, 0xc4, 0xeb, 0xc4, 0x5d,
-	0xb5, 0x62, 0x34, 0x5a, 0x47, 0x95, 0xaa, 0x66, 0x28, 0x1b, 0xc4, 0x9d, 0xae, 0x15, 0xca, 0x74,
-	0xac, 0x6c, 0x0a, 0xef, 0x46, 0xa3, 0xd0, 0xd0, 0x94, 0x98, 0x58, 0x5c, 0xe1, 0x58, 0xab, 0x35,
-	0x0c, 0x05, 0x10, 0x82, 0x14, 0x5d, 0x9c, 0x5e, 0x38, 0xd5, 0x9e, 0xd6, 0xf5, 0x47, 0x86, 0x12,
-	0x47, 0x19, 0x48, 0x12, 0x99, 0xf6, 0x33, 0xad, 0xd4, 0x6c, 0xd4, 0x75, 0x43, 0x49, 0x08, 0x94,
-	0x46, 0xc1, 0x78, 0x64, 0x28, 0x49, 0x31, 0xd4, 0xeb, 0xc4, 0x65, 0x4a, 0x7c, 0xc1, 0x53, 0xad,
-	0x72, 0x7c, 0xd2, 0x30, 0x94, 0x34, 0x41, 0x6d, 0x3e, 0x2e, 0x17, 0x1a, 0x9a, 0x27, 0x53, 0x84,
-	0xe7, 0xd3, 0x82, 0xd1, 0xd0, 0x74, 0x25, 0x43, 0x30, 0x8c, 0x66, 0xd1, 0x28, 0xe9, 0x95, 0xa2,
-	0xa6, 0x20, 0xf2, 0x75, 0xba, 0x66, 0x68, 0xfa, 0x99, 0xd6, 0xd2, 0x35, 0xa3, 0xde, 0xd4, 0x4b,
-	0x9a, 0xa1, 0x6c, 0xa1, 0x5b, 0xb0, 0xd5, 0xac, 0xcd, 0x4f, 0x6c, 0x13, 0x17, 0x25, 0x5d, 0x23,
-	0x2e, 0xce, 0xea, 0xd5, 0xe6, 0xa9, 0x66, 0x28, 0x37, 0xd1, 0x16, 0xa4, 0xcb, 0x9a, 0xd1, 0xd0,
-	0xeb, 0x9f, 0x7b, 0xc2, 0x1d, 0xa4, 0xc2, 0x0e, 0xf3, 0x5b, 0xa9, 0x35, 0xb4, 0x5a, 0xa1, 0x56,
-	0xd2, 0xe8, 0x66, 0x34, 0x0d, 0xe5, 0x16, 0xba, 0x03, 0xd9, 0xb9, 0xb9, 0xd2, 0x89, 0x56, 0x6e,
-	0x56, 0x35, 0x25, 0x8b, 0xf2, 0x70, 0x9b, 0x7f, 0xc5, 0x42, 0x85, 0xd7, 0xe8, 0x89, 0x34, 0x0a,
-	0x7a, 0x00, 0x40, 0x51, 0xd1, 0x36, 0x28, 0x46, 0xa3, 0xfe, 0x38, 0x20, 0xbd, 0x2d, 0xf6, 0xec,
-	0x49, 0xb3, 0xde, 0x28, 0x28, 0x77, 0xe8, 0xe7, 0x7b, 0xc3, 0xd7, 0x91, 0x02, 0x09, 0x5d, 0x3b,
-	0xad, 0x9f, 0x69, 0x5c, 0x92, 0xdb, 0x9d, 0xbc, 0x45, 0xde, 0x02, 0x67, 0x64, 0x0d, 0x1d, 0x8c,
-	0x0e, 0x03, 0xf9, 0xf6, 0xfc, 0x3b, 0x2a, 0x14, 0xe5, 0x9c, 0xfb, 0x08, 0x80, 0xe4, 0xdc, 0x17,
-	0xd8, 0xec, 0xbb, 0x17, 0x3c, 0xe5, 0xbe, 0xb7, 0xdc, 0xf2, 0x18, 0xbb, 0x27, 0x54, 0x95, 0x65,
-	0xb6, 0xde, 0x10, 0x95, 0x20, 0x46, 0x70, 0xce, 0xfb, 0x66, 0xd7, 0xe1, 0xc9, 0xf6, 0xee, 0x4a,
-	0x98, 0x23, 0xa2, 0xc9, 0x1e, 0x73, 0x31, 0x42, 0x15, 0x56, 0x00, 0x5c, 0x62, 0xdb, 0x21, 0xcf,
-	0x64, 0x64, 0x49, 0x02, 0x26, 0xc3, 0x9c, 0x31, 0x5d, 0xaf, 0x08, 0xe0, 0x63, 0x01, 0x25, 0x6a,
-	0x89, 0xe8, 0x15, 0xa0, 0x96, 0xd5, 0x13, 0x9f, 0x43, 0xa6, 0x3b, 0x57, 0x4f, 0xb0, 0xb4, 0xfb,
-	0x9d, 0x95, 0x80, 0xf3, 0x35, 0xc5, 0x8c, 0x90, 0xec, 0xbe, 0x54, 0x53, 0x6c, 0xbc, 0x68, 0xf7,
-	0x97, 0xd6, 0x15, 0x25, 0xb9, 0xae, 0xd8, 0x7c, 0xd1, 0xee, 0x2f, 0xa9, 0x2d, 0xf8, 0x11, 0x3a,
-	0xae, 0xe9, 0x62, 0x9e, 0x4d, 0xaf, 0x3e, 0x42, 0x83, 0x68, 0x7a, 0x47, 0x48, 0x47, 0xe2, 0x3e,
-	0xd1, 0x27, 0x4a, 0xa4, 0xd0, 0xab, 0xef, 0x13, 0x7d, 0xa2, 0x1c, 0xef, 0x3e, 0xb1, 0x21, 0xd2,
-	0x21, 0x45, 0xef, 0x93, 0x6d, 0x0e, 0xf0, 0x57, 0x96, 0xfd, 0x85, 0xc3, 0xf3, 0xe5, 0xb7, 0x57,
-	0x5f, 0x2a, 0x4f, 0x9d, 0xe5, 0xf8, 0x01, 0x11, 0xaa, 0x43, 0x92, 0x60, 0xe2, 0x5f, 0xe1, 0xf6,
-	0xd8, 0xb5, 0x6c, 0x67, 0x69, 0x5e, 0x2c, 0x43, 0x6a, 0x42, 0xbb, 0xa8, 0x10, 0xf6, 0x97, 0x25,
-	0x62, 0xc7, 0x5c, 0xd3, 0xf9, 0xc2, 0xe1, 0xc9, 0xf0, 0xea, 0x1d, 0x6b, 0x10, 0x4d, 0x6f, 0xc7,
-	0xe8, 0x48, 0x80, 0x90, 0x77, 0xc3, 0xe1, 0x29, 0xf0, 0x6a, 0x10, 0x9d, 0x68, 0x7a, 0x20, 0x74,
-	0x24, 0xae, 0xbb, 0x28, 0x0a, 0xd3, 0x57, 0xb8, 0xee, 0xa2, 0x2a, 0x14, 0xd7, 0x5d, 0x24, 0x80,
-	0xfc, 0x04, 0x99, 0x45, 0x56, 0xb9, 0xc2, 0x09, 0x9e, 0x52, 0x91, 0x77, 0x82, 0x6c, 0x88, 0x2e,
-	0x60, 0x87, 0xe1, 0x48, 0xb5, 0x8f, 0x6b, 0xba, 0x63, 0x27, 0x9b, 0xa1, 0x98, 0xfb, 0x2f, 0xc0,
-	0xf4, 0x93, 0x0f, 0x6a, 0x55, 0xcc, 0x4e, 0x27, 0xf9, 0xed, 0x45, 0x33, 0x68, 0x08, 0xd9, 0x39,
-	0x4f, 0x22, 0x49, 0x41, 0xd4, 0xd7, 0xff, 0x5f, 0xd9, 0x97, 0x48, 0x5b, 0xd4, 0xe9, 0x24, 0xbf,
-	0xb3, 0x78, 0x4e, 0x9c, 0x18, 0x2b, 0x38, 0xb6, 0xae, 0x70, 0x62, 0x52, 0xe1, 0x22, 0x46, 0xea,
-	0x2e, 0x48, 0xec, 0x79, 0x13, 0x36, 0x18, 0x03, 0x3f, 0xa7, 0xa9, 0xc3, 0x26, 0x4f, 0x5a, 0x0e,
-	0xc0, 0xe7, 0xc6, 0x7b, 0x10, 0x65, 0xe4, 0xca, 0x52, 0x9d, 0x94, 0xef, 0x90, 0xcc, 0x73, 0x83,
-	0x1a, 0xc8, 0x1c, 0xf8, 0x29, 0x24, 0x38, 0x95, 0xd2, 0x5c, 0x9e, 0xa7, 0x39, 0x37, 0x7d, 0x4b,
-	0xae, 0x48, 0x72, 0xf9, 0xe2, 0x16, 0xcf, 0x6f, 0xe2, 0x92, 0x70, 0xbe, 0x26, 0x12, 0x7c, 0xca,
-	0x16, 0xa1, 0x48, 0xf9, 0x16, 0x9d, 0xe0, 0xcb, 0x78, 0x0b, 0xe6, 0x98, 0x6e, 0x51, 0x4d, 0xa4,
-	0x1e, 0xc9, 0x95, 0xce, 0x87, 0x00, 0x84, 0xbe, 0x02, 0x65, 0x87, 0x94, 0xa5, 0x12, 0x25, 0xba,
-	0xd0, 0x0c, 0x5f, 0x68, 0x4c, 0x48, 0x1c, 0xf5, 0x30, 0x58, 0x10, 0x39, 0xbd, 0x5f, 0xb3, 0x14,
-	0x4c, 0x94, 0x3e, 0x08, 0x22, 0x1d, 0xd3, 0x35, 0x69, 0x39, 0x94, 0xa0, 0xb2, 0x90, 0xfa, 0xa7,
-	0x30, 0xf8, 0xac, 0x15, 0x08, 0xe4, 0xd0, 0x35, 0x03, 0x79, 0x8e, 0x5e, 0xc2, 0xaf, 0x48, 0x2f,
-	0xf3, 0x1c, 0xb8, 0xf6, 0xca, 0x1c, 0x18, 0xe4, 0xe7, 0xc8, 0x75, 0xf9, 0x59, 0xfd, 0x63, 0x04,
-	0x24, 0xb6, 0x7e, 0x08, 0xeb, 0x1c, 0x91, 0x9d, 0xdb, 0x3b, 0x57, 0x40, 0x64, 0xc5, 0x0a, 0xbf,
-	0x09, 0xff, 0x5c, 0x83, 0x28, 0x1d, 0xa3, 0x9f, 0x02, 0xf0, 0xfa, 0xc6, 0xbf, 0xb2, 0x5b, 0xb3,
-	0x15, 0x4e, 0xe0, 0x1e, 0x78, 0x22, 0x52, 0xe2, 0x9a, 0x6d, 0xb7, 0x77, 0x89, 0xe9, 0x49, 0xf3,
-	0x28, 0x22, 0xc1, 0x25, 0x32, 0x8a, 0x35, 0xa9, 0x4a, 0xce, 0xc0, 0xda, 0xa8, 0xd7, 0xa1, 0x5b,
-	0x20, 0x44, 0x0f, 0x21, 0x6d, 0xe3, 0x6e, 0x8f, 0x2c, 0x18, 0x77, 0x5a, 0xa4, 0xfe, 0xe7, 0x89,
-	0x83, 0x74, 0x0f, 0x1b, 0xbd, 0x01, 0xbb, 0x87, 0xb4, 0xe5, 0xa3, 0x7b, 0xea, 0x44, 0x8e, 0x4a,
-	0x90, 0xb1, 0xf1, 0x2c, 0xc4, 0xfa, 0x52, 0x08, 0xde, 0x3a, 0xb3, 0x67, 0x41, 0xd2, 0xae, 0xe5,
-	0x9a, 0xfd, 0x40, 0x47, 0x6e, 0x59, 0xcd, 0xb6, 0xc3, 0x77, 0x21, 0xd5, 0x20, 0x26, 0x7e, 0x35,
-	0xfc, 0x08, 0xb6, 0xcc, 0x7e, 0xdf, 0x6a, 0x9b, 0x2e, 0xee, 0x04, 0xfa, 0x6f, 0xcb, 0x80, 0x54,
-	0x0e, 0x84, 0x0a, 0xc2, 0xcc, 0x07, 0x3b, 0x86, 0x8c, 0x75, 0x7e, 0x4e, 0xbf, 0xc8, 0x87, 0x8a,
-	0x2d, 0x85, 0xca, 0x72, 0x28, 0xa5, 0xce, 0x8c, 0x3c, 0x20, 0xf5, 0xdf, 0xeb, 0x30, 0x73, 0x1f,
-	0x1f, 0x01, 0x48, 0xf7, 0x9b, 0xdd, 0x9e, 0x07, 0x57, 0xbc, 0xdf, 0xfb, 0xde, 0x9f, 0xfc, 0xfc,
-	0xfa, 0xb0, 0xdd, 0xb6, 0x06, 0xa3, 0x3e, 0x26, 0x1f, 0x2d, 0xc1, 0x86, 0xaf, 0x0b, 0x7b, 0x9b,
-	0x7f, 0xc9, 0x56, 0x49, 0xc0, 0x4a, 0x4b, 0xd7, 0x61, 0xdb, 0xc6, 0x6d, 0xeb, 0x92, 0xee, 0x4b,
-	0x20, 0x48, 0x89, 0xb7, 0x5b, 0x12, 0x75, 0x89, 0x39, 0x7a, 0xe8, 0x1e, 0xa6, 0x2e, 0x8c, 0x7d,
-	0x4c, 0xf5, 0xaf, 0x11, 0x88, 0x79, 0x43, 0x74, 0x04, 0x29, 0x0f, 0x57, 0x8e, 0x87, 0xa5, 0xd8,
-	0x37, 0x39, 0x76, 0x32, 0x20, 0x5e, 0x12, 0x17, 0xb7, 0x20, 0xd6, 0xb6, 0x86, 0x43, 0xdc, 0x76,
-	0x71, 0x87, 0x46, 0xc6, 0xe6, 0xf2, 0x30, 0x88, 0xbc, 0x7a, 0x18, 0x44, 0x5f, 0x3a, 0x0c, 0x32,
-	0xe3, 0xe1, 0x4b, 0xc6, 0x52, 0x73, 0x38, 0x03, 0xf2, 0x26, 0x6d, 0x85, 0x61, 0x5b, 0x84, 0x50,
-	0xda, 0xb7, 0xa4, 0x97, 0xd3, 0xfb, 0xe5, 0x21, 0xd5, 0x1b, 0x12, 0x92, 0xc0, 0x2d, 0xae, 0xce,
-	0x02, 0x45, 0x6a, 0xd1, 0x55, 0xd8, 0x3c, 0xb3, 0xf2, 0xf6, 0x59, 0x96, 0x2e, 0x0d, 0xba, 0xd8,
-	0x7f, 0x2f, 0xe8, 0xe0, 0x1a, 0x41, 0xf7, 0x97, 0x30, 0x04, 0xdf, 0x95, 0x13, 0x88, 0xf9, 0x8f,
-	0x14, 0x0b, 0xb9, 0x83, 0xab, 0x3d, 0x52, 0xfb, 0xe2, 0x2f, 0xbe, 0x6f, 0xcf, 0x40, 0xb1, 0xec,
-	0xd1, 0x85, 0x39, 0x0c, 0xbc, 0x7a, 0xd7, 0x02, 0xbc, 0xc5, 0xd7, 0x9f, 0xae, 0x53, 0x40, 0x4f,
-	0x43, 0xfd, 0x6d, 0x08, 0x36, 0xc5, 0x08, 0x95, 0x20, 0x29, 0x3c, 0xc9, 0x01, 0x21, 0x9d, 0x93,
-	0x50, 0x65, 0x97, 0x42, 0x34, 0x6d, 0x64, 0x69, 0xa0, 0x85, 0x16, 0xbe, 0x6a, 0x0b, 0x4d, 0xfd,
-	0x3e, 0x04, 0xfe, 0x5b, 0xff, 0x11, 0x24, 0x47, 0x78, 0xd8, 0x21, 0xf5, 0xa0, 0x48, 0x1a, 0x66,
-	0xb2, 0x32, 0xa2, 0xe7, 0xfb, 0x7f, 0xcc, 0x94, 0x99, 0xf1, 0x3d, 0x88, 0x32, 0xa3, 0xf0, 0x42,
-	0x23, 0x2f, 0x08, 0x7d, 0x2e, 0x63, 0xea, 0x6b, 0x0b, 0xd5, 0xbd, 0x17, 0xc0, 0xe3, 0x28, 0xe6,
-	0xe5, 0x43, 0x48, 0xf0, 0xb3, 0x61, 0xd6, 0x91, 0x85, 0xd6, 0x5e, 0xda, 0xc7, 0xb6, 0x9d, 0x9a,
-	0xf2, 0xbc, 0x93, 0x55, 0x16, 0xf7, 0x20, 0xca, 0x4a, 0x93, 0xb9, 0x2f, 0x24, 0xf3, 0xfc, 0xf9,
-	0x3e, 0x05, 0xb9, 0x82, 0x78, 0x78, 0xf5, 0x16, 0xb2, 0xef, 0xdf, 0x97, 0x39, 0xea, 0x67, 0x20,
-	0xd5, 0x11, 0x1f, 0x43, 0x9c, 0xdd, 0x20, 0x71, 0xe0, 0xa1, 0x20, 0x18, 0x53, 0x63, 0x5c, 0xc4,
-	0xc1, 0xc0, 0x97, 0xa9, 0x4f, 0x60, 0x71, 0xd1, 0xf0, 0x21, 0xac, 0xf3, 0x72, 0x84, 0x5d, 0xa1,
-	0x7b, 0x8b, 0xfb, 0x98, 0xa5, 0xfe, 0x98, 0x40, 0xf1, 0x1a, 0x84, 0x7d, 0xed, 0x63, 0x58, 0x56,
-	0x19, 0x5c, 0xb7, 0x3d, 0xfa, 0x31, 0x78, 0x85, 0x01, 0x7a, 0x30, 0xb3, 0xb0, 0xdb, 0x0b, 0xdb,
-	0x92, 0xf2, 0x82, 0x76, 0xbf, 0x0d, 0xff, 0x98, 0x2d, 0xc6, 0x60, 0x2f, 0x71, 0x3d, 0xd8, 0x4b,
-	0xdc, 0x08, 0xf6, 0x12, 0x37, 0x67, 0x7a, 0x89, 0xb1, 0x05, 0xbd, 0x44, 0x98, 0xef, 0x25, 0xc6,
-	0x83, 0xbd, 0xc4, 0x44, 0xb0, 0x97, 0x98, 0x9c, 0xed, 0x25, 0xa6, 0x66, 0xfa, 0x86, 0xe9, 0x15,
-	0xfd, 0x3c, 0x65, 0x65, 0x3f, 0x2f, 0x13, 0xec, 0xc0, 0xa1, 0xdd, 0x3f, 0x6f, 0x40, 0x54, 0xbb,
-	0x24, 0x89, 0xe9, 0x41, 0xa0, 0xbb, 0x76, 0x7b, 0x8e, 0xdf, 0xa8, 0x96, 0xdc, 0x5a, 0xfb, 0x00,
-	0xc0, 0x19, 0x3f, 0x73, 0xda, 0x76, 0xef, 0x19, 0xee, 0xf0, 0x62, 0xe0, 0x8d, 0x25, 0x66, 0x86,
-	0xa7, 0x88, 0x4a, 0x00, 0x24, 0x60, 0x5b, 0x66, 0xa7, 0x43, 0xdf, 0xe5, 0xc5, 0x3f, 0x82, 0x73,
-	0x6f, 0xa6, 0xf3, 0x45, 0x81, 0xe8, 0xb1, 0xf4, 0xdc, 0x1b, 0xa2, 0x0a, 0x24, 0x28, 0x08, 0xfb,
-	0x01, 0xb2, 0xc3, 0xdf, 0xef, 0xdd, 0x15, 0x30, 0xac, 0xe7, 0xdf, 0x61, 0xbf, 0x8b, 0x49, 0x02,
-	0x74, 0x04, 0x71, 0xc6, 0x96, 0x6c, 0x41, 0xd1, 0x95, 0xdf, 0x41, 0xc9, 0x92, 0xad, 0x88, 0xf6,
-	0x15, 0xfc, 0x31, 0xaa, 0x42, 0x92, 0xe1, 0xb0, 0xdf, 0xeb, 0x3a, 0x4b, 0x7f, 0xb9, 0x96, 0x90,
-	0x58, 0x6f, 0xbd, 0xc3, 0x6a, 0x23, 0x59, 0xa2, 0x3e, 0x01, 0x08, 0xec, 0x99, 0xd4, 0xba, 0x0a,
-	0x5d, 0xaf, 0x75, 0xa5, 0x1e, 0x80, 0xb4, 0x81, 0xbb, 0x10, 0x21, 0x1b, 0xc8, 0x63, 0x70, 0x21,
-	0x45, 0xab, 0xbf, 0x0f, 0x41, 0x60, 0xa7, 0x3e, 0x85, 0x84, 0x94, 0xae, 0x75, 0xe6, 0xeb, 0x6d,
-	0x3f, 0x2b, 0x2b, 0xfb, 0xc4, 0x27, 0x09, 0xd1, 0xbb, 0x5e, 0xec, 0xb3, 0x77, 0x69, 0x3b, 0xe8,
-	0x57, 0x0e, 0x7a, 0xb4, 0x07, 0x51, 0xf6, 0xbd, 0x24, 0x75, 0x4b, 0xc9, 0x35, 0x92, 0x50, 0xc5,
-	0xbc, 0xd4, 0xad, 0x82, 0x7c, 0x0e, 0x9f, 0x40, 0x94, 0x9e, 0x03, 0x5f, 0xde, 0x4b, 0x97, 0x6a,
-	0x65, 0x08, 0x9c, 0xc4, 0xf5, 0x7e, 0x90, 0xda, 0xed, 0x2d, 0x61, 0x2c, 0xaf, 0xdb, 0x5f, 0x56,
-	0x42, 0x64, 0x4c, 0x08, 0xa0, 0x55, 0x28, 0x97, 0xb5, 0xb2, 0x12, 0x46, 0x0a, 0x24, 0xe8, 0x98,
-	0x35, 0xdc, 0xcb, 0x8c, 0xb3, 0x28, 0xb3, 0x70, 0x95, 0x08, 0xa1, 0x12, 0x26, 0x60, 0x8d, 0xf2,
-	0xb2, 0x12, 0x2d, 0xbe, 0xff, 0xcd, 0x77, 0xb9, 0xd0, 0xb7, 0xdf, 0xe5, 0x6e, 0xfc, 0xf0, 0x5d,
-	0x2e, 0xf4, 0x9b, 0x69, 0x2e, 0xf4, 0x87, 0x69, 0x2e, 0xf4, 0xf5, 0x34, 0x17, 0xfa, 0x66, 0x9a,
-	0x0b, 0xfd, 0x7d, 0x9a, 0x0b, 0x7d, 0x3f, 0xcd, 0x85, 0x7e, 0x98, 0xe6, 0x6e, 0xfc, 0xee, 0x1f,
-	0xb9, 0x1b, 0x3f, 0x5f, 0x67, 0xbb, 0xf0, 0x9f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xa8, 0x57, 0x0c,
-	0x89, 0xe7, 0x23, 0x00, 0x00,
+	// 2516 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x59, 0x4b, 0x73, 0x13, 0xd9,
+	0xf5, 0x47, 0xb2, 0x64, 0x4b, 0x47, 0xaf, 0xf6, 0xb5, 0x01, 0x8d, 0xe0, 0x2f, 0x1b, 0x7b, 0x1e,
+	0xe6, 0x3f, 0xb1, 0x3c, 0x36, 0x78, 0x08, 0x21, 0x0c, 0xc8, 0x56, 0x63, 0xab, 0x90, 0x2d, 0x50,
+	0x4b, 0x26, 0xc9, 0x46, 0xd5, 0xa8, 0xaf, 0x65, 0x0d, 0x92, 0x5a, 0x74, 0x5f, 0x99, 0x90, 0x55,
+	0x3e, 0x42, 0x36, 0xf9, 0x02, 0xa9, 0x4a, 0x55, 0x3e, 0xca, 0x54, 0x65, 0x93, 0xec, 0xa6, 0xb2,
+	0xa0, 0x06, 0x67, 0x93, 0x25, 0x8b, 0x2c, 0x52, 0x59, 0xa5, 0xee, 0x4b, 0x7d, 0xdb, 0x7a, 0x58,
+	0x26, 0x95, 0xd9, 0x80, 0xfb, 0xf6, 0xef, 0x77, 0x6e, 0xdf, 0xd3, 0xe7, 0xf1, 0xeb, 0x23, 0xb8,
+	0x69, 0xf7, 0xb0, 0x63, 0x12, 0xdb, 0xd9, 0xe8, 0x98, 0x2e, 0xc1, 0xf2, 0xbf, 0x5c, 0xcf, 0xb1,
+	0x89, 0x8d, 0x52, 0x1d, 0xec, 0xda, 0x6e, 0xee, 0x74, 0x33, 0xc7, 0x97, 0x33, 0x9b, 0xcd, 0x16,
+	0x39, 0xe9, 0xbf, 0xcc, 0x35, 0xec, 0xce, 0x86, 0xdd, 0xb5, 0x1c, 0xfc, 0xed, 0xba, 0xdb, 0xb1,
+	0xdb, 0xe6, 0x06, 0x03, 0xae, 0x37, 0xed, 0xf5, 0x13, 0x42, 0x7a, 0xfc, 0x8a, 0xdb, 0xc8, 0x3c,
+	0x9e, 0x8e, 0x32, 0x78, 0x8e, 0xd7, 0x7d, 0x9b, 0x98, 0xfc, 0x5f, 0x61, 0xa1, 0x74, 0x49, 0x0b,
+	0x1d, 0xb3, 0xd5, 0x25, 0xb8, 0x6b, 0x76, 0x1b, 0x58, 0xfd, 0x5b, 0x58, 0x5b, 0x57, 0xac, 0x35,
+	0xed, 0xa6, 0xbd, 0xc1, 0x96, 0x5f, 0xf6, 0x8f, 0xd9, 0x15, 0xbb, 0x60, 0x7f, 0x71, 0xf8, 0xca,
+	0x9f, 0x17, 0x21, 0xb4, 0x6b, 0xb6, 0xdb, 0x28, 0x07, 0x21, 0xf2, 0xb6, 0x87, 0xd3, 0x81, 0xe5,
+	0xc0, 0x5a, 0x72, 0x2b, 0x93, 0x3b, 0xe7, 0x9a, 0x1c, 0x05, 0xe5, 0xaa, 0x6f, 0x7b, 0x78, 0x27,
+	0xf4, 0xdd, 0xbb, 0xa5, 0x2b, 0x68, 0x1b, 0x62, 0x4d, 0x4c, 0xea, 0x1d, 0x4c, 0x9c, 0x56, 0xc3,
+	0x4d, 0x07, 0x97, 0x03, 0x6b, 0xb1, 0xad, 0xe5, 0xd1, 0xb4, 0x3d, 0x4c, 0x0e, 0x38, 0x0e, 0x3d,
+	0x86, 0x79, 0x17, 0x93, 0x7a, 0xdb, 0x6e, 0x36, 0x5b, 0xdd, 0x66, 0xbd, 0x8d, 0x4f, 0x71, 0x3b,
+	0x3d, 0xc3, 0xc8, 0x9f, 0x8d, 0x26, 0x1b, 0x98, 0x94, 0x38, 0xba, 0x44, 0xc1, 0xe8, 0x0e, 0x40,
+	0xbb, 0xe5, 0x92, 0xfa, 0x71, 0xab, 0x8d, 0xdd, 0x74, 0x88, 0x51, 0x97, 0x46, 0x53, 0x4b, 0x2d,
+	0x97, 0x3c, 0xa1, 0x30, 0xb4, 0x09, 0x51, 0x07, 0x9b, 0x16, 0x23, 0xa5, 0xc3, 0x8c, 0x93, 0x1d,
+	0xcd, 0xa9, 0x60, 0xd3, 0xa2, 0x1c, 0xf4, 0x00, 0x92, 0xfd, 0x9e, 0x65, 0x12, 0x5c, 0x7f, 0x83,
+	0x5b, 0xcd, 0x13, 0xe2, 0xa6, 0x67, 0x19, 0x6f, 0x75, 0x34, 0xaf, 0xc6, 0xb0, 0x2f, 0x38, 0x14,
+	0xe5, 0x61, 0xde, 0xc1, 0x2e, 0x76, 0x4e, 0x71, 0xdd, 0xc1, 0xae, 0xdd, 0x77, 0x1a, 0xd8, 0x4d,
+	0xcf, 0x31, 0xfe, 0xe7, 0xe3, 0xf6, 0x65, 0xf0, 0x8a, 0x44, 0x23, 0x1d, 0x16, 0xfa, 0xdd, 0x61,
+	0x23, 0x11, 0x66, 0x64, 0x6d, 0xcc, 0x43, 0x48, 0x82, 0x67, 0xe6, 0x01, 0x24, 0x1b, 0x0e, 0xa6,
+	0xc7, 0x38, 0xb5, 0xdb, 0xfd, 0x0e, 0x76, 0xd3, 0xd1, 0x49, 0xc7, 0xd8, 0x65, 0xd8, 0x23, 0x0e,
+	0x45, 0x0f, 0x21, 0x65, 0x61, 0x97, 0x38, 0xf6, 0xdb, 0x01, 0x1b, 0x18, 0xfb, 0xd3, 0xd1, 0xec,
+	0x02, 0x07, 0x4b, 0x7a, 0x15, 0x6e, 0x08, 0x17, 0x2a, 0x71, 0x5a, 0x77, 0x1b, 0x27, 0xd8, 0xea,
+	0xb7, 0x71, 0x3a, 0xc6, 0x4c, 0x6d, 0x4c, 0xf2, 0xe7, 0x81, 0xc7, 0x33, 0x04, 0x8d, 0xfa, 0xd6,
+	0x25, 0xa6, 0x43, 0x54, 0xa3, 0xe9, 0xf8, 0x24, 0xdf, 0x1a, 0x14, 0xae, 0x98, 0x42, 0x8f, 0x40,
+	0x73, 0x89, 0xdd, 0xf3, 0x59, 0x48, 0x4c, 0x0c, 0x42, 0x62, 0xf7, 0x54, 0x03, 0x9b, 0x10, 0xa5,
+	0x61, 0xcc, 0xd2, 0x38, 0x9d, 0x9c, 0x14, 0x4f, 0x06, 0x26, 0xcf, 0x29, 0x0a, 0xdd, 0x83, 0xb8,
+	0x83, 0x3b, 0xf6, 0x29, 0x16, 0xac, 0x14, 0x63, 0xdd, 0x1a, 0x17, 0x0d, 0x14, 0xc9, 0x88, 0x99,
+	0x6d, 0x00, 0x25, 0x81, 0xbe, 0x80, 0x39, 0xd2, 0xea, 0x60, 0xbb, 0x4f, 0x58, 0xaa, 0xc6, 0xb6,
+	0xae, 0x79, 0x16, 0x0a, 0x7d, 0xc7, 0x24, 0x2d, 0xbb, 0x5b, 0xec, 0x1e, 0xdb, 0x99, 0x23, 0x48,
+	0x9d, 0x4f, 0x9d, 0x05, 0x08, 0xf3, 0x84, 0x0b, 0x2c, 0x07, 0xd7, 0x12, 0x22, 0x91, 0x73, 0x10,
+	0xb1, 0x04, 0x2f, 0x1d, 0x5c, 0x0e, 0x8e, 0xb7, 0xc8, 0xf1, 0x99, 0x25, 0x88, 0x7a, 0x79, 0x85,
+	0x20, 0xd4, 0x33, 0xc9, 0x09, 0x33, 0x18, 0x15, 0x80, 0x02, 0x44, 0x06, 0x49, 0x34, 0xe2, 0x3e,
+	0x5a, 0x84, 0x59, 0xfb, 0xf8, 0xd8, 0xc5, 0x84, 0x6d, 0x17, 0x12, 0xab, 0x49, 0x98, 0x6d, 0xe3,
+	0x6e, 0x93, 0x9c, 0xb0, 0x6a, 0x10, 0xca, 0xe4, 0x21, 0xe1, 0x4f, 0xa9, 0xaf, 0x20, 0xce, 0x13,
+	0xb1, 0xde, 0xea, 0x1e, 0xdb, 0x6e, 0x3a, 0xb0, 0x3c, 0xb3, 0x16, 0xdb, 0x5a, 0xf4, 0x9e, 0x95,
+	0x03, 0x95, 0x27, 0xed, 0x83, 0x36, 0x94, 0x55, 0x77, 0x21, 0x62, 0x36, 0x71, 0x97, 0xd4, 0x5b,
+	0x16, 0x7b, 0xa8, 0xd8, 0xd6, 0xbc, 0x67, 0x21, 0x4f, 0xef, 0x14, 0x0b, 0x3b, 0x29, 0x4a, 0x3f,
+	0x7b, 0xb7, 0x34, 0x27, 0x16, 0xd0, 0x97, 0xb4, 0x7c, 0xc8, 0x0c, 0x0c, 0xb2, 0x8d, 0x91, 0x47,
+	0x93, 0xd6, 0xc5, 0xb6, 0x6f, 0x00, 0x8d, 0xc8, 0xc3, 0x1f, 0x61, 0xe3, 0x1e, 0x24, 0xfc, 0xe9,
+	0xfb, 0x71, 0x7b, 0xde, 0x86, 0x39, 0x99, 0xec, 0x17, 0xed, 0xf8, 0x1a, 0x92, 0xe7, 0x52, 0xfe,
+	0x7f, 0xbe, 0xa5, 0x01, 0x9f, 0x8c, 0x2f, 0x0d, 0x5f, 0x43, 0x64, 0x50, 0x5d, 0xf8, 0xee, 0xbe,
+	0xac, 0xf4, 0x7a, 0xa5, 0x64, 0x08, 0xa3, 0x8f, 0x40, 0x1b, 0xaa, 0x11, 0x5f, 0x42, 0xa4, 0x63,
+	0x36, 0x4e, 0x5a, 0x5d, 0x2c, 0x63, 0x6d, 0xc1, 0xb3, 0x75, 0xc0, 0xef, 0x14, 0x0b, 0xc2, 0xc0,
+	0x37, 0x90, 0x3a, 0x5f, 0x22, 0x2e, 0xc5, 0xd7, 0x21, 0x32, 0x28, 0x14, 0xf7, 0x21, 0xc1, 0x2a,
+	0x44, 0xdd, 0xc1, 0xaf, 0xfb, 0xd8, 0x25, 0xe2, 0x24, 0x37, 0x3d, 0x36, 0x57, 0x0f, 0x0c, 0x5d,
+	0xe1, 0x18, 0x61, 0xe6, 0x16, 0xc4, 0x94, 0xca, 0x41, 0xb3, 0xcf, 0xb1, 0x85, 0x2b, 0x44, 0xf6,
+	0xad, 0xfc, 0x2d, 0x04, 0x21, 0xda, 0xc6, 0x51, 0x0c, 0xe6, 0x6a, 0x87, 0x4f, 0x0f, 0xcb, 0x2f,
+	0x0e, 0x35, 0x9a, 0x7d, 0xb0, 0xa7, 0x57, 0xeb, 0xfb, 0x7a, 0xbe, 0x54, 0xdd, 0xd7, 0x02, 0x28,
+	0x01, 0x51, 0x7a, 0xfd, 0xa4, 0x94, 0xdf, 0x33, 0xb4, 0x20, 0x4a, 0x41, 0x8c, 0x5e, 0x1e, 0xe9,
+	0x15, 0xa3, 0x58, 0x3e, 0xd4, 0x66, 0xe4, 0xc2, 0x81, 0x5e, 0xad, 0x14, 0x77, 0x0d, 0x2d, 0x84,
+	0xae, 0xc2, 0x3c, 0x5d, 0x28, 0x95, 0xf7, 0xf6, 0x8a, 0x87, 0x7b, 0xf5, 0x92, 0x7e, 0xa4, 0x97,
+	0xb4, 0x30, 0x5d, 0x36, 0x86, 0x96, 0x67, 0xe9, 0x76, 0xa5, 0xa2, 0x51, 0xad, 0x3f, 0x29, 0x96,
+	0x74, 0x43, 0x9b, 0xa3, 0xdb, 0x55, 0xf4, 0x7c, 0x81, 0x5d, 0x6b, 0x11, 0xb9, 0xbb, 0x51, 0xcd,
+	0x57, 0x75, 0x2d, 0x2a, 0x1f, 0x2e, 0xbf, 0xa7, 0x1f, 0x56, 0x0d, 0x0d, 0x10, 0x82, 0x24, 0x7b,
+	0xb8, 0x4a, 0xfe, 0x40, 0x7f, 0x51, 0xae, 0x3c, 0x35, 0xb4, 0x18, 0x9a, 0x87, 0x04, 0x5d, 0xd3,
+	0x7f, 0xa1, 0xef, 0xd6, 0xaa, 0xe5, 0x8a, 0xa1, 0xc5, 0xa5, 0x95, 0x6a, 0xde, 0x78, 0x6a, 0x68,
+	0x09, 0x79, 0x59, 0x29, 0xd3, 0x2d, 0x93, 0xf2, 0x04, 0x2f, 0xf4, 0xe2, 0xde, 0x7e, 0xd5, 0xd0,
+	0x52, 0xd4, 0x6a, 0xed, 0x59, 0x21, 0x5f, 0xd5, 0x07, 0x6b, 0x9a, 0xdc, 0xf9, 0x20, 0x6f, 0x54,
+	0xf5, 0x8a, 0x36, 0x4f, 0x6d, 0x18, 0xb5, 0x1d, 0x63, 0xb7, 0x52, 0xdc, 0xd1, 0x35, 0x44, 0x4f,
+	0x57, 0xd1, 0x0d, 0xbd, 0x72, 0xa4, 0xd7, 0x2b, 0xba, 0x51, 0xae, 0x55, 0x76, 0x75, 0x43, 0x5b,
+	0x40, 0xd7, 0x61, 0xa1, 0x76, 0x38, 0x7c, 0x63, 0x91, 0x6e, 0xb1, 0x5b, 0xd1, 0xe9, 0x16, 0x47,
+	0xe5, 0x52, 0xed, 0x40, 0x37, 0xb4, 0xab, 0x68, 0x01, 0x52, 0x05, 0xdd, 0xa8, 0x56, 0xca, 0xbf,
+	0x1c, 0x2c, 0x5e, 0x43, 0x19, 0xb8, 0xc6, 0xf7, 0x2d, 0x1e, 0x56, 0xf5, 0xc3, 0xfc, 0xe1, 0xae,
+	0xce, 0x9c, 0x51, 0x33, 0xb4, 0xeb, 0xe8, 0x26, 0xa4, 0x87, 0xee, 0xed, 0xee, 0xeb, 0x85, 0x5a,
+	0x49, 0xd7, 0xd2, 0x68, 0x09, 0x6e, 0x88, 0x53, 0x8c, 0x04, 0x7c, 0xc2, 0xde, 0x48, 0x35, 0x5f,
+	0xf1, 0x19, 0xd0, 0x32, 0x68, 0x11, 0x34, 0xa3, 0x5a, 0x7e, 0xe6, 0x5b, 0xbd, 0x21, 0x7d, 0xf6,
+	0xbc, 0x56, 0xae, 0xe6, 0xb5, 0x9b, 0xec, 0xf8, 0x83, 0xcb, 0xff, 0x43, 0x1a, 0xc4, 0x2b, 0xfa,
+	0x41, 0xf9, 0x48, 0x17, 0x2b, 0xd9, 0x95, 0x3f, 0xdc, 0xa2, 0xb5, 0xdf, 0xed, 0xd9, 0x5d, 0x17,
+	0xa3, 0x2d, 0x9f, 0xa2, 0x1c, 0x6e, 0x8f, 0x12, 0xa8, 0xaa, 0xca, 0x7b, 0x00, 0x54, 0x55, 0x9e,
+	0x60, 0xb3, 0x4d, 0x4e, 0x84, 0xa8, 0x5c, 0x1d, 0xcf, 0xdc, 0xc3, 0x64, 0x9f, 0x41, 0xd1, 0x36,
+	0x44, 0x29, 0xf1, 0xb8, 0x6d, 0x36, 0x5d, 0xa1, 0x27, 0x57, 0x26, 0xf2, 0x9e, 0x50, 0x24, 0xba,
+	0xcf, 0x55, 0xec, 0x29, 0x76, 0x5c, 0xda, 0xff, 0x42, 0x63, 0xc4, 0x8d, 0x4a, 0x3c, 0xe2, 0x58,
+	0x49, 0x95, 0x02, 0x38, 0x3c, 0x05, 0x55, 0xf6, 0xf0, 0x02, 0xcc, 0x37, 0x87, 0x44, 0x30, 0x57,
+	0x97, 0xb7, 0x27, 0x1a, 0xf0, 0x75, 0xf3, 0x7b, 0x3e, 0x21, 0x3c, 0x77, 0x91, 0xaf, 0xbc, 0xa6,
+	0xbd, 0xad, 0x8a, 0xe1, 0xc8, 0x45, 0xbe, 0x1a, 0xf4, 0x72, 0xe1, 0x62, 0x97, 0x98, 0x04, 0x0b,
+	0x11, 0x39, 0xd9, 0xc5, 0x06, 0x45, 0xca, 0x57, 0xca, 0xba, 0x82, 0x94, 0x8f, 0x93, 0x5f, 0x29,
+	0xeb, 0x0a, 0x2e, 0x7a, 0x04, 0x49, 0xf6, 0x4a, 0x1d, 0xb3, 0x83, 0xdf, 0xd8, 0xce, 0x2b, 0x57,
+	0x08, 0xc6, 0x2f, 0x26, 0xbf, 0xd7, 0x01, 0x1c, 0x3d, 0x84, 0x04, 0x35, 0x80, 0x7f, 0x8d, 0x1b,
+	0x7d, 0x62, 0x3b, 0xee, 0x58, 0x91, 0xa8, 0xf2, 0x75, 0x89, 0x96, 0xe7, 0x25, 0xa6, 0xfb, 0xca,
+	0x15, 0xea, 0x70, 0xf2, 0x79, 0xab, 0x14, 0x29, 0x69, 0xb4, 0xf0, 0xba, 0x42, 0x1a, 0x4e, 0xa6,
+	0x55, 0x28, 0x52, 0x86, 0x93, 0xfc, 0xd6, 0x48, 0x4d, 0x11, 0x4e, 0x52, 0x19, 0x09, 0x0f, 0x73,
+	0x44, 0x5a, 0x9b, 0xc2, 0xc3, 0x07, 0x6c, 0x09, 0x1d, 0xc2, 0x35, 0x4e, 0x54, 0xc4, 0x39, 0x31,
+	0x49, 0xdf, 0x4d, 0xcf, 0x33, 0x23, 0xb9, 0x0b, 0x8c, 0x78, 0x0d, 0x98, 0xb1, 0x50, 0x05, 0xd2,
+	0x43, 0xf6, 0x64, 0x3b, 0x46, 0xcc, 0xe2, 0x57, 0x53, 0x5b, 0x94, 0x2d, 0x5d, 0xb8, 0x93, 0x6b,
+	0xe6, 0x85, 0x29, 0xdc, 0xc9, 0x45, 0xf3, 0x0a, 0x44, 0xbd, 0xe2, 0x70, 0x15, 0xe6, 0x78, 0x45,
+	0x79, 0xcb, 0x5a, 0x61, 0x44, 0x74, 0xcb, 0x0d, 0x88, 0x0c, 0x0a, 0xc1, 0x2a, 0x84, 0x79, 0xed,
+	0xe0, 0xad, 0x3a, 0xe9, 0x6d, 0x41, 0xef, 0x0f, 0x64, 0x02, 0x28, 0x05, 0x60, 0x13, 0xe2, 0xa2,
+	0x6e, 0x30, 0x45, 0x2a, 0xda, 0xf4, 0x55, 0x8f, 0x29, 0x80, 0x8a, 0x22, 0x1d, 0x92, 0xf2, 0xb2,
+	0x7a, 0xf0, 0x5d, 0x35, 0x45, 0x20, 0xb0, 0x1b, 0x82, 0xf6, 0x39, 0xa4, 0xf6, 0xa6, 0x90, 0xf2,
+	0x99, 0xfb, 0xaa, 0x34, 0xff, 0x09, 0x00, 0x4d, 0x70, 0x9f, 0x5a, 0x56, 0x64, 0x15, 0x05, 0x29,
+	0x4f, 0xb6, 0xe5, 0x17, 0xed, 0x6e, 0xeb, 0x37, 0x5c, 0x36, 0x48, 0x79, 0x8e, 0x20, 0x64, 0x99,
+	0xc4, 0x64, 0x92, 0x3d, 0xce, 0xd6, 0x02, 0x99, 0x7f, 0x07, 0x98, 0x03, 0x79, 0x9a, 0xfb, 0xb2,
+	0x25, 0x30, 0x75, 0xb6, 0x0c, 0xe5, 0x68, 0xf0, 0x52, 0x39, 0x3a, 0x5c, 0x23, 0x66, 0x2e, 0x57,
+	0x23, 0xfc, 0xd5, 0x29, 0x34, 0x75, 0x75, 0xca, 0xfc, 0x6b, 0x86, 0x45, 0xd8, 0xa0, 0x56, 0xcd,
+	0x0a, 0x13, 0xdc, 0xd1, 0xb7, 0xa7, 0x30, 0xc1, 0xe5, 0xb0, 0xf0, 0xef, 0x1d, 0xd0, 0x1c, 0xdc,
+	0xb0, 0x4f, 0xb1, 0x83, 0x2d, 0xf9, 0x34, 0xc1, 0xf3, 0xaa, 0x91, 0xcb, 0x65, 0xef, 0xa5, 0xfd,
+	0x33, 0x08, 0x61, 0xb6, 0x86, 0xd6, 0x01, 0x84, 0xec, 0xf6, 0x22, 0x71, 0x3c, 0x91, 0x7e, 0x82,
+	0x99, 0x0d, 0xd2, 0x3a, 0xc5, 0xec, 0x7d, 0x8a, 0x7c, 0xa0, 0x69, 0x22, 0x1b, 0xe1, 0x8c, 0xef,
+	0x7b, 0x6d, 0xa6, 0xd7, 0xb2, 0x98, 0x6f, 0xa2, 0x3b, 0x73, 0x67, 0xef, 0x96, 0x66, 0x9e, 0xb1,
+	0x2f, 0x93, 0x94, 0x83, 0x9b, 0x2d, 0x7a, 0x36, 0x6c, 0xd5, 0xe9, 0x27, 0xa9, 0x68, 0x81, 0x4a,
+	0x8c, 0x55, 0x5b, 0x1d, 0x16, 0x63, 0x68, 0x1d, 0xe6, 0x1d, 0x7c, 0x1e, 0x3e, 0x3b, 0x16, 0xbe,
+	0x09, 0x29, 0x62, 0x13, 0xb3, 0xed, 0x9b, 0x9d, 0x4c, 0xfc, 0x2c, 0x40, 0xdb, 0xb0, 0x60, 0xb6,
+	0xdb, 0x76, 0xc3, 0x24, 0xd8, 0xf2, 0x4d, 0x4b, 0x26, 0xd3, 0xee, 0xc0, 0xbc, 0x7d, 0x7c, 0xcc,
+	0x9e, 0xc9, 0x23, 0x45, 0x2f, 0xf8, 0x04, 0xf9, 0x6b, 0x18, 0x12, 0xfe, 0x28, 0x7a, 0x0a, 0xa0,
+	0x84, 0x20, 0x0f, 0x81, 0xcd, 0x29, 0x43, 0x30, 0x37, 0xf8, 0x53, 0x3c, 0x53, 0x0d, 0x16, 0x1b,
+	0x76, 0xa7, 0xd7, 0xc6, 0xf4, 0x28, 0x8a, 0xd9, 0xe0, 0x7f, 0x67, 0xf6, 0x01, 0x2c, 0x7a, 0x11,
+	0xe6, 0x4b, 0x18, 0x6a, 0xf6, 0xba, 0x52, 0x19, 0xe4, 0x3d, 0x25, 0xd2, 0xde, 0xcd, 0x40, 0x74,
+	0xb0, 0x8e, 0xb6, 0x21, 0x39, 0x30, 0xa0, 0x46, 0xdc, 0x64, 0x23, 0x63, 0xa2, 0xee, 0x3a, 0x44,
+	0x1b, 0x76, 0xb7, 0x8b, 0x1b, 0x04, 0x5b, 0x2c, 0xee, 0xe4, 0x8d, 0x11, 0x11, 0x16, 0xba, 0x5c,
+	0x84, 0x4d, 0x0c, 0xc8, 0x7e, 0x77, 0xfa, 0x80, 0xfc, 0x8c, 0x8d, 0x2c, 0xb0, 0x23, 0xe3, 0x30,
+	0xe5, 0x61, 0xca, 0x74, 0x5d, 0x3c, 0xf1, 0x5d, 0x48, 0xb6, 0xba, 0x34, 0x85, 0x70, 0x5d, 0xc0,
+	0x79, 0xfc, 0x29, 0x03, 0x95, 0x22, 0xbf, 0xaf, 0xb2, 0xc6, 0x84, 0x6e, 0xf4, 0x63, 0x42, 0x17,
+	0x2e, 0x20, 0x5d, 0xa7, 0xd2, 0x4f, 0x04, 0x41, 0x3a, 0xa6, 0xf4, 0xc2, 0xdf, 0x07, 0x21, 0xee,
+	0xab, 0xac, 0xfb, 0x10, 0xf5, 0x8a, 0x32, 0x8f, 0xe8, 0x8d, 0xe9, 0x8a, 0x72, 0x4e, 0xfe, 0x25,
+	0xf6, 0x2c, 0x83, 0x66, 0x3b, 0xbd, 0x13, 0xb3, 0xeb, 0xab, 0xf2, 0x1f, 0x6f, 0x30, 0xf3, 0x2d,
+	0x44, 0xe4, 0x0a, 0xba, 0x03, 0x09, 0x69, 0x55, 0x8d, 0x44, 0xc5, 0xe3, 0x12, 0xaa, 0x04, 0xe2,
+	0x6d, 0x65, 0x48, 0x11, 0x1c, 0x37, 0xa4, 0xe0, 0x7b, 0x9d, 0xf1, 0x1e, 0xc7, 0x9b, 0xd5, 0x97,
+	0x90, 0xe8, 0xe1, 0xae, 0x45, 0x35, 0xbb, 0xec, 0x73, 0xe7, 0xc4, 0x02, 0xc5, 0x89, 0x4d, 0x56,
+	0x21, 0xcc, 0x41, 0xc1, 0x09, 0xa0, 0x75, 0x48, 0x79, 0xb9, 0xce, 0xe1, 0x33, 0x13, 0xe0, 0x9f,
+	0x42, 0x5c, 0xb8, 0x92, 0x63, 0x43, 0xa3, 0xb0, 0x68, 0x83, 0x07, 0xb7, 0xd9, 0x38, 0x31, 0x5f,
+	0xb6, 0xb1, 0x80, 0x86, 0xc7, 0x9b, 0x15, 0x42, 0x88, 0xeb, 0xd0, 0x55, 0x08, 0x73, 0xe9, 0x3a,
+	0x74, 0x36, 0x7a, 0x7f, 0x30, 0xee, 0x00, 0x45, 0x7f, 0x5e, 0x7e, 0x32, 0xf7, 0x73, 0xd6, 0x3b,
+	0x85, 0x0a, 0xdd, 0x80, 0x18, 0x7f, 0xfb, 0xf2, 0x05, 0x06, 0xfc, 0x6c, 0x0e, 0x53, 0xd8, 0xcf,
+	0x61, 0x71, 0xa4, 0xfc, 0xbc, 0x0f, 0xb3, 0x42, 0xbe, 0xf2, 0x20, 0x58, 0x1d, 0x3d, 0xfb, 0xd9,
+	0x6d, 0xf7, 0xa9, 0x41, 0x4e, 0x12, 0x26, 0x9f, 0xc1, 0xb5, 0x31, 0xfa, 0xf3, 0x63, 0x47, 0x4a,
+	0x0f, 0x99, 0x4f, 0xf9, 0x1c, 0x66, 0xf3, 0xdc, 0x83, 0xdd, 0x18, 0x39, 0xca, 0x51, 0x1f, 0x68,
+	0xe5, 0xfb, 0xe0, 0x8f, 0x39, 0xa6, 0xf1, 0xcf, 0x63, 0x66, 0xfd, 0xf3, 0x98, 0x39, 0xff, 0x3c,
+	0x26, 0x72, 0x6e, 0x1e, 0x13, 0x1d, 0x31, 0x8f, 0x81, 0xe1, 0x79, 0x4c, 0xcc, 0x3f, 0x8f, 0x89,
+	0xfb, 0xe7, 0x31, 0x89, 0xf3, 0xf3, 0x98, 0xe4, 0xb9, 0xd9, 0x4b, 0x6a, 0xc2, 0x4c, 0x44, 0x9b,
+	0x38, 0x13, 0x99, 0xf7, 0x4f, 0x31, 0xd0, 0xca, 0x87, 0x59, 0x08, 0xeb, 0xa7, 0x54, 0x35, 0x6d,
+	0xf8, 0x26, 0x14, 0x37, 0x86, 0xaa, 0x11, 0x43, 0xf9, 0x7f, 0xf4, 0x02, 0xb7, 0xff, 0xd2, 0x6d,
+	0x38, 0xad, 0x97, 0xd8, 0x12, 0x52, 0xf5, 0xd6, 0x18, 0x9a, 0x31, 0x00, 0xa2, 0xbb, 0x00, 0x34,
+	0x09, 0xeb, 0xa6, 0x65, 0xb1, 0x1e, 0x37, 0xfa, 0xa7, 0x32, 0xb1, 0x9b, 0xe9, 0xbe, 0xca, 0x53,
+	0x1c, 0xfa, 0x29, 0xc4, 0x19, 0x8b, 0xff, 0x84, 0x62, 0x89, 0xe6, 0xb7, 0x32, 0x81, 0xc7, 0x07,
+	0xa3, 0x16, 0xfa, 0x1a, 0x62, 0xbc, 0xbe, 0xf1, 0x0d, 0xc3, 0x13, 0x9f, 0x93, 0xd5, 0x3b, 0xbe,
+	0xe3, 0xcf, 0x20, 0xc1, 0x79, 0xfc, 0x87, 0x0a, 0x6b, 0xec, 0x2f, 0x5e, 0x0a, 0x93, 0xcf, 0x1b,
+	0xad, 0xcc, 0x2e, 0x80, 0x72, 0x62, 0xdf, 0xac, 0x20, 0x30, 0xed, 0xac, 0x20, 0xb3, 0x01, 0x51,
+	0xef, 0xfc, 0x2b, 0x10, 0xa2, 0xe7, 0x17, 0x39, 0x33, 0xba, 0x72, 0xfd, 0x31, 0x00, 0x31, 0xf5,
+	0xe4, 0x8f, 0x21, 0xae, 0x28, 0x13, 0x6b, 0xf8, 0x9b, 0xcc, 0xd3, 0x25, 0x85, 0x9d, 0x05, 0x31,
+	0x86, 0x8e, 0x29, 0x8b, 0xe8, 0xff, 0x07, 0xb9, 0xca, 0x3b, 0xc3, 0xa2, 0x7f, 0x5f, 0x35, 0x49,
+	0xd1, 0x1a, 0x84, 0xf9, 0x09, 0xa9, 0x6c, 0x49, 0xaa, 0x82, 0x5b, 0x42, 0xb1, 0xf8, 0x54, 0x2a,
+	0x01, 0x28, 0x7e, 0xfe, 0x06, 0xc2, 0xcc, 0xcf, 0xe2, 0xf1, 0x2e, 0xfb, 0xb1, 0x90, 0x29, 0x40,
+	0x5c, 0xf5, 0xfd, 0xc7, 0x0d, 0xdd, 0x57, 0x5a, 0x63, 0x2a, 0xcc, 0x60, 0xc2, 0x59, 0xd0, 0x02,
+	0xf4, 0x9a, 0x26, 0x6c, 0x3d, 0x5f, 0x28, 0xe8, 0x05, 0x2d, 0x88, 0x34, 0x88, 0xb3, 0x6b, 0x3e,
+	0x64, 0x2c, 0xf0, 0x1a, 0xc3, 0x2a, 0x81, 0x80, 0x84, 0x68, 0xea, 0xf3, 0x05, 0x3e, 0x1c, 0x2c,
+	0x68, 0xe1, 0x9d, 0xbb, 0xdf, 0xbf, 0xcf, 0x5e, 0xf9, 0xe1, 0x7d, 0x36, 0xf0, 0xe1, 0x7d, 0x36,
+	0xf0, 0xdb, 0xb3, 0x6c, 0xe0, 0x4f, 0x67, 0xd9, 0xc0, 0x77, 0x67, 0xd9, 0xc0, 0x5f, 0xce, 0xb2,
+	0x81, 0x1f, 0xce, 0xb2, 0x81, 0x7f, 0x9c, 0x65, 0xaf, 0x7c, 0x38, 0xcb, 0x06, 0x7e, 0xf7, 0xf7,
+	0xec, 0x95, 0x5f, 0xcd, 0x72, 0x2f, 0xfc, 0x27, 0x00, 0x00, 0xff, 0xff, 0xc9, 0x13, 0x34, 0x8d,
+	0xbd, 0x1f, 0x00, 0x00,
 }

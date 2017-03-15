@@ -102,6 +102,18 @@ func (a *Client) KillNestedContainer(req *Call_KillNestedContainer, ctx context.
 	return a.sendWithoutResponse(&Call{Type: Call_KILL_NESTED_CONTAINER, KillNestedContainer: req}, ctx)
 }
 
+func (a *Client) LaunchNestedContainerSession(req *Call_LaunchNestedContainerSession, ctx context.Context) error {
+	return a.sendWithoutResponse(&Call{Type: Call_LAUNCH_NESTED_CONTAINER_SESSION, LaunchNestedContainerSession: req}, ctx)
+}
+
+func (a *Client) AttachContainerInput(req *Call_AttachContainerInput, ctx context.Context) error {
+	return a.sendWithoutResponse(&Call{Type: Call_ATTACH_CONTAINER_INPUT, AttachContainerInput: req}, ctx)
+}
+
+func (a *Client) AttachContainerOutput(req *Call_AttachContainerOutput, ctx context.Context) error {
+	return a.sendWithoutResponse(&Call{Type: Call_ATTACH_CONTAINER_OUTPUT, AttachContainerOutput: req}, ctx)
+}
+
 // returns pointer to empty struct in case of error
 func (a *Client) sendWithResponse(c *Call, ctx context.Context) (*Response, error) {
 	ev := &Response{}

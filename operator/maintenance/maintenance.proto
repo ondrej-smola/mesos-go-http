@@ -23,9 +23,18 @@ import "github.com/gogo/protobuf/gogoproto/gogo.proto";
 
 option go_package = "maintenance";
 
-option (gogoproto.enum_stringer_all) = false;
-option (gogoproto.goproto_enum_prefix_all) = true;
-option (gogoproto.goproto_enum_stringer_all) = true;
+option (gogoproto.enum_stringer_all) = true;
+option (gogoproto.equal_all) = true;
+option (gogoproto.goproto_enum_stringer_all) = false;
+option (gogoproto.goproto_stringer_all) = false;
+option (gogoproto.goproto_unrecognized_all) = false;
+option (gogoproto.gostring_all) = true;
+option (gogoproto.marshaler_all) = true;
+option (gogoproto.sizer_all) = true;
+option (gogoproto.stringer_all) =  true;
+option (gogoproto.unmarshaler_all) = true;
+option (gogoproto.verbose_equal_all) = true;
+
 
 // This is an illustration of a maintenance `Schedule`:
 //
@@ -48,7 +57,6 @@ option (gogoproto.goproto_enum_stringer_all) = true;
 //         +-----------------------------------------------------~~~~->
 //                          Downtime for maintenance
 
-
 /**
  * A set of machines scheduled to go into maintenance
  * in the same `unavailability`.
@@ -61,7 +69,6 @@ message Window {
   required Unavailability unavailability = 2 [(gogoproto.nullable) = false];
 }
 
-
 /**
  * A list of maintenance windows.
  * For example, this may represent a rolling restart of agents.
@@ -69,7 +76,6 @@ message Window {
 message Schedule {
   repeated Window windows = 1 [(gogoproto.nullable) = false];
 }
-
 
 /**
  * Represents the maintenance status of each machine in the cluster.
@@ -84,6 +90,6 @@ message ClusterStatus {
     repeated allocator.InverseOfferStatus statuses = 2 [(gogoproto.nullable) = false];
   }
 
-  repeated DrainingMachine draining_machines = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "DrainingMachines"];
-  repeated MachineID down_machines = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "DownMachines"];
+  repeated DrainingMachine draining_machines = 1 [(gogoproto.nullable) = false];
+  repeated MachineID down_machines = 2 [(gogoproto.nullable) = false];
 }
