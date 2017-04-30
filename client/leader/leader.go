@@ -23,9 +23,10 @@ type (
 		log            log.Logger
 
 		sync.RWMutex
+
 		// mutex for
-		leader   mesos.Client
-		endpoint string
+		endpoint    string
+		endpointSeq uint64 // sequence number for parallel leader find sync
 	}
 )
 
@@ -69,47 +70,61 @@ func New(endpoints []string, opts ...Opt) *LeaderClient {
 	return l
 }
 
-// Sends Message to current leader (following redirects) and returning response.
-// Current leader is reused for subsequent requests.
+// Send message to current leader.
+// Handles leader (re)detection and retries on error
 func (c *LeaderClient) Do(msg proto.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, error) {
-	c.RLock()
-	leader := c.leader
-	endpoint := c.endpoint
-	c.RUnlock()
+	for {
+		c.RLock()
+		endpoint := c.endpoint
+		lastSeq := c.endpointSeq
+		c.RUnlock()
+		// concurrent path
+		if endpoint != "" {
+			leader := c.clientProvider.New(endpoint, c.clientOpts...)
+			if resp, err := leader.Do(msg, ctx, opts...); err == nil {
+				return resp, err
+			} else {
+				// request failed -> find new leader
+				c.log.Log("event", "call", "err", err)
+			}
+		}
 
-	// shared path
-	if leader != nil {
-		if resp, err := leader.Do(msg, ctx, opts...); err == nil {
-			return resp, err
+		c.Lock()
+
+		if c.endpointSeq > lastSeq {
+			c.Unlock()
+			continue
+		}
+
+		if resp, newEndpoint, err := c.findLeader(msg, ctx, opts...); err != nil {
+			c.Unlock()
+			return nil, err
 		} else {
-			// request failed -> find new leader
-			c.log.Log("event", "call", "err", err)
+			c.endpoint = newEndpoint
+			c.endpointSeq = lastSeq + 1
+			c.Unlock()
+			return resp, nil
 		}
 	}
+}
 
-	// slow path
-	c.Lock()
-	defer c.Unlock()
-	c.leader = nil
-	c.endpoint = ""
-	var lastErr error
-
+func (c *LeaderClient) findLeader(msg proto.Message, ctx context.Context, opts ...mesos.RequestOpt) (mesos.Response, string, error) {
 	for _, m := range c.masters {
-		endpoint = m
+		endpoint := m
 
 		for i := 0; i < c.maxRedirects; i++ {
 			select {
 			case <-ctx.Done():
-				return nil, ctx.Err()
+				return nil, "", ctx.Err()
 			default:
 			}
 
-			newClient := c.clientProvider.New(endpoint, c.clientOpts...)
-			if resp, err := newClient.Do(msg, ctx, opts...); err != nil {
+			leader := c.clientProvider.New(endpoint, c.clientOpts...)
+			if resp, err := leader.Do(msg, ctx, opts...); err != nil {
 				if ok, newLeader := client.IsRedirect(err); ok {
 					leaderUrl, err := url.Parse(endpoint)
 					if err != nil {
-						return nil, errors.Wrap(err, "URL parse")
+						return nil, "", errors.Wrap(err, "URL parse")
 					}
 					leaderUrl.Host = newLeader
 					to := leaderUrl.String()
@@ -122,7 +137,6 @@ func (c *LeaderClient) Do(msg proto.Message, ctx context.Context, opts ...mesos.
 					endpoint = to
 					continue
 				} else {
-					lastErr = err
 					c.log.Log("event", "call", "endpoint", endpoint, "err", err)
 					break
 				}
@@ -131,12 +145,10 @@ func (c *LeaderClient) Do(msg proto.Message, ctx context.Context, opts ...mesos.
 					"event", "connected_to_leader",
 					"endpoint", endpoint,
 					"debug", true)
-				c.leader = newClient
-				c.endpoint = endpoint
-				return resp, nil
+				return resp, endpoint, nil
 			}
 		}
 	}
 
-	return nil, errors.Errorf("Mesos: request failed on all endpoints, last err: %v", lastErr)
+	return nil, "", errors.Errorf("Mesos: request failed on all endpoints")
 }

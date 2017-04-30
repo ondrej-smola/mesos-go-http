@@ -9,6 +9,9 @@ import (
 	"github.com/ondrej-smola/mesos-go-http/scheduler"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/pkg/errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -92,6 +95,59 @@ var _ = Describe("Leader", func() {
 
 		_, err := cl.Do(msg, context.Background())
 		Expect(err).To(HaveOccurred())
+		close(stop)
+		close(done)
+	})
+
+	It("Allow only one find leader action during multiple parallel requests", func(done Done) {
+		parallelRequests := 3
+		reqCount := int32(0)
+
+		tProv := client.NewTestClientProvider()
+
+		cl := New(endpoints, WithClientProvider(tProv))
+
+		stop := make(chan struct{})
+		go func() {
+			defer GinkgoRecover()
+
+			replyWithTestClient := func(err error) {
+				tProv.NewOut <- mesos.DoFunc(func(proto.Message, context.Context, ...mesos.RequestOpt) (mesos.Response, error) {
+					return &mesos.TestEmptyResponse{}, err
+				})
+			}
+
+			for {
+				select {
+				case <-stop:
+					break
+				case end := <-tProv.NewIn:
+					if end == endpoints[2] {
+						atomic.AddInt32(&reqCount, 1)
+						replyWithTestClient(nil)
+					} else {
+						replyWithTestClient(errors.New("boom!!!"))
+					}
+				}
+			}
+		}()
+
+		wg := sync.WaitGroup{}
+		wg.Add(parallelRequests)
+
+		for i := 0; i < parallelRequests; i++ {
+			go func() {
+				defer GinkgoRecover()
+				_, err := cl.Do(msg, context.Background())
+				Expect(err).To(Succeed())
+				wg.Done()
+			}()
+		}
+
+		wg.Wait()
+
+		Expect(atomic.LoadInt32(&reqCount)).To(BeEquivalentTo(parallelRequests))
+
 		close(stop)
 		close(done)
 	})

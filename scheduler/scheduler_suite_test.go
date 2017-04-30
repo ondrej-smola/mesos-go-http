@@ -52,13 +52,13 @@ var _ = Describe("Scheduler", func() {
 		go func() {
 			defer GinkgoRecover()
 			<-cl.ReqIn
-			cl.ReqOut <- &mesos.TestClientResponseOrError{Resp: &mesos.TestEmptyResponse{Sid: "1"}}
+			cl.ReqOut <- &mesos.TestClientResponseOrError{Resp: mesos.NewTestChanResponse("1")}
 			msg := <-cl.ReqIn
 			req, err := http.NewRequest("POST", "http://localhost", gbytes.NewBuffer())
 			Expect(err).To(Succeed())
 			mesos.RequestOpts(msg.Opts).Apply(req)
 			Expect(req.Header.Get(mesos.MESOS_STREAM_ID_HEADER)).To(Equal("1"))
-			cl.ReqOut <- &mesos.TestClientResponseOrError{Resp: &mesos.TestEmptyResponse{Sid: "1"}}
+			cl.ReqOut <- &mesos.TestClientResponseOrError{Resp: &mesos.TestEmptyResponse{}}
 		}()
 
 		Expect(sched.Push(Subscribe(mesos.FrameworkInfo{User: "test"}), ctx)).To(Succeed())
