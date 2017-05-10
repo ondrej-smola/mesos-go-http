@@ -20,13 +20,11 @@ func Blueprint(b scheduler.Monitor) flow.StageBlueprint {
 	})
 }
 
-// Applies opts to all pushed scheduler calls
 func New(monitor scheduler.Monitor) flow.Stage {
 	return &metrics{monit: monitor}
 }
 
 func (m *metrics) Push(ev flow.Message, ctx context.Context) error {
-
 	name := ""
 	n, ok := ev.(scheduler.MonitoredMessage)
 	if ok {
@@ -50,7 +48,6 @@ func (m *metrics) Push(ev flow.Message, ctx context.Context) error {
 }
 
 func (m *metrics) Pull(ctx context.Context) (flow.Message, error) {
-
 	start := time.Now()
 	msg, err := m.via.Pull(ctx)
 	m.monit.PullLatency(time.Now().Sub(start))

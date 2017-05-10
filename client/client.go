@@ -155,6 +155,8 @@ func NewProvider(opts ...Opt) Provider {
 	})
 }
 
+var defaultDoFunc = NewDoFunc()
+
 func New(endpoint string, opts ...Opt) *Client {
 	if endpoint == "" {
 		panic("Endpoint cannot be blank")
@@ -163,7 +165,7 @@ func New(endpoint string, opts ...Opt) *Client {
 	client := &Client{
 		codec:       codec.ProtobufCodec,
 		errorMapper: DefaultErrorMapper,
-		do:          NewDoFunc(),
+		do:          defaultDoFunc,
 		endpoint:    endpoint,
 		framing:     single.NewProvider(),
 	}
