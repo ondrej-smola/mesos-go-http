@@ -8,11 +8,12 @@ package etcd
 import (
 	"errors"
 	"fmt"
-	codec1978 "github.com/ugorji/go/codec"
 	pkg1_http "net/http"
 	"reflect"
 	"runtime"
 	time "time"
+
+	codec1978 "github.com/ugorji/go/codec"
 )
 
 const (

@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/ondrej-smola/mesos-go-http/client"
-	"github.com/ondrej-smola/mesos-go-http/client/leader"
-	"github.com/ondrej-smola/mesos-go-http/operator/master"
-	"github.com/spf13/cobra"
 	"os"
+
+	"github.com/ondrej-smola/mesos-go-http/lib/client"
+	"github.com/ondrej-smola/mesos-go-http/lib/client/leader"
+	"github.com/ondrej-smola/mesos-go-http/lib/operator/master"
+	"github.com/spf13/cobra"
 )
 
 func masterCommands(cfg *config) *cobra.Command {
