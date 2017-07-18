@@ -38,6 +38,26 @@ func (r *Resource) WithRole(role string) *Resource {
 	return r
 }
 
+func (r *Resource) WithReservation(ri *Resource_ReservationInfo) *Resource {
+	r.Reservation = ri
+	return r
+}
+
+func (r *Resource) WithDisk(d *Resource_DiskInfo) *Resource {
+	r.Disk = d
+	return r
+}
+
+func (r *Resource) WithShared(s *Resource_SharedInfo) *Resource {
+	r.Shared = s
+	return r
+}
+
+func (r *Resource) WithRevocable(ri *Resource_RevocableInfo) *Resource {
+	r.Revocable = ri
+	return r
+}
+
 func (resources Resources) String() string {
 	if len(resources) == 0 {
 		return ""
