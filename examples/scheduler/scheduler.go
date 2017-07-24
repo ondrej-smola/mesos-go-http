@@ -2,32 +2,32 @@ package main
 
 import (
 	"context"
-	"github.com/go-kit/kit/log"
-	"github.com/ondrej-smola/mesos-go-http"
-	"github.com/ondrej-smola/mesos-go-http/backoff"
-	"github.com/ondrej-smola/mesos-go-http/client"
-	"github.com/ondrej-smola/mesos-go-http/client/leader"
-	"github.com/ondrej-smola/mesos-go-http/examples/scheduler/metrics"
-	"github.com/ondrej-smola/mesos-go-http/flow"
-	"github.com/ondrej-smola/mesos-go-http/scheduler"
-	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/ack"
-	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/callopt"
-	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/fwid"
-	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/heartbeat"
-	"github.com/ondrej-smola/mesos-go-http/scheduler/stage/monitor"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"net"
 	"net/http"
 	"os"
 	"strconv"
-	"time"
+
+	"github.com/go-kit/kit/log"
+	"github.com/ondrej-smola/mesos-go-http/lib"
+	"github.com/ondrej-smola/mesos-go-http/lib/backoff"
+	"github.com/ondrej-smola/mesos-go-http/lib/client"
+	"github.com/ondrej-smola/mesos-go-http/lib/client/leader"
+	"github.com/ondrej-smola/mesos-go-http/examples/scheduler/metrics"
+	"github.com/ondrej-smola/mesos-go-http/lib/flow"
+	"github.com/ondrej-smola/mesos-go-http/lib/resources/filter"
+	"github.com/ondrej-smola/mesos-go-http/lib/resources/find"
+	"github.com/ondrej-smola/mesos-go-http/lib/scheduler"
+	"github.com/ondrej-smola/mesos-go-http/lib/scheduler/stage/ack"
+	"github.com/ondrej-smola/mesos-go-http/lib/scheduler/stage/fwid"
+	"github.com/ondrej-smola/mesos-go-http/lib/scheduler/stage/heartbeat"
+	"github.com/ondrej-smola/mesos-go-http/lib/scheduler/stage/monitor"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type app struct {
 	cfg           *config
 	tasksLaunched int
-	wants         mesos.Resources
 	log           log.Logger
 }
 
@@ -48,7 +48,6 @@ func run(cfg *config) {
 
 	blueprint := flow.BlueprintBuilder().
 		Append(monitor.Blueprint(metricsBackend)).
-		Append(callopt.Blueprint(scheduler.Filters(mesos.RefuseSecondsWithJitter(3*time.Second)))).
 		Append(heartbeat.Blueprint()).
 		Append(ack.Blueprint()).
 		Append(fwid.Blueprint()).
@@ -57,15 +56,9 @@ func run(cfg *config) {
 
 	go serveMetrics(metricsBackend, cfg.metricsBind, logger)
 
-	wants := mesos.Resources{
-		mesos.BuildResource().Name("cpus").Scalar(cfg.taskCpus).Build(),
-		mesos.BuildResource().Name("mem").Scalar(cfg.taskMem).Build(),
-	}
-
 	a := &app{
-		cfg:   cfg,
-		wants: wants,
-		log:   log.NewContext(logger).With("src", "main"),
+		cfg: cfg,
+		log: log.NewContext(logger).With("src", "main"),
 	}
 
 	ctx := context.Background()
@@ -75,25 +68,30 @@ func run(cfg *config) {
 
 	var msg flow.Message
 
+	subscribeCall := scheduler.Subscribe(&mesos.FrameworkInfo{
+		User: mesos.Strp("root"),
+		Name: mesos.Strp("test"),
+	})
+	
 	for attempt := range retry.Attempts() {
 		a.tasksLaunched = 0
 		a.log.Log("event", "connecting", "attempt", attempt)
 		fl := blueprint.Mat()
-		err := fl.Push(scheduler.Subscribe(mesos.FrameworkInfo{User: "root", Name: "test"}), ctx)
+		err := fl.Push(subscribeCall, ctx)
 		for err == nil {
 			msg, err = fl.Pull(ctx)
 			if err == nil {
 				switch m := msg.(type) {
 				case *scheduler.Event:
 					a.log.Log("event", "message_received", "type", m.Type.String())
-					switch m.Type {
+					switch m.GetType() {
 					case scheduler.Event_SUBSCRIBED:
 						retry.Reset()
 					case scheduler.Event_UPDATE:
 						status := m.Update.Status
 						a.log.Log(
 							"event", "status_update",
-							"task_id", status.TaskID.Value,
+							"task_id", status.TaskId.GetValue(),
 							"status", status.State.String(),
 							"msg", status.Message,
 						)
@@ -138,28 +136,44 @@ func serveMetrics(metrics *metrics.PrometheusMetrics, endpoint string, log log.L
 	}
 }
 
-func (a *app) handleOffers(offers []mesos.Offer, flow flow.Flow) error {
+func (a *app) handleOffers(offers []*mesos.Offer, flow flow.Flow) error {
 	useShell := false
 
 	for _, o := range offers {
-		logger := log.NewContext(a.log).With("offer", o.ID.Value)
+		logger := log.NewContext(a.log).With("offer", o.Id.GetValue())
 
-		offerResources := mesos.Resources(o.Resources)
-		logger.Log("resources", offerResources)
-		tasks := []mesos.TaskInfo{}
+		resources := mesos.Resources(o.Resources)
+		logger.Log("resources", resources)
+		tasks := []*mesos.TaskInfo{}
 
-		for a.tasksLaunched < a.cfg.numTasks && offerResources.ContainsAll(a.wants) {
+		availableResources := filter.All(filter.Unreserved(), resources...)
+
+		for a.tasksLaunched < a.cfg.numTasks {
+			logger.Log("resources", availableResources)
+
+			cpus, remaining, ok := find.Scalar(mesos.CPUS, a.cfg.taskCpus, availableResources...)
+			if !ok {
+				break
+			}
+			mem, remaining, ok := find.Scalar(mesos.MEM, a.cfg.taskMem, remaining...)
+			if !ok {
+				break
+			}
+
+			// remaining resources are available for next task
+			availableResources = remaining
+
 			a.tasksLaunched++
 			taskID := a.tasksLaunched
 
-			t := mesos.TaskInfo{
-				Name:    "Task " + strconv.Itoa(taskID),
-				TaskID:  mesos.TaskID{Value: strconv.Itoa(taskID)},
-				AgentID: o.AgentID,
+			t := &mesos.TaskInfo{
+				Name:    mesos.Strp("Task " + strconv.Itoa(taskID)),
+				TaskId:  &mesos.TaskID{Value: mesos.Strp(strconv.Itoa(taskID))},
+				AgentId: o.AgentId,
 				Container: &mesos.ContainerInfo{
 					Type: mesos.ContainerInfo_DOCKER.Enum(),
 					Docker: &mesos.ContainerInfo_DockerInfo{
-						Image:   a.cfg.taskImage,
+						Image:   mesos.Strp(a.cfg.taskImage),
 						Network: mesos.ContainerInfo_DockerInfo_NONE.Enum(),
 					},
 				},
@@ -168,25 +182,22 @@ func (a *app) handleOffers(offers []mesos.Offer, flow flow.Flow) error {
 					Value:     nilIfEmptyString(a.cfg.taskCmd),
 					Arguments: a.cfg.taskArgs,
 				},
-				Resources: offerResources.Find(a.wants),
+				Resources: []*mesos.Resource{cpus, mem},
 			}
 
 			tasks = append(tasks, t)
-			offerResources = offerResources.Subtract(t.Resources...)
 		}
 
 		if len(tasks) > 0 {
 			logger.Log("event", "launch", "count", len(tasks))
-			accept := scheduler.Accept(
-				scheduler.OfferOperations{scheduler.OpLaunch(tasks...)}.WithOffers(o.ID),
-			)
-			err := flow.Push(accept, context.Background())
+
+			err := flow.Push(scheduler.AcceptOffer(o.Id,scheduler.OpLaunch(tasks...)), context.Background())
 			if err != nil {
 				return err
 			}
 		} else {
 			logger.Log("event", "declined")
-			err := flow.Push(scheduler.Decline(o.ID), context.Background())
+			err := flow.Push(scheduler.Decline(o.Id), context.Background())
 			if err != nil {
 				return err
 			}

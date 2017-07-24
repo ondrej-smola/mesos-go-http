@@ -9,9 +9,11 @@ Goal of this project is to provide low and high level API for Apache Mesos using
 Current state of project is *alpha* as it needs more adoption/feedback.
 Users of this library are encouraged to vendor it. API stability isn't guaranteed at this stage.
 
-### Mesos proto versions
+### Requirements
 
-* (MASTER) 1.2.0
+* Mesos 1.0.0+ (latest supported is 1.3.0)
+* Go 1.7+
+
 
 ### Features
 
@@ -20,7 +22,6 @@ Users of this library are encouraged to vendor it. API stability isn't guarantee
 - Operator API
 - High level Flow API
 - Low level Client API
-- Examples
 
 ## Get started
 
@@ -44,7 +45,7 @@ scheduler -e http://127.0.0.1:5050/api/v1/scheduler --cmd=sleep --arg=15 --tasks
 
 ## Local infrastructure
 
-For easy testing of master failover, agent failed ...
+For easy testing of master failover, agent failure ...
 
 #### [Docker compose](https://docs.docker.com/compose/)
 
@@ -60,7 +61,7 @@ docker-compose up -d
 
 ## Logging
 
-Project uses [go-kit/log] (https://github.com/go-kit/kit/tree/v0.3.0/log) compatible interfaces for logging
+Project uses [go-kit/log] (https://github.com/go-kit/kit/tree/v0.5.0/log) compatible interfaces for logging
 
    
 ## Testing

@@ -1,8 +1,9 @@
 package metrics
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type PrometheusMetrics struct {
@@ -49,7 +50,7 @@ func New() *PrometheusMetrics {
 		Subsystem: "scheduler",
 		Name:      "resources",
 		Help:      "offered resources count",
-	}, []string{"type"})
+	}, []string{"type", "role"})
 
 	return p
 }
@@ -86,8 +87,8 @@ func (t *PrometheusMetrics) OffersDeclined(count uint32) {
 	t.offers.WithLabelValues("declined").Add(float64(count))
 }
 
-func (t *PrometheusMetrics) ResourceOffered(name string, value float64) {
-	t.resources.WithLabelValues(name).Add(float64(value))
+func (t *PrometheusMetrics) ResourceOffered(name string, role string, value float64) {
+	t.resources.WithLabelValues(name, role).Add(float64(value))
 }
 
 func (p *PrometheusMetrics) MustRegister(r *prometheus.Registry) {

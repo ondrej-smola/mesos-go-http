@@ -1,11 +1,12 @@
 sudo: false
 language: go
 go:
-  - 1.7.5
+  - 1.7.6
+  - 1.8.3
 install:
   - make install-dependencies
   - make install-test-dependencies
 script:
   - go vet `go list ./... | grep -v vendor`
-  - fmtTest=$(go fmt `go list ./... | grep -v vendor` 2>&1); [[ -z $fmtTest ]]
+  - fmtTest=$(gofmt -l lib); [[ -z $fmtTest ]]
   - make test
