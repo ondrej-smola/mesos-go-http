@@ -12,7 +12,7 @@ Users of this library are encouraged to vendor it. API stability isn't guarantee
 ### Requirements
 
 * Mesos 1.0.0 (latest supported is 1.3.0)
-* Go 1.8+
+* Go 1.7+
 
 
 ### Features

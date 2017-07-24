@@ -44,7 +44,11 @@ func (r *Value_Range) Split(el uint64) (*Value_Range, *Value_Range, bool) {
 }
 
 func (r Ranges) Sort() {
-	sort.Slice(r, func(i, j int) bool {
-		return r[i].GetBegin() < r[j].GetBegin() || (r[i].GetBegin() == r[j].GetBegin() && r[i].GetEnd() < r[j].GetEnd())
-	})
+	sort.Sort(r)
+}
+
+func (r Ranges) Len() int      { return len(r) }
+func (r Ranges) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r Ranges) Less(i, j int) bool {
+	return r[i].GetBegin() < r[j].GetBegin() || (r[i].GetBegin() == r[j].GetBegin() && r[i].GetEnd() < r[j].GetEnd())
 }

@@ -102,11 +102,9 @@ func ValuesInRange(name mesos.ResourceName, values []uint64, in ...*mesos.Resour
 	rem := filter.All(filter.Not(f), res...)
 
 	// sort values
-	toFind := append([]uint64(nil), values...)
-	sort.Slice(toFind, func(i, j int) bool {
-		return toFind[i] < toFind[j]
-	})
 
+	toFind := append(uints64{}, values...)
+	sort.Sort(toFind)
 	takeRanges := mesos.Resources{}
 
 	for i, res := range ranges {
@@ -178,4 +176,12 @@ func ValuesInRange(name mesos.ResourceName, values []uint64, in ...*mesos.Resour
 	} else {
 		return nil, mesos.Resources(in), false
 	}
+}
+
+type uints64 []uint64
+
+func (u uints64) Len() int      { return len(u) }
+func (r uints64) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r uints64) Less(i, j int) bool {
+	return r[i] < r[j]
 }
