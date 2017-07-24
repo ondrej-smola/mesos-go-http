@@ -2,10 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/ondrej-smola/mesos-go-http/client"
-	"github.com/ondrej-smola/mesos-go-http/operator/agent"
-	"github.com/spf13/cobra"
 	"os"
+
+	"github.com/ondrej-smola/mesos-go-http/lib/client"
+	"github.com/ondrej-smola/mesos-go-http/lib/operator/agent"
+	"github.com/spf13/cobra"
 )
 
 func agentCommands(cfg *config) *cobra.Command {

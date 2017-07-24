@@ -27,7 +27,7 @@ func main() {
 	)
 
 	rootCmd.Flags().Float64Var(&cfg.taskCpus, "cpus", 0.1, "task cpus")
-	rootCmd.Flags().Float64Var(&cfg.taskMem, "mem", 0.1, "task mem")
+	rootCmd.Flags().Float64Var(&cfg.taskMem, "mem", 128, "task mem")
 	rootCmd.Flags().StringVar(&cfg.taskImage, "image", "alpine:3.4", "task image")
 	rootCmd.Flags().StringVar(&cfg.taskCmd, "cmd", "echo", "task cmd")
 	rootCmd.Flags().StringSliceVar(&cfg.taskArgs, "arg", []string{"hello"}, "task cmd argument")
