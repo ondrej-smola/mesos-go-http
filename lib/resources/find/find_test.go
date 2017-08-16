@@ -1,22 +1,16 @@
 package find_test
 
 import (
-	. "github.com/ondrej-smola/mesos-go-http/lib/resources"
-	. "github.com/ondrej-smola/mesos-go-http/lib/resources/find"
-
 	"fmt"
 
 	"github.com/ondrej-smola/mesos-go-http/lib"
+	. "github.com/ondrej-smola/mesos-go-http/lib/resources"
+	. "github.com/ondrej-smola/mesos-go-http/lib/resources/find"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("Find", func() {
-
-	// override rand function to always return last element
-	RandFunc = func(i int) int {
-		return i - 1
-	}
 
 	It("Scalar", func() {
 		var tests = []struct {
@@ -71,35 +65,47 @@ var _ = Describe("Find", func() {
 	})
 
 	It("RandomInRange", func() {
+
 		var tests = []struct {
 			name       mesos.ResourceName
 			in         mesos.Resources
 			shouldFind bool
 			find       *mesos.Resource
 			rem        mesos.Resources
+			randFunc   func(i int) int
 		}{
 			{
 				mesos.PORTS,
 				mesos.Resources{Ports(mesos.NewRange(2, 3)).WithRole("my_role"), Cpus(1), Mem(256)},
 				true,
-				Ports(mesos.NewRange(2, 2)).WithRole("my_role"),
-				mesos.Resources{Ports(mesos.NewRange(3, 3)).WithRole("my_role"), Cpus(1), Mem(256)},
+				Ports(mesos.NewRange(3, 3)).WithRole("my_role"),
+				mesos.Resources{Ports(mesos.NewRange(2, 2)).WithRole("my_role"), Cpus(1), Mem(256)},
+				func(i int) int { return i - 1 },
 			},
 			{
 				mesos.PORTS,
 				mesos.Resources{
-					Ports(mesos.NewRange(2, 3), mesos.NewRange(4, 4), mesos.NewRange(5, 5)).WithRole("my_role"),
-					Ports(mesos.NewRange(5, 6)),
-					Cpus(1),
-					Mem(256)},
+					Ports(mesos.NewRange(1, 1), mesos.NewRange(2, 3), mesos.NewRange(4, 4), mesos.NewRange(5, 5)).WithRole("my_role"),
+					Ports(mesos.NewRange(5, 6))},
 				true,
 				Ports(mesos.NewRange(5, 5)).WithRole("my_role"),
 				mesos.Resources{
-					Ports(mesos.NewRange(2, 3), mesos.NewRange(4, 4)).WithRole("my_role"),
+					Ports(mesos.NewRange(1, 1), mesos.NewRange(2, 3), mesos.NewRange(4, 4)).WithRole("my_role"),
 					Ports(mesos.NewRange(5, 6)),
-					Cpus(1),
-					Mem(256),
 				},
+				func(i int) int { return i - 1 },
+			},
+			{
+				mesos.PORTS,
+				mesos.Resources{
+					Ports(mesos.NewRange(1, 5), mesos.NewRange(6, 11), mesos.NewRange(12, 17)).WithRole("my_role"),
+				},
+				true,
+				Ports(mesos.NewRange(10, 10)).WithRole("my_role"),
+				mesos.Resources{
+					Ports(mesos.NewRange(1, 5), mesos.NewRange(6, 9), mesos.NewRange(11, 11), mesos.NewRange(12, 17)).WithRole("my_role"),
+				},
+				func(i int) int { return i - 2 },
 			},
 			{
 				mesos.PORTS,
@@ -107,10 +113,14 @@ var _ = Describe("Find", func() {
 				false,
 				nil,
 				mesos.Resources{Cpus(1), Mem(256)},
+				func(i int) int { return i - 1 },
 			},
 		}
 
 		for i, tt := range tests {
+			// overwrite rand func
+			RandFunc = tt.randFunc
+
 			found, rem, ok := RandomInRange(tt.name, tt.in...)
 			Expect(ok).To(Equal(tt.shouldFind),
 				fmt.Sprintf("[%v] RandomInRange[%v]: in %v: should found '%v' (expected '%v')",

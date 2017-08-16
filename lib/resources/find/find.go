@@ -1,7 +1,6 @@
 package find
 
 import (
-	"fmt"
 	"math/rand"
 	"sort"
 
@@ -34,7 +33,7 @@ func Scalar(name mesos.ResourceName, value float64, in ...*mesos.Resource) (*mes
 	return cpus, remaining, true
 }
 
-// select first element from random range in provided resources
+// select random element from random range in provided resources
 func RandomInRange(name mesos.ResourceName, in ...*mesos.Resource) (*mesos.Resource, mesos.Resources, bool) {
 	allResources := mesos.Resources(in).Clone()
 	f := filter.And(filter.Name(name), filter.Range())
@@ -44,50 +43,50 @@ func RandomInRange(name mesos.ResourceName, in ...*mesos.Resource) (*mesos.Resou
 
 	for i, r := range ranges {
 		resRanges := r.RangesOrZero()
-		if len(resRanges) == 0 {
+		if resRanges.Len() == 0 {
 			others = append(others, ranges[i])
 			continue
 		}
 
 		// select random range
-		idx := RandFunc(len(resRanges))
-
-		selectedRange := resRanges[idx]
-		var rem *mesos.Resource
+		idx := RandFunc(resRanges.Len())
+		// range containing selected element
+		selectedRange := resRanges[idx].Clone()
+		// all other ranges
+		notSelectedRanges := r.Clone()
 
 		if selectedRange.Len() == 1 {
-			// selected range is result
-
-			// create copy with remaining free ranges
-			rem = r.Clone()
-			rem.Ranges = &mesos.Value_Ranges{Range: append(resRanges[:idx], resRanges[idx+1:]...)}
-			// set current range to be result with selected range
-			r.Ranges = &mesos.Value_Ranges{Range: []*mesos.Value_Range{selectedRange}}
-
+			// take whole selected range, and rest is not selected
+			notSelectedRanges.Ranges = &mesos.Value_Ranges{Range: append(resRanges[:idx], resRanges[idx+1:]...)}
 		} else {
-			// first element from range is result
+			// selected random element in range
+			selectedElement := selectedRange.GetBegin() + uint64(RandFunc(int(selectedRange.Len())))
 
-			// create remaining ranges
-			rCpy := selectedRange.Clone()
-			rCpy.Begin = mesos.UI64p(selectedRange.GetBegin() + 1)
+			leftSplit, rightSplit, _ := selectedRange.Split(selectedElement)
+			// all other ranges are not selected
+			remRanges := resRanges[:idx].Clone()
+			if leftSplit != nil {
+				remRanges = append(remRanges, leftSplit)
+			}
 
-			remRanges := append(resRanges[:idx], rCpy)
-			remRanges = append(remRanges, resRanges[idx+1:]...)
-
-			// create resource copy with remaining ranges
-			rem = r.Clone()
-			rem.Ranges = &mesos.Value_Ranges{Range: remRanges}
+			if rightSplit != nil {
+				remRanges = append(remRanges, rightSplit)
+			}
+			notSelectedRanges.Ranges = &mesos.Value_Ranges{Range: append(remRanges, resRanges[idx+1:]...)}
 
 			// set selected range to contain only selected element
-			selectedRange.End = mesos.UI64p(selectedRange.GetBegin())
+			selectedRange.Begin = mesos.UI64p(selectedElement)
+			selectedRange.End = mesos.UI64p(selectedElement)
 		}
 
-		others = append(others, rem)
+		// append current not selected ranges and also all other resources
+		others = append(others, notSelectedRanges)
 		others = append(others, ranges[i+1:]...)
 
-		r.Ranges = &mesos.Value_Ranges{Range: []*mesos.Value_Range{selectedRange}}
+		found := r.Clone()
+		found.Ranges = &mesos.Value_Ranges{Range: []*mesos.Value_Range{selectedRange}}
 
-		return r, others, true
+		return found, others, true
 	}
 
 	return nil, mesos.Resources(in), false
@@ -116,7 +115,6 @@ func ValuesInRange(name mesos.ResourceName, values []uint64, in ...*mesos.Resour
 
 		for len(toProcess) > 0 {
 			if len(toFind) == 0 {
-				fmt.Println("append", toProcess)
 				skip = append(skip, toProcess...)
 				break
 			}
