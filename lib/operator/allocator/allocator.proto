@@ -18,12 +18,9 @@ syntax = "proto2";
 
 import "github.com/ondrej-smola/mesos-go-http/lib/mesos.proto";
 
-package mesos.v1.allocator;
-
-option java_package = "org.apache.mesos.v1.allocator";
-option java_outer_classname = "Protos";
-
+package mesos.allocator;
 option go_package = "allocator";
+
 
 /**
  * Describes the status of an inverse offer.

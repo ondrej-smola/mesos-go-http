@@ -16,7 +16,7 @@ package executor
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import mesos_v1 "github.com/ondrej-smola/mesos-go-http/lib"
+import mesos "github.com/ondrej-smola/mesos-go-http/lib"
 
 import github_com_golang_protobuf_proto "github.com/golang/protobuf/proto"
 
@@ -163,7 +163,7 @@ type Event struct {
 	// Type of the event, indicates which optional field below should be
 	// present if that type has a nested message definition.
 	// Enum fields should be optional, see: MESOS-4997.
-	Type             *Event_Type         `protobuf:"varint,1,opt,name=type,enum=mesos.v1.executor.Event_Type" json:"type,omitempty"`
+	Type             *Event_Type         `protobuf:"varint,1,opt,name=type,enum=mesos.executor.Event_Type" json:"type,omitempty"`
 	Subscribed       *Event_Subscribed   `protobuf:"bytes,2,opt,name=subscribed" json:"subscribed,omitempty"`
 	Acknowledged     *Event_Acknowledged `protobuf:"bytes,3,opt,name=acknowledged" json:"acknowledged,omitempty"`
 	Launch           *Event_Launch       `protobuf:"bytes,4,opt,name=launch" json:"launch,omitempty"`
@@ -238,12 +238,12 @@ func (m *Event) GetError() *Event_Error {
 // First event received when the executor subscribes.
 // The 'id' field in the 'framework_info' will be set.
 type Event_Subscribed struct {
-	ExecutorInfo  *mesos_v1.ExecutorInfo  `protobuf:"bytes,1,req,name=executor_info" json:"executor_info,omitempty"`
-	FrameworkInfo *mesos_v1.FrameworkInfo `protobuf:"bytes,2,req,name=framework_info" json:"framework_info,omitempty"`
-	AgentInfo     *mesos_v1.AgentInfo     `protobuf:"bytes,3,req,name=agent_info" json:"agent_info,omitempty"`
+	ExecutorInfo  *mesos.ExecutorInfo  `protobuf:"bytes,1,req,name=executor_info" json:"executor_info,omitempty"`
+	FrameworkInfo *mesos.FrameworkInfo `protobuf:"bytes,2,req,name=framework_info" json:"framework_info,omitempty"`
+	SlaveInfo     *mesos.SlaveInfo     `protobuf:"bytes,3,req,name=slave_info" json:"slave_info,omitempty"`
 	// Uniquely identifies the container of an executor run.
-	ContainerId      *mesos_v1.ContainerID `protobuf:"bytes,4,opt,name=container_id" json:"container_id,omitempty"`
-	XXX_unrecognized []byte                `json:"-"`
+	ContainerId      *mesos.ContainerID `protobuf:"bytes,4,opt,name=container_id" json:"container_id,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
 }
 
 func (m *Event_Subscribed) Reset()                    { *m = Event_Subscribed{} }
@@ -251,28 +251,28 @@ func (m *Event_Subscribed) String() string            { return proto.CompactText
 func (*Event_Subscribed) ProtoMessage()               {}
 func (*Event_Subscribed) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{0, 0} }
 
-func (m *Event_Subscribed) GetExecutorInfo() *mesos_v1.ExecutorInfo {
+func (m *Event_Subscribed) GetExecutorInfo() *mesos.ExecutorInfo {
 	if m != nil {
 		return m.ExecutorInfo
 	}
 	return nil
 }
 
-func (m *Event_Subscribed) GetFrameworkInfo() *mesos_v1.FrameworkInfo {
+func (m *Event_Subscribed) GetFrameworkInfo() *mesos.FrameworkInfo {
 	if m != nil {
 		return m.FrameworkInfo
 	}
 	return nil
 }
 
-func (m *Event_Subscribed) GetAgentInfo() *mesos_v1.AgentInfo {
+func (m *Event_Subscribed) GetSlaveInfo() *mesos.SlaveInfo {
 	if m != nil {
-		return m.AgentInfo
+		return m.SlaveInfo
 	}
 	return nil
 }
 
-func (m *Event_Subscribed) GetContainerId() *mesos_v1.ContainerID {
+func (m *Event_Subscribed) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
@@ -280,11 +280,11 @@ func (m *Event_Subscribed) GetContainerId() *mesos_v1.ContainerID {
 }
 
 // Received when the framework attempts to launch a task. Once
-// the task is successfully launched, the executor must respond with
-// a TASK_RUNNING update (See TaskState in v1/mesos.proto).
+// the task is successfuly launched, the executor must respond with
+// a TASK_RUNNING update (See TaskState in mesos.proto).
 type Event_Launch struct {
-	Task             *mesos_v1.TaskInfo `protobuf:"bytes,1,req,name=task" json:"task,omitempty"`
-	XXX_unrecognized []byte             `json:"-"`
+	Task             *mesos.TaskInfo `protobuf:"bytes,1,req,name=task" json:"task,omitempty"`
+	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *Event_Launch) Reset()                    { *m = Event_Launch{} }
@@ -292,7 +292,7 @@ func (m *Event_Launch) String() string            { return proto.CompactTextStri
 func (*Event_Launch) ProtoMessage()               {}
 func (*Event_Launch) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{0, 1} }
 
-func (m *Event_Launch) GetTask() *mesos_v1.TaskInfo {
+func (m *Event_Launch) GetTask() *mesos.TaskInfo {
 	if m != nil {
 		return m.Task
 	}
@@ -303,8 +303,8 @@ func (m *Event_Launch) GetTask() *mesos_v1.TaskInfo {
 // Similar to `Launch` above the executor must send TASK_RUNNING updates for
 // tasks that are successfully launched.
 type Event_LaunchGroup struct {
-	TaskGroup        *mesos_v1.TaskGroupInfo `protobuf:"bytes,1,req,name=task_group" json:"task_group,omitempty"`
-	XXX_unrecognized []byte                  `json:"-"`
+	TaskGroup        *mesos.TaskGroupInfo `protobuf:"bytes,1,req,name=task_group" json:"task_group,omitempty"`
+	XXX_unrecognized []byte               `json:"-"`
 }
 
 func (m *Event_LaunchGroup) Reset()                    { *m = Event_LaunchGroup{} }
@@ -312,7 +312,7 @@ func (m *Event_LaunchGroup) String() string            { return proto.CompactTex
 func (*Event_LaunchGroup) ProtoMessage()               {}
 func (*Event_LaunchGroup) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{0, 2} }
 
-func (m *Event_LaunchGroup) GetTaskGroup() *mesos_v1.TaskGroupInfo {
+func (m *Event_LaunchGroup) GetTaskGroup() *mesos.TaskGroupInfo {
 	if m != nil {
 		return m.TaskGroup
 	}
@@ -324,12 +324,11 @@ func (m *Event_LaunchGroup) GetTaskGroup() *mesos_v1.TaskGroupInfo {
 // (or TASK_FAILED) update. The terminal update is necessary so
 // Mesos can release the resources associated with the task.
 type Event_Kill struct {
-	TaskId *mesos_v1.TaskID `protobuf:"bytes,1,req,name=task_id" json:"task_id,omitempty"`
+	TaskId *mesos.TaskID `protobuf:"bytes,1,req,name=task_id" json:"task_id,omitempty"`
 	// If set, overrides any previously specified kill policy for this task.
 	// This includes 'TaskInfo.kill_policy' and 'Executor.kill.kill_policy'.
-	// Can be used to forcefully kill a task which is already being killed.
-	KillPolicy       *mesos_v1.KillPolicy `protobuf:"bytes,2,opt,name=kill_policy" json:"kill_policy,omitempty"`
-	XXX_unrecognized []byte               `json:"-"`
+	KillPolicy       *mesos.KillPolicy `protobuf:"bytes,2,opt,name=kill_policy" json:"kill_policy,omitempty"`
+	XXX_unrecognized []byte            `json:"-"`
 }
 
 func (m *Event_Kill) Reset()                    { *m = Event_Kill{} }
@@ -337,30 +336,30 @@ func (m *Event_Kill) String() string            { return proto.CompactTextString
 func (*Event_Kill) ProtoMessage()               {}
 func (*Event_Kill) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{0, 3} }
 
-func (m *Event_Kill) GetTaskId() *mesos_v1.TaskID {
+func (m *Event_Kill) GetTaskId() *mesos.TaskID {
 	if m != nil {
 		return m.TaskId
 	}
 	return nil
 }
 
-func (m *Event_Kill) GetKillPolicy() *mesos_v1.KillPolicy {
+func (m *Event_Kill) GetKillPolicy() *mesos.KillPolicy {
 	if m != nil {
 		return m.KillPolicy
 	}
 	return nil
 }
 
-// Received when the agent acknowledges the receipt of status
+// Received when the slave acknowledges the receipt of status
 // update. Schedulers are responsible for explicitly acknowledging
 // the receipt of status updates that have 'update.status().uuid()'
 // field set. Unacknowledged updates can be retried by the executor.
 // They should also be sent by the executor whenever it
 // re-subscribes.
 type Event_Acknowledged struct {
-	TaskId           *mesos_v1.TaskID `protobuf:"bytes,1,req,name=task_id" json:"task_id,omitempty"`
-	Uuid             []byte           `protobuf:"bytes,2,req,name=uuid" json:"uuid,omitempty"`
-	XXX_unrecognized []byte           `json:"-"`
+	TaskId           *mesos.TaskID `protobuf:"bytes,1,req,name=task_id" json:"task_id,omitempty"`
+	Uuid             []byte        `protobuf:"bytes,2,req,name=uuid" json:"uuid,omitempty"`
+	XXX_unrecognized []byte        `json:"-"`
 }
 
 func (m *Event_Acknowledged) Reset()                    { *m = Event_Acknowledged{} }
@@ -368,7 +367,7 @@ func (m *Event_Acknowledged) String() string            { return proto.CompactTe
 func (*Event_Acknowledged) ProtoMessage()               {}
 func (*Event_Acknowledged) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{0, 4} }
 
-func (m *Event_Acknowledged) GetTaskId() *mesos_v1.TaskID {
+func (m *Event_Acknowledged) GetTaskId() *mesos.TaskID {
 	if m != nil {
 		return m.TaskId
 	}
@@ -383,7 +382,7 @@ func (m *Event_Acknowledged) GetUuid() []byte {
 }
 
 // Received when a custom message generated by the scheduler is
-// forwarded by the agent. Note that this message is not
+// forwarded by the slave. Note that this message is not
 // interpreted by Mesos and is only forwarded (without reliability
 // guarantees) to the executor. It is up to the scheduler to retry
 // if the message is dropped for any reason.
@@ -433,14 +432,13 @@ func (m *Event_Error) GetMessage() string {
 // "union" trick (see above).
 type Call struct {
 	// Identifies the executor which generated this call.
-	ExecutorId  *mesos_v1.ExecutorID  `protobuf:"bytes,1,req,name=executor_id" json:"executor_id,omitempty"`
-	FrameworkId *mesos_v1.FrameworkID `protobuf:"bytes,2,req,name=framework_id" json:"framework_id,omitempty"`
+	ExecutorId  *mesos.ExecutorID  `protobuf:"bytes,1,req,name=executor_id" json:"executor_id,omitempty"`
+	FrameworkId *mesos.FrameworkID `protobuf:"bytes,2,req,name=framework_id" json:"framework_id,omitempty"`
 	// Type of the call, indicates which optional field below should be
 	// present if that type has a nested message definition.
 	// In case type is SUBSCRIBED, no message needs to be set.
-	// See comments on `Event::Type` above on the reasoning behind this
-	// field being optional.
-	Type             *Call_Type      `protobuf:"varint,3,opt,name=type,enum=mesos.v1.executor.Call_Type" json:"type,omitempty"`
+	// See comments on `Event::Type` above on the reasoning behind this field being optional.
+	Type             *Call_Type      `protobuf:"varint,3,opt,name=type,enum=mesos.executor.Call_Type" json:"type,omitempty"`
 	Subscribe        *Call_Subscribe `protobuf:"bytes,4,opt,name=subscribe" json:"subscribe,omitempty"`
 	Update           *Call_Update    `protobuf:"bytes,5,opt,name=update" json:"update,omitempty"`
 	Message          *Call_Message   `protobuf:"bytes,6,opt,name=message" json:"message,omitempty"`
@@ -452,14 +450,14 @@ func (m *Call) String() string            { return proto.CompactTextString(m) }
 func (*Call) ProtoMessage()               {}
 func (*Call) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{1} }
 
-func (m *Call) GetExecutorId() *mesos_v1.ExecutorID {
+func (m *Call) GetExecutorId() *mesos.ExecutorID {
 	if m != nil {
 		return m.ExecutorId
 	}
 	return nil
 }
 
-func (m *Call) GetFrameworkId() *mesos_v1.FrameworkID {
+func (m *Call) GetFrameworkId() *mesos.FrameworkID {
 	if m != nil {
 		return m.FrameworkId
 	}
@@ -494,13 +492,13 @@ func (m *Call) GetMessage() *Call_Message {
 	return nil
 }
 
-// Request to subscribe with the agent. If subscribing after a disconnection,
+// Request to subscribe with the slave. If subscribing after a disconnection,
 // it must include a list of all the tasks and updates which haven't been
 // acknowledged by the scheduler.
 type Call_Subscribe struct {
-	UnacknowledgedTasks   []*mesos_v1.TaskInfo `protobuf:"bytes,1,rep,name=unacknowledged_tasks" json:"unacknowledged_tasks,omitempty"`
-	UnacknowledgedUpdates []*Call_Update       `protobuf:"bytes,2,rep,name=unacknowledged_updates" json:"unacknowledged_updates,omitempty"`
-	XXX_unrecognized      []byte               `json:"-"`
+	UnacknowledgedTasks   []*mesos.TaskInfo `protobuf:"bytes,1,rep,name=unacknowledged_tasks" json:"unacknowledged_tasks,omitempty"`
+	UnacknowledgedUpdates []*Call_Update    `protobuf:"bytes,2,rep,name=unacknowledged_updates" json:"unacknowledged_updates,omitempty"`
+	XXX_unrecognized      []byte            `json:"-"`
 }
 
 func (m *Call_Subscribe) Reset()                    { *m = Call_Subscribe{} }
@@ -508,7 +506,7 @@ func (m *Call_Subscribe) String() string            { return proto.CompactTextSt
 func (*Call_Subscribe) ProtoMessage()               {}
 func (*Call_Subscribe) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{1, 0} }
 
-func (m *Call_Subscribe) GetUnacknowledgedTasks() []*mesos_v1.TaskInfo {
+func (m *Call_Subscribe) GetUnacknowledgedTasks() []*mesos.TaskInfo {
 	if m != nil {
 		return m.UnacknowledgedTasks
 	}
@@ -526,14 +524,14 @@ func (m *Call_Subscribe) GetUnacknowledgedUpdates() []*Call_Update {
 // state to another. Status updates should be used by executors
 // to reliably communicate the status of the tasks that they
 // manage. It is crucial that a terminal update (see TaskState
-// in v1/mesos.proto) is sent to the scheduler as soon as the task
+// in mesos.proto) is sent to the scheduler as soon as the task
 // terminates, in order for Mesos to release the resources allocated
 // to the task. It is the responsibility of the scheduler to
 // explicitly acknowledge the receipt of a status update. See
 // 'Acknowledged' in the 'Events' section above for the semantics.
 type Call_Update struct {
-	Status           *mesos_v1.TaskStatus `protobuf:"bytes,1,req,name=status" json:"status,omitempty"`
-	XXX_unrecognized []byte               `json:"-"`
+	Status           *mesos.TaskStatus `protobuf:"bytes,1,req,name=status" json:"status,omitempty"`
+	XXX_unrecognized []byte            `json:"-"`
 }
 
 func (m *Call_Update) Reset()                    { *m = Call_Update{} }
@@ -541,7 +539,7 @@ func (m *Call_Update) String() string            { return proto.CompactTextStrin
 func (*Call_Update) ProtoMessage()               {}
 func (*Call_Update) Descriptor() ([]byte, []int) { return fileDescriptorExecutor, []int{1, 1} }
 
-func (m *Call_Update) GetStatus() *mesos_v1.TaskStatus {
+func (m *Call_Update) GetStatus() *mesos.TaskStatus {
 	if m != nil {
 		return m.Status
 	}
@@ -570,20 +568,20 @@ func (m *Call_Message) GetData() []byte {
 }
 
 func init() {
-	proto.RegisterType((*Event)(nil), "mesos.v1.executor.Event")
-	proto.RegisterType((*Event_Subscribed)(nil), "mesos.v1.executor.Event.Subscribed")
-	proto.RegisterType((*Event_Launch)(nil), "mesos.v1.executor.Event.Launch")
-	proto.RegisterType((*Event_LaunchGroup)(nil), "mesos.v1.executor.Event.LaunchGroup")
-	proto.RegisterType((*Event_Kill)(nil), "mesos.v1.executor.Event.Kill")
-	proto.RegisterType((*Event_Acknowledged)(nil), "mesos.v1.executor.Event.Acknowledged")
-	proto.RegisterType((*Event_Message)(nil), "mesos.v1.executor.Event.Message")
-	proto.RegisterType((*Event_Error)(nil), "mesos.v1.executor.Event.Error")
-	proto.RegisterType((*Call)(nil), "mesos.v1.executor.Call")
-	proto.RegisterType((*Call_Subscribe)(nil), "mesos.v1.executor.Call.Subscribe")
-	proto.RegisterType((*Call_Update)(nil), "mesos.v1.executor.Call.Update")
-	proto.RegisterType((*Call_Message)(nil), "mesos.v1.executor.Call.Message")
-	proto.RegisterEnum("mesos.v1.executor.Event_Type", Event_Type_name, Event_Type_value)
-	proto.RegisterEnum("mesos.v1.executor.Call_Type", Call_Type_name, Call_Type_value)
+	proto.RegisterType((*Event)(nil), "mesos.executor.Event")
+	proto.RegisterType((*Event_Subscribed)(nil), "mesos.executor.Event.Subscribed")
+	proto.RegisterType((*Event_Launch)(nil), "mesos.executor.Event.Launch")
+	proto.RegisterType((*Event_LaunchGroup)(nil), "mesos.executor.Event.LaunchGroup")
+	proto.RegisterType((*Event_Kill)(nil), "mesos.executor.Event.Kill")
+	proto.RegisterType((*Event_Acknowledged)(nil), "mesos.executor.Event.Acknowledged")
+	proto.RegisterType((*Event_Message)(nil), "mesos.executor.Event.Message")
+	proto.RegisterType((*Event_Error)(nil), "mesos.executor.Event.Error")
+	proto.RegisterType((*Call)(nil), "mesos.executor.Call")
+	proto.RegisterType((*Call_Subscribe)(nil), "mesos.executor.Call.Subscribe")
+	proto.RegisterType((*Call_Update)(nil), "mesos.executor.Call.Update")
+	proto.RegisterType((*Call_Message)(nil), "mesos.executor.Call.Message")
+	proto.RegisterEnum("mesos.executor.Event_Type", Event_Type_name, Event_Type_value)
+	proto.RegisterEnum("mesos.executor.Call_Type", Call_Type_name, Call_Type_value)
 }
 func (m *Event) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -720,13 +718,13 @@ func (m *Event_Subscribed) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n9
 	}
-	if m.AgentInfo == nil {
+	if m.SlaveInfo == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	} else {
 		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintExecutor(dAtA, i, uint64(m.AgentInfo.Size()))
-		n10, err := m.AgentInfo.MarshalTo(dAtA[i:])
+		i = encodeVarintExecutor(dAtA, i, uint64(m.SlaveInfo.Size()))
+		n10, err := m.SlaveInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
@@ -1221,8 +1219,8 @@ func (m *Event_Subscribed) Size() (n int) {
 		l = m.FrameworkInfo.Size()
 		n += 1 + l + sovExecutor(uint64(l))
 	}
-	if m.AgentInfo != nil {
-		l = m.AgentInfo.Size()
+	if m.SlaveInfo != nil {
+		l = m.SlaveInfo.Size()
 		n += 1 + l + sovExecutor(uint64(l))
 	}
 	if m.ContainerId != nil {
@@ -1772,7 +1770,7 @@ func (m *Event_Subscribed) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ExecutorInfo == nil {
-				m.ExecutorInfo = &mesos_v1.ExecutorInfo{}
+				m.ExecutorInfo = &mesos.ExecutorInfo{}
 			}
 			if err := m.ExecutorInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1806,7 +1804,7 @@ func (m *Event_Subscribed) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.FrameworkInfo == nil {
-				m.FrameworkInfo = &mesos_v1.FrameworkInfo{}
+				m.FrameworkInfo = &mesos.FrameworkInfo{}
 			}
 			if err := m.FrameworkInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1815,7 +1813,7 @@ func (m *Event_Subscribed) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentInfo", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveInfo", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -1839,10 +1837,10 @@ func (m *Event_Subscribed) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentInfo == nil {
-				m.AgentInfo = &mesos_v1.AgentInfo{}
+			if m.SlaveInfo == nil {
+				m.SlaveInfo = &mesos.SlaveInfo{}
 			}
-			if err := m.AgentInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1874,7 +1872,7 @@ func (m *Event_Subscribed) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1968,7 +1966,7 @@ func (m *Event_Launch) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Task == nil {
-				m.Task = &mesos_v1.TaskInfo{}
+				m.Task = &mesos.TaskInfo{}
 			}
 			if err := m.Task.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2057,7 +2055,7 @@ func (m *Event_LaunchGroup) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TaskGroup == nil {
-				m.TaskGroup = &mesos_v1.TaskGroupInfo{}
+				m.TaskGroup = &mesos.TaskGroupInfo{}
 			}
 			if err := m.TaskGroup.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2146,7 +2144,7 @@ func (m *Event_Kill) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TaskId == nil {
-				m.TaskId = &mesos_v1.TaskID{}
+				m.TaskId = &mesos.TaskID{}
 			}
 			if err := m.TaskId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2180,7 +2178,7 @@ func (m *Event_Kill) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.KillPolicy == nil {
-				m.KillPolicy = &mesos_v1.KillPolicy{}
+				m.KillPolicy = &mesos.KillPolicy{}
 			}
 			if err := m.KillPolicy.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2268,7 +2266,7 @@ func (m *Event_Acknowledged) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TaskId == nil {
-				m.TaskId = &mesos_v1.TaskID{}
+				m.TaskId = &mesos.TaskID{}
 			}
 			if err := m.TaskId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2565,7 +2563,7 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ExecutorId == nil {
-				m.ExecutorId = &mesos_v1.ExecutorID{}
+				m.ExecutorId = &mesos.ExecutorID{}
 			}
 			if err := m.ExecutorId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2599,7 +2597,7 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.FrameworkId == nil {
-				m.FrameworkId = &mesos_v1.FrameworkID{}
+				m.FrameworkId = &mesos.FrameworkID{}
 			}
 			if err := m.FrameworkId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -2808,7 +2806,7 @@ func (m *Call_Subscribe) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.UnacknowledgedTasks = append(m.UnacknowledgedTasks, &mesos_v1.TaskInfo{})
+			m.UnacknowledgedTasks = append(m.UnacknowledgedTasks, &mesos.TaskInfo{})
 			if err := m.UnacknowledgedTasks[len(m.UnacknowledgedTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -2923,7 +2921,7 @@ func (m *Call_Update) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Status == nil {
-				m.Status = &mesos_v1.TaskStatus{}
+				m.Status = &mesos.TaskStatus{}
 			}
 			if err := m.Status.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -3150,57 +3148,55 @@ var (
 func init() { proto.RegisterFile("lib/executor/executor.proto", fileDescriptorExecutor) }
 
 var fileDescriptorExecutor = []byte{
-	// 823 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x95, 0x4d, 0x8f, 0xdb, 0x44,
-	0x18, 0xc7, 0xeb, 0xc4, 0x71, 0x92, 0x27, 0xee, 0x62, 0x86, 0x6d, 0x6b, 0x99, 0x92, 0xa6, 0x4b,
-	0x11, 0x4b, 0x57, 0x71, 0xda, 0x15, 0x08, 0xa9, 0x95, 0x80, 0x6c, 0x6c, 0xb6, 0xd1, 0xa6, 0xd9,
-	0x28, 0x2f, 0x42, 0xe2, 0x12, 0x4d, 0xec, 0xd9, 0xc4, 0xc4, 0xf1, 0x58, 0x7e, 0x69, 0xd9, 0x03,
-	0x27, 0xbe, 0x04, 0x77, 0x0e, 0x7c, 0x0f, 0x4e, 0x1c, 0xf9, 0x08, 0x68, 0xf9, 0x22, 0x68, 0xc6,
-	0x4e, 0x1c, 0xb2, 0xb1, 0xda, 0x9b, 0x95, 0xe7, 0xf7, 0x7f, 0x5e, 0x66, 0xfe, 0xf3, 0x04, 0x3e,
-	0x76, 0x9d, 0x59, 0x8b, 0xfc, 0x4c, 0xac, 0x38, 0xa2, 0xc1, 0xe6, 0x43, 0xf7, 0x03, 0x1a, 0x51,
-	0xf4, 0xe1, 0x8a, 0x84, 0x34, 0xd4, 0xdf, 0x3c, 0xd7, 0xd7, 0x01, 0xed, 0xab, 0xb9, 0x13, 0x2d,
-	0xe2, 0x99, 0x6e, 0xd1, 0x55, 0x8b, 0x7a, 0x76, 0x40, 0x7e, 0x6a, 0x86, 0x2b, 0xea, 0xe2, 0x16,
-	0x47, 0x9b, 0x73, 0xda, 0x5c, 0x44, 0x91, 0xdf, 0x62, 0x59, 0x13, 0x31, 0xcf, 0x74, 0xf4, 0x7b,
-	0x05, 0x4a, 0xe6, 0x1b, 0xe2, 0x45, 0xe8, 0x04, 0xc4, 0xe8, 0xda, 0x27, 0xaa, 0xd0, 0x10, 0x8e,
-	0x0f, 0x4e, 0x3f, 0xd1, 0x6f, 0x95, 0xd0, 0x39, 0xa7, 0x8f, 0xaf, 0x7d, 0x82, 0xbe, 0x06, 0x08,
-	0xe3, 0x59, 0x68, 0x05, 0xce, 0x8c, 0xd8, 0x6a, 0xa1, 0x21, 0x1c, 0xd7, 0x4e, 0x3f, 0xcd, 0x95,
-	0x8c, 0x36, 0x28, 0x7a, 0x09, 0x32, 0xb6, 0x96, 0x1e, 0x7d, 0xeb, 0x12, 0x7b, 0x4e, 0x6c, 0xb5,
-	0xc8, 0xa5, 0x9f, 0xe5, 0x4a, 0xdb, 0x5b, 0x30, 0x6a, 0x81, 0xe4, 0xe2, 0xd8, 0xb3, 0x16, 0xaa,
-	0xc8, 0x65, 0x8f, 0x72, 0x65, 0x3d, 0x8e, 0xb1, 0x99, 0x96, 0x8e, 0xeb, 0xaa, 0x25, 0x8e, 0xe7,
-	0xcf, 0x74, 0xe1, 0xb8, 0x2e, 0x7a, 0x0e, 0xe5, 0x15, 0x09, 0x43, 0x3c, 0x27, 0xaa, 0xc4, 0xf9,
-	0x46, 0x2e, 0xff, 0x3a, 0xe1, 0x50, 0x13, 0x4a, 0x24, 0x08, 0x68, 0xa0, 0x96, 0xb9, 0xa0, 0x9e,
-	0x2b, 0x30, 0x19, 0x85, 0x5e, 0x80, 0x9c, 0xf4, 0x3f, 0x9d, 0x07, 0x34, 0xf6, 0xd5, 0x0a, 0x57,
-	0x3d, 0x79, 0xc7, 0x14, 0xe7, 0x8c, 0xd5, 0xfe, 0x14, 0x00, 0xb6, 0xce, 0xb1, 0x09, 0x77, 0xd7,
-	0xf0, 0xd4, 0xf1, 0xae, 0xa8, 0x2a, 0x34, 0x0a, 0xc7, 0xb5, 0xd3, 0xfb, 0x59, 0x2e, 0x33, 0x0d,
-	0x77, 0xbd, 0x2b, 0x8a, 0x5a, 0x70, 0x70, 0x15, 0xe0, 0x15, 0x79, 0x4b, 0x83, 0x65, 0xc2, 0x17,
-	0x38, 0xff, 0x20, 0xe3, 0xbf, 0x5f, 0xc7, 0xb9, 0xe0, 0x73, 0x00, 0x3c, 0x27, 0x5e, 0x94, 0xc0,
-	0x45, 0x0e, 0x7f, 0x94, 0xc1, 0x6d, 0x16, 0xe3, 0xe0, 0x09, 0xc8, 0x16, 0xf5, 0x22, 0xec, 0x78,
-	0x24, 0x98, 0x3a, 0x76, 0x7a, 0x33, 0xf7, 0x32, 0xb4, 0xb3, 0x8e, 0x76, 0x0d, 0xed, 0x29, 0x48,
-	0xe9, 0xcd, 0x34, 0x40, 0x8c, 0x70, 0xb8, 0x4c, 0xdb, 0x46, 0x19, 0x3e, 0xc6, 0x21, 0xef, 0x40,
-	0x7b, 0x01, 0xb5, 0xad, 0xf9, 0xd1, 0x09, 0x00, 0x13, 0xa4, 0x27, 0x27, 0xec, 0x76, 0xcf, 0x64,
-	0x1c, 0xe4, 0xda, 0x31, 0x88, 0xfc, 0x4a, 0x1f, 0x43, 0x99, 0x8b, 0x1c, 0x3b, 0x55, 0x28, 0x3b,
-	0x85, 0x0c, 0xf4, 0x05, 0xd4, 0x98, 0x45, 0xa6, 0x3e, 0x75, 0x1d, 0xeb, 0x3a, 0xb5, 0xf2, 0x61,
-	0x86, 0xb1, 0x3c, 0x03, 0x1e, 0xd3, 0xbe, 0x05, 0xf9, 0x7f, 0x76, 0x7c, 0x8f, 0xec, 0x32, 0x88,
-	0x71, 0xec, 0xd8, 0xfc, 0xb4, 0x65, 0xed, 0x01, 0x94, 0xd7, 0xce, 0x91, 0x41, 0xb4, 0x71, 0x84,
-	0xb9, 0x50, 0xd6, 0x54, 0x28, 0x25, 0x0e, 0xf9, 0x20, 0xf3, 0x20, 0x8b, 0x54, 0x8f, 0x7e, 0x15,
-	0x40, 0xe4, 0x2f, 0xae, 0x06, 0xe5, 0x49, 0xff, 0xa2, 0x7f, 0xf9, 0x43, 0x5f, 0xb9, 0x83, 0x0e,
-	0x00, 0x46, 0x93, 0xb3, 0x51, 0x67, 0xd8, 0x3d, 0x33, 0x0d, 0x45, 0x40, 0x00, 0x52, 0xaf, 0x3d,
-	0xe9, 0x77, 0x5e, 0x29, 0x05, 0xa4, 0x80, 0x9c, 0x7c, 0x4f, 0xcf, 0x87, 0x97, 0x93, 0x81, 0x52,
-	0x41, 0x15, 0x10, 0x2f, 0xba, 0xbd, 0x9e, 0x52, 0x64, 0xb1, 0x76, 0x87, 0x25, 0xe9, 0x99, 0xc6,
-	0xb9, 0x69, 0x28, 0x22, 0x4b, 0xfb, 0xda, 0x1c, 0x8d, 0xda, 0xe7, 0xa6, 0x52, 0x42, 0x55, 0x28,
-	0x99, 0xc3, 0xe1, 0xe5, 0x50, 0x91, 0x90, 0x0c, 0x95, 0xd1, 0xab, 0xc9, 0xd8, 0x60, 0xf5, 0xca,
-	0x47, 0x7f, 0x88, 0x20, 0x76, 0xb0, 0xeb, 0xb2, 0xd3, 0xca, 0x6c, 0xb7, 0x1e, 0xfb, 0x70, 0x8f,
-	0xe9, 0x0c, 0x66, 0x8c, 0x2d, 0xcb, 0xd9, 0xa9, 0xe1, 0xee, 0xed, 0x33, 0x9c, 0x81, 0x9e, 0xa6,
-	0xcb, 0xa7, 0xc8, 0x97, 0xcf, 0xc3, 0x3d, 0x2f, 0x82, 0x95, 0x4f, 0x76, 0xcf, 0x97, 0x50, 0xdd,
-	0xec, 0x9e, 0xd4, 0x6e, 0x8f, 0xf3, 0x04, 0x9b, 0x17, 0x83, 0x74, 0x90, 0x62, 0xdf, 0xc6, 0x11,
-	0x49, 0x97, 0x41, 0x3d, 0x4f, 0x32, 0xe1, 0x14, 0x7a, 0xb6, 0xbb, 0x0d, 0x1e, 0xe5, 0x09, 0xd2,
-	0x2b, 0xd5, 0x7e, 0x81, 0x6a, 0x56, 0xee, 0x19, 0x1c, 0xc6, 0xde, 0xf6, 0xa6, 0x9b, 0x32, 0xab,
-	0x84, 0xaa, 0xd0, 0x28, 0xee, 0xf7, 0x3b, 0xfa, 0x06, 0xee, 0xef, 0x28, 0x92, 0x7e, 0x43, 0xb5,
-	0xc0, 0x35, 0xef, 0x68, 0x58, 0xd3, 0x41, 0x4a, 0x5b, 0x7f, 0x02, 0x52, 0x18, 0xe1, 0x28, 0x0e,
-	0x6f, 0xdf, 0x0f, 0xab, 0x36, 0xe2, 0xb1, 0x7d, 0x66, 0xe4, 0x2e, 0x3d, 0x7a, 0xb9, 0xcf, 0x71,
-	0x77, 0xa1, 0xba, 0x71, 0x5c, 0x62, 0xb8, 0xc9, 0xc0, 0x68, 0x8f, 0x4d, 0xa5, 0xb0, 0x6d, 0xa1,
-	0xe2, 0xd9, 0x77, 0x7f, 0xdd, 0xd4, 0x85, 0xbf, 0x6f, 0xea, 0xc2, 0x3f, 0x37, 0x75, 0xe1, 0xb7,
-	0x7f, 0xeb, 0x77, 0xe0, 0x21, 0x0d, 0xe6, 0x3a, 0xf6, 0xb1, 0xb5, 0x20, 0xb7, 0x27, 0x38, 0x93,
-	0x06, 0xec, 0x6f, 0x28, 0xfc, 0xb1, 0xb2, 0xfe, 0xe5, 0xbf, 0x00, 0x00, 0x00, 0xff, 0xff, 0xf1,
-	0x82, 0xed, 0x72, 0xf9, 0x06, 0x00, 0x00,
+	// 790 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x84, 0x94, 0x4d, 0x6e, 0xf2, 0x46,
+	0x18, 0x80, 0x3f, 0x83, 0x31, 0xf0, 0xe2, 0x10, 0x67, 0x1a, 0xb5, 0xae, 0x93, 0x20, 0x82, 0xaa,
+	0x06, 0x25, 0x01, 0xd4, 0xa8, 0x55, 0x2a, 0xa5, 0x1b, 0x82, 0x5d, 0x82, 0x42, 0x48, 0x84, 0x41,
+	0x95, 0xba, 0x41, 0x06, 0x4f, 0x88, 0x8b, 0xf1, 0x20, 0xff, 0x24, 0xcd, 0xba, 0xdb, 0x1e, 0xa0,
+	0x27, 0xe9, 0x19, 0xba, 0xec, 0x11, 0xaa, 0xf4, 0x02, 0x3d, 0x42, 0x35, 0xe3, 0x81, 0x10, 0xea,
+	0xe6, 0xdb, 0x59, 0x7e, 0x9f, 0xf7, 0x67, 0x66, 0x9e, 0x19, 0xd8, 0x73, 0x9d, 0x71, 0x03, 0xff,
+	0x8c, 0x27, 0x51, 0x48, 0xfc, 0xd5, 0x47, 0x7d, 0xe1, 0x93, 0x90, 0xa0, 0xe2, 0x1c, 0x07, 0x24,
+	0xa8, 0x2f, 0xff, 0x6a, 0xdf, 0x4c, 0x9d, 0xf0, 0x21, 0x1a, 0xd7, 0x27, 0x64, 0xde, 0x20, 0x9e,
+	0xed, 0xe3, 0x9f, 0x6a, 0xc1, 0x9c, 0xb8, 0x56, 0x83, 0x71, 0xb5, 0x29, 0xa9, 0x3d, 0x84, 0xe1,
+	0xa2, 0x41, 0x4b, 0xc6, 0x99, 0xac, 0x4c, 0xe5, 0x9f, 0x2c, 0x64, 0x8c, 0x47, 0xec, 0x85, 0xa8,
+	0x0a, 0x62, 0xf8, 0xbc, 0xc0, 0xaa, 0x50, 0x16, 0xaa, 0xc5, 0x33, 0xad, 0xfe, 0xb6, 0x7e, 0x9d,
+	0x41, 0xf5, 0xc1, 0xf3, 0x02, 0xa3, 0xaf, 0x01, 0x82, 0x68, 0x1c, 0x4c, 0x7c, 0x67, 0x8c, 0x6d,
+	0x35, 0x55, 0x16, 0xaa, 0x85, 0xb3, 0x72, 0x32, 0x6f, 0xae, 0x38, 0xf4, 0x2d, 0xc8, 0xd6, 0x64,
+	0xe6, 0x91, 0x27, 0x17, 0xdb, 0x53, 0x6c, 0xab, 0x69, 0x96, 0x57, 0x49, 0xce, 0x6b, 0xae, 0x91,
+	0xe8, 0x14, 0x24, 0xd7, 0x8a, 0xbc, 0xc9, 0x83, 0x2a, 0xb2, 0x9c, 0xfd, 0xe4, 0x9c, 0x2e, 0x63,
+	0xe8, 0x3a, 0x66, 0x8e, 0xeb, 0xaa, 0x19, 0xc6, 0xfe, 0xcf, 0x3a, 0xae, 0x1d, 0xd7, 0x45, 0x75,
+	0xc8, 0xce, 0x71, 0x10, 0x58, 0x53, 0xac, 0x4a, 0x0c, 0x3e, 0x48, 0x86, 0x6f, 0x62, 0x08, 0x1d,
+	0x43, 0x06, 0xfb, 0x3e, 0xf1, 0xd5, 0x2c, 0xa3, 0xf7, 0x92, 0x69, 0x83, 0x22, 0xe8, 0x1c, 0xe4,
+	0x78, 0xe6, 0xd1, 0xd4, 0x27, 0xd1, 0x42, 0xcd, 0xb1, 0x94, 0xc3, 0xf7, 0x26, 0x6f, 0x53, 0x50,
+	0xfb, 0x5d, 0x00, 0x58, 0xdb, 0xb5, 0x63, 0xd8, 0x5a, 0xc2, 0x23, 0xc7, 0xbb, 0x27, 0xaa, 0x50,
+	0x4e, 0x55, 0x0b, 0x67, 0x9f, 0xf0, 0x42, 0x06, 0x8f, 0x75, 0xbc, 0x7b, 0x82, 0x4e, 0xa1, 0x78,
+	0xef, 0x5b, 0x73, 0xfc, 0x44, 0xfc, 0x59, 0x0c, 0xa7, 0x18, 0xbc, 0xcb, 0xe1, 0xef, 0x97, 0x41,
+	0x46, 0x7f, 0x01, 0x10, 0xb8, 0xd6, 0x23, 0x8e, 0xc9, 0x34, 0x23, 0x15, 0x4e, 0x9a, 0x34, 0xc0,
+	0xa8, 0x2a, 0xc8, 0x13, 0xe2, 0x85, 0x96, 0xe3, 0x61, 0x7f, 0xe4, 0xd8, 0xfc, 0x04, 0x10, 0xe7,
+	0x5a, 0xcb, 0x50, 0x47, 0xd7, 0x8e, 0x40, 0xe2, 0x27, 0x70, 0x00, 0x62, 0x68, 0x05, 0x33, 0x3e,
+	0xea, 0x36, 0x67, 0x07, 0x56, 0xc0, 0x1a, 0x6b, 0xe7, 0x50, 0x58, 0x5b, 0x30, 0xaa, 0x02, 0x50,
+	0x9a, 0xef, 0x93, 0xf0, 0x66, 0x62, 0x9a, 0xc3, 0x28, 0x96, 0xd8, 0x03, 0x91, 0x9d, 0x5b, 0x09,
+	0xb2, 0x2c, 0xc3, 0xb1, 0x39, 0xbe, 0xb5, 0xde, 0x42, 0x47, 0x5f, 0x42, 0x81, 0x1a, 0x30, 0x5a,
+	0x10, 0xd7, 0x99, 0x3c, 0x73, 0x41, 0x77, 0x38, 0x43, 0x2b, 0xdc, 0xb1, 0x80, 0xf6, 0x1d, 0xc8,
+	0x6f, 0x3c, 0xfb, 0x58, 0x5d, 0x19, 0xc4, 0x28, 0x72, 0x6c, 0xb6, 0xab, 0xb2, 0xf6, 0x19, 0x64,
+	0x97, 0x62, 0xc8, 0x20, 0xda, 0x56, 0x68, 0xb1, 0x2c, 0x59, 0x53, 0x21, 0x13, 0x3b, 0xb0, 0xfd,
+	0xea, 0x17, 0x8d, 0xe4, 0x2b, 0xbf, 0x08, 0x20, 0xb2, 0x1b, 0x54, 0x80, 0xec, 0xb0, 0x77, 0xdd,
+	0xbb, 0xfd, 0xa1, 0xa7, 0x7c, 0x40, 0x45, 0x00, 0x73, 0x78, 0x69, 0xb6, 0xfa, 0x9d, 0x4b, 0x43,
+	0x57, 0x04, 0x04, 0x20, 0x75, 0x9b, 0xc3, 0x5e, 0xeb, 0x4a, 0x49, 0x21, 0x05, 0xe4, 0xf8, 0x7b,
+	0xd4, 0xee, 0xdf, 0x0e, 0xef, 0x94, 0x1c, 0xca, 0x81, 0x78, 0xdd, 0xe9, 0x76, 0x95, 0x34, 0x8d,
+	0x35, 0x5b, 0xb4, 0x48, 0xd7, 0xd0, 0xdb, 0x86, 0xae, 0x88, 0xb4, 0xec, 0x8d, 0x61, 0x9a, 0xcd,
+	0xb6, 0xa1, 0x64, 0x50, 0x1e, 0x32, 0x46, 0xbf, 0x7f, 0xdb, 0x57, 0x24, 0x24, 0x43, 0xce, 0xbc,
+	0x1a, 0x0e, 0x74, 0xda, 0x2f, 0x5b, 0xf9, 0x55, 0x04, 0xb1, 0x65, 0xb9, 0x2e, 0xdd, 0xa7, 0x57,
+	0xb7, 0x96, 0x6b, 0xde, 0xd9, 0x34, 0x4b, 0xa7, 0x0e, 0xac, 0x79, 0x65, 0x73, 0xab, 0xd0, 0x7f,
+	0xac, 0xd2, 0xd1, 0x11, 0x7f, 0x43, 0xd2, 0xec, 0x0d, 0xf9, 0x7c, 0xd3, 0x76, 0xda, 0x35, 0x7e,
+	0x42, 0xbe, 0x82, 0xfc, 0xea, 0x09, 0xe1, 0x4e, 0x95, 0x12, 0xe9, 0xd5, 0x55, 0x40, 0x27, 0x20,
+	0x45, 0x0b, 0xdb, 0x0a, 0x31, 0xbf, 0xd9, 0x7b, 0x89, 0xfc, 0x90, 0x21, 0xa8, 0xb6, 0x79, 0xb5,
+	0xf7, 0x13, 0x69, 0x7e, 0x80, 0xda, 0x13, 0xe4, 0x5f, 0x1b, 0xd5, 0x60, 0x37, 0xf2, 0xd6, 0x9f,
+	0xaa, 0x11, 0xb5, 0x22, 0x50, 0x85, 0x72, 0x3a, 0x41, 0x67, 0x74, 0x01, 0x9f, 0x6e, 0xe0, 0xf1,
+	0x98, 0x81, 0x9a, 0x62, 0x09, 0xef, 0xcd, 0xa9, 0x9d, 0x80, 0xc4, 0x27, 0x3e, 0x04, 0x29, 0x08,
+	0xad, 0x30, 0x0a, 0x36, 0xce, 0x81, 0xf6, 0x31, 0x59, 0x20, 0xc9, 0x38, 0xa6, 0x62, 0xe5, 0x22,
+	0x49, 0xab, 0x2d, 0xc8, 0xaf, 0xb4, 0x8a, 0xad, 0x1a, 0xde, 0xe9, 0xcd, 0x81, 0xa1, 0xa4, 0xd6,
+	0x3d, 0x49, 0x5f, 0x6a, 0x7f, 0xbc, 0x94, 0x84, 0x3f, 0x5f, 0x4a, 0xc2, 0x5f, 0x2f, 0x25, 0xe1,
+	0xb7, 0xbf, 0x4b, 0x1f, 0x7e, 0xcc, 0x2d, 0x47, 0xfd, 0x37, 0x00, 0x00, 0xff, 0xff, 0x69, 0x3a,
+	0x4b, 0x81, 0x82, 0x06, 0x00, 0x00,
 }

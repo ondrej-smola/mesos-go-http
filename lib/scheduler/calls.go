@@ -136,16 +136,16 @@ func Kill(taskID, agentID string) *Call {
 		Type: Call_KILL.Enum(),
 		Kill: &Call_Kill{
 			TaskId:  &mesos.TaskID{Value: &taskID},
-			AgentId: optionalAgentID(agentID),
+			SlaveId: optionalSlaveID(agentID),
 		},
 	}
 }
 
-func optionalAgentID(agentID string) *mesos.AgentID {
+func optionalSlaveID(agentID string) *mesos.SlaveID {
 	if agentID == "" {
 		return nil
 	}
-	return &mesos.AgentID{Value: &agentID}
+	return &mesos.SlaveID{Value: &agentID}
 }
 
 func Shutdown(executorID, agentID string) *Call {
@@ -153,7 +153,7 @@ func Shutdown(executorID, agentID string) *Call {
 		Type: Call_SHUTDOWN.Enum(),
 		Shutdown: &Call_Shutdown{
 			ExecutorId: &mesos.ExecutorID{Value: &executorID},
-			AgentId:    &mesos.AgentID{Value: &agentID},
+			SlaveId:    &mesos.SlaveID{Value: &agentID},
 		},
 	}
 }
@@ -162,7 +162,7 @@ func Acknowledge(agentID, taskID string, uuid []byte) *Call {
 	return &Call{
 		Type: Call_ACKNOWLEDGE.Enum(),
 		Acknowledge: &Call_Acknowledge{
-			AgentId: &mesos.AgentID{Value: &agentID},
+			SlaveId: &mesos.SlaveID{Value: &agentID},
 			TaskId:  &mesos.TaskID{Value: &taskID},
 			Uuid:    uuid,
 		},
@@ -171,12 +171,12 @@ func Acknowledge(agentID, taskID string, uuid []byte) *Call {
 
 // Map keys (taskID's) are required to be non-empty, but values (agentID's) *may* be empty.
 func ReconcileTasks(tasks map[string]string) *Call {
-	rec := []*Call_Reconcile_Task{}
+	var rec []*Call_Reconcile_Task
 
 	for tid, aid := range tasks {
 		rec = append(rec, &Call_Reconcile_Task{
 			TaskId:  &mesos.TaskID{Value: mesos.Strp(tid)},
-			AgentId: optionalAgentID(aid),
+			SlaveId: optionalSlaveID(aid),
 		})
 	}
 

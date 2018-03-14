@@ -77,33 +77,32 @@ services:
       MESOS_WORK_DIR: /tmp/mesos
       MESOS_LOG_DIR: /var/log/mesos
       MESOS_PORT: 5061
+      MESOS_SYSTEMD_ENABLE_SUPPORT: 'false'
     links:
      - zk
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup
-      - /usr/bin/docker:/usr/bin/docker:ro
       - /var/run/docker.sock:/var/run/docker.sock
-
-  slave2:
-      image: mesosphere/mesos-slave:$MESOS_VERSION
-      ports:
-        - "5062:5062"
-      pid: host
-      privileged: true
-      depends_on:
-          - master1
-          - master2
-          - master3
-      environment:
-        MESOS_MASTER: zk://zk:2181/mesos
-        MESOS_HOSTNAME: $DOCKER_IP
-        MESOS_CONTAINERIZERS: docker,mesos
-        MESOS_WORK_DIR: /tmp/mesos
-        MESOS_LOG_DIR: /var/log/mesos
-        MESOS_PORT: 5062
-      links:
-       - zk
-      volumes:
-        - /sys/fs/cgroup:/sys/fs/cgroup
-        - /usr/bin/docker:/usr/bin/docker:ro
-        - /var/run/docker.sock:/var/run/docker.sock
+#
+#  slave2:
+#      image: mesosphere/mesos-slave:$MESOS_VERSION
+#      ports:
+#        - "5062:5062"
+#      pid: host
+#      privileged: true
+#      depends_on:
+#          - master1
+#          - master2
+#          - master3
+#      environment:
+#        MESOS_MASTER: zk://zk:2181/mesos
+#        MESOS_HOSTNAME: $DOCKER_IP
+#        MESOS_CONTAINERIZERS: docker,mesos
+#        MESOS_WORK_DIR: /tmp/mesos
+#        MESOS_LOG_DIR: /var/log/mesos
+#        MESOS_PORT: 5062
+#      links:
+#       - zk
+#      volumes:
+#        - /sys/fs/cgroup:/sys/fs/cgroup
+#        - /var/run/docker.sock:/var/run/docker.sock

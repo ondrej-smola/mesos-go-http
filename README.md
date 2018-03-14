@@ -6,13 +6,12 @@ Goal of this project is to provide low and high level API for Apache Mesos using
 
 ## Status
 
-Current state of project is *alpha* as it needs more adoption/feedback.
 Users of this library are encouraged to vendor it. API stability isn't guaranteed at this stage.
 
 ### Requirements
 
-* Mesos 1.0.0+ (latest supported is 1.3.0)
-* Go 1.7+
+* Mesos 1.0.0 (latest supported is 1.5.0)
+* Go 1.8+
 
 
 ### Features

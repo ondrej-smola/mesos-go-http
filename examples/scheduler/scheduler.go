@@ -169,7 +169,7 @@ func (a *app) handleOffers(offers []*mesos.Offer, flow flow.Flow) error {
 			t := &mesos.TaskInfo{
 				Name:    mesos.Strp("Task " + strconv.Itoa(taskID)),
 				TaskId:  &mesos.TaskID{Value: mesos.Strp(strconv.Itoa(taskID))},
-				AgentId: o.AgentId,
+				SlaveId: o.SlaveId,
 				Container: &mesos.ContainerInfo{
 					Type: mesos.ContainerInfo_DOCKER.Enum(),
 					Docker: &mesos.ContainerInfo_DockerInfo{

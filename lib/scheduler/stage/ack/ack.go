@@ -91,7 +91,7 @@ func (a *Acks) Pull(ctx context.Context) (flow.Message, error) {
 
 			state := e.Update.Status
 
-			if state.AgentId == nil {
+			if state.SlaveId == nil {
 				return nil, errors.Errorf("AgentId must be set on status update: %v", state)
 			}
 
@@ -99,7 +99,7 @@ func (a *Acks) Pull(ctx context.Context) (flow.Message, error) {
 				call := &scheduler.Call{
 					Type: scheduler.Call_ACKNOWLEDGE.Enum(),
 					Acknowledge: &scheduler.Call_Acknowledge{
-						AgentId: state.AgentId,
+						SlaveId: state.SlaveId,
 						TaskId:  state.TaskId,
 						Uuid:    state.Uuid,
 					},
@@ -113,7 +113,7 @@ func (a *Acks) Pull(ctx context.Context) (flow.Message, error) {
 						a.log.Log(
 							"event", "implicit_ack_failed",
 							"task", state.TaskId.Value,
-							"agent", state.AgentId.Value,
+							"agent", state.SlaveId.Value,
 							"state", state.State.Enum(),
 							"err", err,
 						)

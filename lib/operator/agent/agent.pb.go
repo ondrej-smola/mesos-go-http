@@ -17,7 +17,7 @@ package agent
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
-import mesos_v1 "github.com/ondrej-smola/mesos-go-http/lib"
+import mesos "github.com/ondrej-smola/mesos-go-http/lib"
 
 import github_com_golang_protobuf_proto "github.com/golang/protobuf/proto"
 
@@ -53,11 +53,19 @@ const (
 	Call_READ_FILE         Call_Type = 8
 	Call_GET_STATE         Call_Type = 9
 	Call_GET_CONTAINERS    Call_Type = 10
-	Call_GET_FRAMEWORKS    Call_Type = 11
-	Call_GET_EXECUTORS     Call_Type = 12
-	Call_GET_TASKS         Call_Type = 13
-	Call_GET_AGENT         Call_Type = 20
+	// Retrieves the information about known frameworks.
+	Call_GET_FRAMEWORKS Call_Type = 11
+	// Retrieves the information about known executors.
+	Call_GET_EXECUTORS Call_Type = 12
+	// Retrieves the information about known tasks.
+	Call_GET_TASKS Call_Type = 13
+	// Retrieves the agent information.
+	Call_GET_AGENT Call_Type = 20
+	// Retrieves the information about known resource providers.
+	Call_GET_RESOURCE_PROVIDERS Call_Type = 26
 	// Calls for managing nested containers underneath an executor's container.
+	// Some of these calls are deprecated in favor of the calls
+	// for both standalone or nested containers further below.
 	Call_LAUNCH_NESTED_CONTAINER Call_Type = 14
 	Call_WAIT_NESTED_CONTAINER   Call_Type = 15
 	Call_KILL_NESTED_CONTAINER   Call_Type = 16
@@ -66,6 +74,17 @@ const (
 	Call_LAUNCH_NESTED_CONTAINER_SESSION Call_Type = 17
 	Call_ATTACH_CONTAINER_INPUT          Call_Type = 18
 	Call_ATTACH_CONTAINER_OUTPUT         Call_Type = 19
+	// Calls for managing standalone containers
+	// or containers nested underneath another container.
+	Call_LAUNCH_CONTAINER                Call_Type = 22
+	Call_WAIT_CONTAINER                  Call_Type = 23
+	Call_KILL_CONTAINER                  Call_Type = 24
+	Call_REMOVE_CONTAINER                Call_Type = 25
+	Call_ADD_RESOURCE_PROVIDER_CONFIG    Call_Type = 27
+	Call_UPDATE_RESOURCE_PROVIDER_CONFIG Call_Type = 28
+	Call_REMOVE_RESOURCE_PROVIDER_CONFIG Call_Type = 29
+	// Prune unused container images.
+	Call_PRUNE_IMAGES Call_Type = 30
 )
 
 var Call_Type_name = map[int32]string{
@@ -84,6 +103,7 @@ var Call_Type_name = map[int32]string{
 	12: "GET_EXECUTORS",
 	13: "GET_TASKS",
 	20: "GET_AGENT",
+	26: "GET_RESOURCE_PROVIDERS",
 	14: "LAUNCH_NESTED_CONTAINER",
 	15: "WAIT_NESTED_CONTAINER",
 	16: "KILL_NESTED_CONTAINER",
@@ -91,6 +111,14 @@ var Call_Type_name = map[int32]string{
 	17: "LAUNCH_NESTED_CONTAINER_SESSION",
 	18: "ATTACH_CONTAINER_INPUT",
 	19: "ATTACH_CONTAINER_OUTPUT",
+	22: "LAUNCH_CONTAINER",
+	23: "WAIT_CONTAINER",
+	24: "KILL_CONTAINER",
+	25: "REMOVE_CONTAINER",
+	27: "ADD_RESOURCE_PROVIDER_CONFIG",
+	28: "UPDATE_RESOURCE_PROVIDER_CONFIG",
+	29: "REMOVE_RESOURCE_PROVIDER_CONFIG",
+	30: "PRUNE_IMAGES",
 }
 var Call_Type_value = map[string]int32{
 	"UNKNOWN":                         0,
@@ -108,6 +136,7 @@ var Call_Type_value = map[string]int32{
 	"GET_EXECUTORS":                   12,
 	"GET_TASKS":                       13,
 	"GET_AGENT":                       20,
+	"GET_RESOURCE_PROVIDERS":          26,
 	"LAUNCH_NESTED_CONTAINER":         14,
 	"WAIT_NESTED_CONTAINER":           15,
 	"KILL_NESTED_CONTAINER":           16,
@@ -115,6 +144,14 @@ var Call_Type_value = map[string]int32{
 	"LAUNCH_NESTED_CONTAINER_SESSION": 17,
 	"ATTACH_CONTAINER_INPUT":          18,
 	"ATTACH_CONTAINER_OUTPUT":         19,
+	"LAUNCH_CONTAINER":                22,
+	"WAIT_CONTAINER":                  23,
+	"KILL_CONTAINER":                  24,
+	"REMOVE_CONTAINER":                25,
+	"ADD_RESOURCE_PROVIDER_CONFIG":    27,
+	"UPDATE_RESOURCE_PROVIDER_CONFIG": 28,
+	"REMOVE_RESOURCE_PROVIDER_CONFIG": 29,
+	"PRUNE_IMAGES":                    30,
 }
 
 func (x Call_Type) Enum() *Call_Type {
@@ -171,28 +208,30 @@ func (x *Call_AttachContainerInput_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Call_AttachContainerInput_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorAgent, []int{0, 9, 0}
+	return fileDescriptorAgent, []int{0, 10, 0}
 }
 
 // Each of the responses of type `FOO` corresponds to `Foo` message below.
 type Response_Type int32
 
 const (
-	Response_UNKNOWN               Response_Type = 0
-	Response_GET_HEALTH            Response_Type = 1
-	Response_GET_FLAGS             Response_Type = 2
-	Response_GET_VERSION           Response_Type = 3
-	Response_GET_METRICS           Response_Type = 4
-	Response_GET_LOGGING_LEVEL     Response_Type = 5
-	Response_LIST_FILES            Response_Type = 6
-	Response_READ_FILE             Response_Type = 7
-	Response_GET_STATE             Response_Type = 8
-	Response_GET_CONTAINERS        Response_Type = 9
-	Response_GET_FRAMEWORKS        Response_Type = 10
-	Response_GET_EXECUTORS         Response_Type = 11
-	Response_GET_TASKS             Response_Type = 12
-	Response_GET_AGENT             Response_Type = 14
-	Response_WAIT_NESTED_CONTAINER Response_Type = 13
+	Response_UNKNOWN                Response_Type = 0
+	Response_GET_HEALTH             Response_Type = 1
+	Response_GET_FLAGS              Response_Type = 2
+	Response_GET_VERSION            Response_Type = 3
+	Response_GET_METRICS            Response_Type = 4
+	Response_GET_LOGGING_LEVEL      Response_Type = 5
+	Response_LIST_FILES             Response_Type = 6
+	Response_READ_FILE              Response_Type = 7
+	Response_GET_STATE              Response_Type = 8
+	Response_GET_CONTAINERS         Response_Type = 9
+	Response_GET_FRAMEWORKS         Response_Type = 10
+	Response_GET_EXECUTORS          Response_Type = 11
+	Response_GET_TASKS              Response_Type = 12
+	Response_GET_AGENT              Response_Type = 14
+	Response_GET_RESOURCE_PROVIDERS Response_Type = 16
+	Response_WAIT_NESTED_CONTAINER  Response_Type = 13
+	Response_WAIT_CONTAINER         Response_Type = 15
 )
 
 var Response_Type_name = map[int32]string{
@@ -210,24 +249,28 @@ var Response_Type_name = map[int32]string{
 	11: "GET_EXECUTORS",
 	12: "GET_TASKS",
 	14: "GET_AGENT",
+	16: "GET_RESOURCE_PROVIDERS",
 	13: "WAIT_NESTED_CONTAINER",
+	15: "WAIT_CONTAINER",
 }
 var Response_Type_value = map[string]int32{
-	"UNKNOWN":               0,
-	"GET_HEALTH":            1,
-	"GET_FLAGS":             2,
-	"GET_VERSION":           3,
-	"GET_METRICS":           4,
-	"GET_LOGGING_LEVEL":     5,
-	"LIST_FILES":            6,
-	"READ_FILE":             7,
-	"GET_STATE":             8,
-	"GET_CONTAINERS":        9,
-	"GET_FRAMEWORKS":        10,
-	"GET_EXECUTORS":         11,
-	"GET_TASKS":             12,
-	"GET_AGENT":             14,
-	"WAIT_NESTED_CONTAINER": 13,
+	"UNKNOWN":                0,
+	"GET_HEALTH":             1,
+	"GET_FLAGS":              2,
+	"GET_VERSION":            3,
+	"GET_METRICS":            4,
+	"GET_LOGGING_LEVEL":      5,
+	"LIST_FILES":             6,
+	"READ_FILE":              7,
+	"GET_STATE":              8,
+	"GET_CONTAINERS":         9,
+	"GET_FRAMEWORKS":         10,
+	"GET_EXECUTORS":          11,
+	"GET_TASKS":              12,
+	"GET_AGENT":              14,
+	"GET_RESOURCE_PROVIDERS": 16,
+	"WAIT_NESTED_CONTAINER":  13,
+	"WAIT_CONTAINER":         15,
 }
 
 func (x Response_Type) Enum() *Response_Type {
@@ -367,17 +410,18 @@ func (ProcessIO_Control_Type) EnumDescriptor() ([]byte, []int) {
 }
 
 // *
-// Calls that can be sent to the v1 agent API.
+// Calls that can be sent to the agent API.
 //
 // A call is described using the standard protocol buffer "union"
 // trick, see
 // https://developers.google.com/protocol-buffers/docs/techniques#union.
 type Call struct {
-	Type                         *Call_Type                         `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.Call_Type" json:"type,omitempty"`
+	Type                         *Call_Type                         `protobuf:"varint,1,opt,name=type,enum=mesos.agent.Call_Type" json:"type,omitempty"`
 	GetMetrics                   *Call_GetMetrics                   `protobuf:"bytes,2,opt,name=get_metrics" json:"get_metrics,omitempty"`
 	SetLoggingLevel              *Call_SetLoggingLevel              `protobuf:"bytes,3,opt,name=set_logging_level" json:"set_logging_level,omitempty"`
 	ListFiles                    *Call_ListFiles                    `protobuf:"bytes,4,opt,name=list_files" json:"list_files,omitempty"`
 	ReadFile                     *Call_ReadFile                     `protobuf:"bytes,5,opt,name=read_file" json:"read_file,omitempty"`
+	GetContainers                *Call_GetContainers                `protobuf:"bytes,20,opt,name=get_containers" json:"get_containers,omitempty"`
 	LaunchNestedContainer        *Call_LaunchNestedContainer        `protobuf:"bytes,6,opt,name=launch_nested_container" json:"launch_nested_container,omitempty"`
 	WaitNestedContainer          *Call_WaitNestedContainer          `protobuf:"bytes,7,opt,name=wait_nested_container" json:"wait_nested_container,omitempty"`
 	KillNestedContainer          *Call_KillNestedContainer          `protobuf:"bytes,8,opt,name=kill_nested_container" json:"kill_nested_container,omitempty"`
@@ -385,6 +429,14 @@ type Call struct {
 	LaunchNestedContainerSession *Call_LaunchNestedContainerSession `protobuf:"bytes,9,opt,name=launch_nested_container_session" json:"launch_nested_container_session,omitempty"`
 	AttachContainerInput         *Call_AttachContainerInput         `protobuf:"bytes,10,opt,name=attach_container_input" json:"attach_container_input,omitempty"`
 	AttachContainerOutput        *Call_AttachContainerOutput        `protobuf:"bytes,11,opt,name=attach_container_output" json:"attach_container_output,omitempty"`
+	LaunchContainer              *Call_LaunchContainer              `protobuf:"bytes,13,opt,name=launch_container" json:"launch_container,omitempty"`
+	WaitContainer                *Call_WaitContainer                `protobuf:"bytes,14,opt,name=wait_container" json:"wait_container,omitempty"`
+	KillContainer                *Call_KillContainer                `protobuf:"bytes,15,opt,name=kill_container" json:"kill_container,omitempty"`
+	RemoveContainer              *Call_RemoveContainer              `protobuf:"bytes,16,opt,name=remove_container" json:"remove_container,omitempty"`
+	AddResourceProviderConfig    *Call_AddResourceProviderConfig    `protobuf:"bytes,17,opt,name=add_resource_provider_config" json:"add_resource_provider_config,omitempty"`
+	UpdateResourceProviderConfig *Call_UpdateResourceProviderConfig `protobuf:"bytes,18,opt,name=update_resource_provider_config" json:"update_resource_provider_config,omitempty"`
+	RemoveResourceProviderConfig *Call_RemoveResourceProviderConfig `protobuf:"bytes,19,opt,name=remove_resource_provider_config" json:"remove_resource_provider_config,omitempty"`
+	PruneImages                  *Call_PruneImages                  `protobuf:"bytes,21,opt,name=prune_images" json:"prune_images,omitempty"`
 	XXX_unrecognized             []byte                             `json:"-"`
 }
 
@@ -424,6 +476,13 @@ func (m *Call) GetListFiles() *Call_ListFiles {
 func (m *Call) GetReadFile() *Call_ReadFile {
 	if m != nil {
 		return m.ReadFile
+	}
+	return nil
+}
+
+func (m *Call) GetGetContainers() *Call_GetContainers {
+	if m != nil {
+		return m.GetContainers
 	}
 	return nil
 }
@@ -477,13 +536,69 @@ func (m *Call) GetAttachContainerOutput() *Call_AttachContainerOutput {
 	return nil
 }
 
+func (m *Call) GetLaunchContainer() *Call_LaunchContainer {
+	if m != nil {
+		return m.LaunchContainer
+	}
+	return nil
+}
+
+func (m *Call) GetWaitContainer() *Call_WaitContainer {
+	if m != nil {
+		return m.WaitContainer
+	}
+	return nil
+}
+
+func (m *Call) GetKillContainer() *Call_KillContainer {
+	if m != nil {
+		return m.KillContainer
+	}
+	return nil
+}
+
+func (m *Call) GetRemoveContainer() *Call_RemoveContainer {
+	if m != nil {
+		return m.RemoveContainer
+	}
+	return nil
+}
+
+func (m *Call) GetAddResourceProviderConfig() *Call_AddResourceProviderConfig {
+	if m != nil {
+		return m.AddResourceProviderConfig
+	}
+	return nil
+}
+
+func (m *Call) GetUpdateResourceProviderConfig() *Call_UpdateResourceProviderConfig {
+	if m != nil {
+		return m.UpdateResourceProviderConfig
+	}
+	return nil
+}
+
+func (m *Call) GetRemoveResourceProviderConfig() *Call_RemoveResourceProviderConfig {
+	if m != nil {
+		return m.RemoveResourceProviderConfig
+	}
+	return nil
+}
+
+func (m *Call) GetPruneImages() *Call_PruneImages {
+	if m != nil {
+		return m.PruneImages
+	}
+	return nil
+}
+
 // Provides a snapshot of the current metrics tracked by the agent.
 type Call_GetMetrics struct {
 	// If set, `timeout` would be used to determines the maximum amount of time
 	// the API will take to respond. If the timeout is exceeded, some metrics
 	// may not be included in the response.
-	Timeout          *mesos_v1.DurationInfo `protobuf:"bytes,1,opt,name=timeout" json:"timeout,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Timeout          *mesos.DurationInfo `protobuf:"bytes,1,opt,name=timeout" json:"timeout,omitempty"`
+	XXX_unrecognized []byte              `json:"-"`
 }
 
 func (m *Call_GetMetrics) Reset()                    { *m = Call_GetMetrics{} }
@@ -491,7 +606,7 @@ func (m *Call_GetMetrics) String() string            { return proto.CompactTextS
 func (*Call_GetMetrics) ProtoMessage()               {}
 func (*Call_GetMetrics) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 0} }
 
-func (m *Call_GetMetrics) GetTimeout() *mesos_v1.DurationInfo {
+func (m *Call_GetMetrics) GetTimeout() *mesos.DurationInfo {
 	if m != nil {
 		return m.Timeout
 	}
@@ -507,8 +622,8 @@ type Call_SetLoggingLevel struct {
 	Level *uint32 `protobuf:"varint,1,req,name=level" json:"level,omitempty"`
 	// The duration to keep verbosity level toggled. After this duration, the
 	// verbosity level of log would revert to the original level.
-	Duration         *mesos_v1.DurationInfo `protobuf:"bytes,2,req,name=duration" json:"duration,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Duration         *mesos.DurationInfo `protobuf:"bytes,2,req,name=duration" json:"duration,omitempty"`
+	XXX_unrecognized []byte              `json:"-"`
 }
 
 func (m *Call_SetLoggingLevel) Reset()                    { *m = Call_SetLoggingLevel{} }
@@ -523,7 +638,7 @@ func (m *Call_SetLoggingLevel) GetLevel() uint32 {
 	return 0
 }
 
-func (m *Call_SetLoggingLevel) GetDuration() *mesos_v1.DurationInfo {
+func (m *Call_SetLoggingLevel) GetDuration() *mesos.DurationInfo {
 	if m != nil {
 		return m.Duration
 	}
@@ -586,93 +701,126 @@ func (m *Call_ReadFile) GetLength() uint64 {
 	return 0
 }
 
-// Launches a nested container within an executor's tree of containers.
+// Lists active containers on the agent.
+type Call_GetContainers struct {
+	ShowNested       *bool  `protobuf:"varint,1,opt,name=show_nested" json:"show_nested,omitempty"`
+	ShowStandalone   *bool  `protobuf:"varint,2,opt,name=show_standalone" json:"show_standalone,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *Call_GetContainers) Reset()                    { *m = Call_GetContainers{} }
+func (m *Call_GetContainers) String() string            { return proto.CompactTextString(m) }
+func (*Call_GetContainers) ProtoMessage()               {}
+func (*Call_GetContainers) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 4} }
+
+func (m *Call_GetContainers) GetShowNested() bool {
+	if m != nil && m.ShowNested != nil {
+		return *m.ShowNested
+	}
+	return false
+}
+
+func (m *Call_GetContainers) GetShowStandalone() bool {
+	if m != nil && m.ShowStandalone != nil {
+		return *m.ShowStandalone
+	}
+	return false
+}
+
+// Deprecated in favor of `LaunchContainer`.
 type Call_LaunchNestedContainer struct {
-	ContainerId      *mesos_v1.ContainerID   `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
-	Command          *mesos_v1.CommandInfo   `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
-	Container        *mesos_v1.ContainerInfo `protobuf:"bytes,3,opt,name=container" json:"container,omitempty"`
-	XXX_unrecognized []byte                  `json:"-"`
+	ContainerId      *mesos.ContainerID   `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	Command          *mesos.CommandInfo   `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
+	Container        *mesos.ContainerInfo `protobuf:"bytes,3,opt,name=container" json:"container,omitempty"`
+	XXX_unrecognized []byte               `json:"-"`
 }
 
 func (m *Call_LaunchNestedContainer) Reset()         { *m = Call_LaunchNestedContainer{} }
 func (m *Call_LaunchNestedContainer) String() string { return proto.CompactTextString(m) }
 func (*Call_LaunchNestedContainer) ProtoMessage()    {}
 func (*Call_LaunchNestedContainer) Descriptor() ([]byte, []int) {
-	return fileDescriptorAgent, []int{0, 4}
+	return fileDescriptorAgent, []int{0, 5}
 }
 
-func (m *Call_LaunchNestedContainer) GetContainerId() *mesos_v1.ContainerID {
+func (m *Call_LaunchNestedContainer) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
 	return nil
 }
 
-func (m *Call_LaunchNestedContainer) GetCommand() *mesos_v1.CommandInfo {
+func (m *Call_LaunchNestedContainer) GetCommand() *mesos.CommandInfo {
 	if m != nil {
 		return m.Command
 	}
 	return nil
 }
 
-func (m *Call_LaunchNestedContainer) GetContainer() *mesos_v1.ContainerInfo {
+func (m *Call_LaunchNestedContainer) GetContainer() *mesos.ContainerInfo {
 	if m != nil {
 		return m.Container
 	}
 	return nil
 }
 
-// Waits for the nested container to terminate and receives the exit status.
+// Deprecated in favor of `WaitContainer`.
 type Call_WaitNestedContainer struct {
-	ContainerId      *mesos_v1.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
-	XXX_unrecognized []byte                `json:"-"`
+	ContainerId      *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
 }
 
 func (m *Call_WaitNestedContainer) Reset()                    { *m = Call_WaitNestedContainer{} }
 func (m *Call_WaitNestedContainer) String() string            { return proto.CompactTextString(m) }
 func (*Call_WaitNestedContainer) ProtoMessage()               {}
-func (*Call_WaitNestedContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 5} }
+func (*Call_WaitNestedContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 6} }
 
-func (m *Call_WaitNestedContainer) GetContainerId() *mesos_v1.ContainerID {
+func (m *Call_WaitNestedContainer) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
 	return nil
 }
 
-// Kills the nested container. Currently only supports SIGKILL.
+// Deprecated in favor of `KillContainer`.
 type Call_KillNestedContainer struct {
-	ContainerId      *mesos_v1.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
-	XXX_unrecognized []byte                `json:"-"`
+	ContainerId      *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	Signal           *int32             `protobuf:"varint,2,opt,name=signal" json:"signal,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
 }
 
 func (m *Call_KillNestedContainer) Reset()                    { *m = Call_KillNestedContainer{} }
 func (m *Call_KillNestedContainer) String() string            { return proto.CompactTextString(m) }
 func (*Call_KillNestedContainer) ProtoMessage()               {}
-func (*Call_KillNestedContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 6} }
+func (*Call_KillNestedContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 7} }
 
-func (m *Call_KillNestedContainer) GetContainerId() *mesos_v1.ContainerID {
+func (m *Call_KillNestedContainer) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
 	return nil
 }
 
-// Removes a nested container and its artifacts (runtime and sandbox
-// directories).
+func (m *Call_KillNestedContainer) GetSignal() int32 {
+	if m != nil && m.Signal != nil {
+		return *m.Signal
+	}
+	return 0
+}
+
+// Deprecated in favor of `RemoveContainer`.
 type Call_RemoveNestedContainer struct {
-	ContainerId      *mesos_v1.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
-	XXX_unrecognized []byte                `json:"-"`
+	ContainerId      *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
 }
 
 func (m *Call_RemoveNestedContainer) Reset()         { *m = Call_RemoveNestedContainer{} }
 func (m *Call_RemoveNestedContainer) String() string { return proto.CompactTextString(m) }
 func (*Call_RemoveNestedContainer) ProtoMessage()    {}
 func (*Call_RemoveNestedContainer) Descriptor() ([]byte, []int) {
-	return fileDescriptorAgent, []int{0, 7}
+	return fileDescriptorAgent, []int{0, 8}
 }
 
-func (m *Call_RemoveNestedContainer) GetContainerId() *mesos_v1.ContainerID {
+func (m *Call_RemoveNestedContainer) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
@@ -689,34 +837,34 @@ func (m *Call_RemoveNestedContainer) GetContainerId() *mesos_v1.ContainerID {
 // 3) Results in a streaming response of type `ProcessIO`. So the call
 //    needs to be made on a persistent connection.
 type Call_LaunchNestedContainerSession struct {
-	ContainerId      *mesos_v1.ContainerID   `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
-	Command          *mesos_v1.CommandInfo   `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
-	Container        *mesos_v1.ContainerInfo `protobuf:"bytes,3,opt,name=container" json:"container,omitempty"`
-	XXX_unrecognized []byte                  `json:"-"`
+	ContainerId      *mesos.ContainerID   `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	Command          *mesos.CommandInfo   `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
+	Container        *mesos.ContainerInfo `protobuf:"bytes,3,opt,name=container" json:"container,omitempty"`
+	XXX_unrecognized []byte               `json:"-"`
 }
 
 func (m *Call_LaunchNestedContainerSession) Reset()         { *m = Call_LaunchNestedContainerSession{} }
 func (m *Call_LaunchNestedContainerSession) String() string { return proto.CompactTextString(m) }
 func (*Call_LaunchNestedContainerSession) ProtoMessage()    {}
 func (*Call_LaunchNestedContainerSession) Descriptor() ([]byte, []int) {
-	return fileDescriptorAgent, []int{0, 8}
+	return fileDescriptorAgent, []int{0, 9}
 }
 
-func (m *Call_LaunchNestedContainerSession) GetContainerId() *mesos_v1.ContainerID {
+func (m *Call_LaunchNestedContainerSession) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
 	return nil
 }
 
-func (m *Call_LaunchNestedContainerSession) GetCommand() *mesos_v1.CommandInfo {
+func (m *Call_LaunchNestedContainerSession) GetCommand() *mesos.CommandInfo {
 	if m != nil {
 		return m.Command
 	}
 	return nil
 }
 
-func (m *Call_LaunchNestedContainerSession) GetContainer() *mesos_v1.ContainerInfo {
+func (m *Call_LaunchNestedContainerSession) GetContainer() *mesos.ContainerInfo {
 	if m != nil {
 		return m.Container
 	}
@@ -729,8 +877,8 @@ func (m *Call_LaunchNestedContainerSession) GetContainer() *mesos_v1.ContainerIn
 // streaming a CONTAINER_ID message followed by one or more PROCESS_IO
 // messages.
 type Call_AttachContainerInput struct {
-	Type             *Call_AttachContainerInput_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.Call_AttachContainerInput_Type" json:"type,omitempty"`
-	ContainerId      *mesos_v1.ContainerID           `protobuf:"bytes,2,opt,name=container_id" json:"container_id,omitempty"`
+	Type             *Call_AttachContainerInput_Type `protobuf:"varint,1,opt,name=type,enum=mesos.agent.Call_AttachContainerInput_Type" json:"type,omitempty"`
+	ContainerId      *mesos.ContainerID              `protobuf:"bytes,2,opt,name=container_id" json:"container_id,omitempty"`
 	ProcessIo        *ProcessIO                      `protobuf:"bytes,3,opt,name=process_io" json:"process_io,omitempty"`
 	XXX_unrecognized []byte                          `json:"-"`
 }
@@ -739,7 +887,7 @@ func (m *Call_AttachContainerInput) Reset()         { *m = Call_AttachContainerI
 func (m *Call_AttachContainerInput) String() string { return proto.CompactTextString(m) }
 func (*Call_AttachContainerInput) ProtoMessage()    {}
 func (*Call_AttachContainerInput) Descriptor() ([]byte, []int) {
-	return fileDescriptorAgent, []int{0, 9}
+	return fileDescriptorAgent, []int{0, 10}
 }
 
 func (m *Call_AttachContainerInput) GetType() Call_AttachContainerInput_Type {
@@ -749,7 +897,7 @@ func (m *Call_AttachContainerInput) GetType() Call_AttachContainerInput_Type {
 	return Call_AttachContainerInput_UNKNOWN
 }
 
-func (m *Call_AttachContainerInput) GetContainerId() *mesos_v1.ContainerID {
+func (m *Call_AttachContainerInput) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
@@ -768,43 +916,338 @@ func (m *Call_AttachContainerInput) GetProcessIo() *ProcessIO {
 // container. This call will result in a streaming response of `ProcessIO`;
 // so this call needs to be made on a persistent connection.
 type Call_AttachContainerOutput struct {
-	ContainerId      *mesos_v1.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
-	XXX_unrecognized []byte                `json:"-"`
+	ContainerId      *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
 }
 
 func (m *Call_AttachContainerOutput) Reset()         { *m = Call_AttachContainerOutput{} }
 func (m *Call_AttachContainerOutput) String() string { return proto.CompactTextString(m) }
 func (*Call_AttachContainerOutput) ProtoMessage()    {}
 func (*Call_AttachContainerOutput) Descriptor() ([]byte, []int) {
-	return fileDescriptorAgent, []int{0, 10}
+	return fileDescriptorAgent, []int{0, 11}
 }
 
-func (m *Call_AttachContainerOutput) GetContainerId() *mesos_v1.ContainerID {
+func (m *Call_AttachContainerOutput) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
 	return nil
 }
 
+// Launches a either a "standalone" container on this agent
+// or a nested container within another tree of containers.
+//
+// A standalone container is launched by specifying a ContainerID
+// with no parent. Standalone containers bypass the normal offer cycle
+// between the master and agent. Unlike other containers, a standalone
+// container does not have an executor or any tasks. This means the
+// standalone container does not report back to Mesos or any framework
+// and must be supervised separately.
+//
+// A nested container is launched by specifying a ContainerID with
+// another existing container (including standalone containers)
+// as the parent.
+//
+// Returns 200 OK if the new container launch succeeds.
+// Returns 202 Accepted if the requested ContainerID is already in use
+//   by a standalone or nested container.
+// Returns 400 Bad Request if the container launch fails.
+type Call_LaunchContainer struct {
+	// NOTE: Some characters cannot be used in the ID. All characters
+	// must be valid filesystem path characters.  In addition, '/' and '.'
+	// are reserved.
+	ContainerId *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	Command     *mesos.CommandInfo `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
+	// NOTE: Nested containers may not specify resources and instead
+	// share resources with its parent container.
+	//
+	// TODO(josephw): These resources are purely used for isolation
+	// and are not accounted for by the Mesos master (if connected).
+	// It is the caller's responsibility to ensure that resources are
+	// not overcommitted (e.g. CPU and memory) or conflicting (e.g. ports
+	// and volumes). Once there is support for preempting tasks and a
+	// way to update the resources advertised by the agent, these standalone
+	// container resources should be accounted for by the master.
+	Resources        []*mesos.Resource    `protobuf:"bytes,3,rep,name=resources" json:"resources,omitempty"`
+	Container        *mesos.ContainerInfo `protobuf:"bytes,4,opt,name=container" json:"container,omitempty"`
+	XXX_unrecognized []byte               `json:"-"`
+}
+
+func (m *Call_LaunchContainer) Reset()                    { *m = Call_LaunchContainer{} }
+func (m *Call_LaunchContainer) String() string            { return proto.CompactTextString(m) }
+func (*Call_LaunchContainer) ProtoMessage()               {}
+func (*Call_LaunchContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 12} }
+
+func (m *Call_LaunchContainer) GetContainerId() *mesos.ContainerID {
+	if m != nil {
+		return m.ContainerId
+	}
+	return nil
+}
+
+func (m *Call_LaunchContainer) GetCommand() *mesos.CommandInfo {
+	if m != nil {
+		return m.Command
+	}
+	return nil
+}
+
+func (m *Call_LaunchContainer) GetResources() []*mesos.Resource {
+	if m != nil {
+		return m.Resources
+	}
+	return nil
+}
+
+func (m *Call_LaunchContainer) GetContainer() *mesos.ContainerInfo {
+	if m != nil {
+		return m.Container
+	}
+	return nil
+}
+
+// Waits for the standalone or nested container to terminate
+// and returns the exit status.
+//
+// Returns 200 OK if and when the container exits.
+// Returns 404 Not Found if the container does not exist.
+type Call_WaitContainer struct {
+	ContainerId      *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
+}
+
+func (m *Call_WaitContainer) Reset()                    { *m = Call_WaitContainer{} }
+func (m *Call_WaitContainer) String() string            { return proto.CompactTextString(m) }
+func (*Call_WaitContainer) ProtoMessage()               {}
+func (*Call_WaitContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 13} }
+
+func (m *Call_WaitContainer) GetContainerId() *mesos.ContainerID {
+	if m != nil {
+		return m.ContainerId
+	}
+	return nil
+}
+
+// Kills the standalone or nested container. The signal to be sent
+// to the container can be specified in the 'signal' field.
+//
+// Returns 200 OK if the signal is sent successfully.
+// Returns 404 Not Found if the container does not exist.
+type Call_KillContainer struct {
+	ContainerId *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	// Defaults to SIGKILL.
+	Signal           *int32 `protobuf:"varint,2,opt,name=signal" json:"signal,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *Call_KillContainer) Reset()                    { *m = Call_KillContainer{} }
+func (m *Call_KillContainer) String() string            { return proto.CompactTextString(m) }
+func (*Call_KillContainer) ProtoMessage()               {}
+func (*Call_KillContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 14} }
+
+func (m *Call_KillContainer) GetContainerId() *mesos.ContainerID {
+	if m != nil {
+		return m.ContainerId
+	}
+	return nil
+}
+
+func (m *Call_KillContainer) GetSignal() int32 {
+	if m != nil && m.Signal != nil {
+		return *m.Signal
+	}
+	return 0
+}
+
+// Removes a container's artifacts (runtime and sandbox directories).
+//
+// For nested containers, it is important to use this call if multiple
+// nested containers are launched under the same parent container, because
+// garbage collection only takes place at the parent container. Artifacts
+// belonging to nested containers will not be garbage collected while
+// the parent container is running.
+//
+// TODO(josephw): A standalone container's runtime directory is currently
+// garbage collected as soon as the container exits. To allow the user to
+// retrieve the exit status reliably, the runtime directory cannot be
+// garbage collected immediately. Instead, the user will eventually be
+// required to make this call after the standalone container has exited.
+// Also, a standalone container's sandbox directory is currently not
+// garbage collected and is only deleted via this call.
+//
+// Returns 200 OK if the removal is successful or if the parent container
+//   (for nested containers) does not exist.
+// Returns 500 Internal Server Error if anything goes wrong, including
+//   if the container is still running or does not exist.
+//
+// TODO(josephw): Consider returning a 400 Bad Request instead of 500
+// Internal Server Error when the user tries to remove a running or
+// nonexistent nested container.
+type Call_RemoveContainer struct {
+	ContainerId      *mesos.ContainerID `protobuf:"bytes,1,req,name=container_id" json:"container_id,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
+}
+
+func (m *Call_RemoveContainer) Reset()                    { *m = Call_RemoveContainer{} }
+func (m *Call_RemoveContainer) String() string            { return proto.CompactTextString(m) }
+func (*Call_RemoveContainer) ProtoMessage()               {}
+func (*Call_RemoveContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 15} }
+
+func (m *Call_RemoveContainer) GetContainerId() *mesos.ContainerID {
+	if m != nil {
+		return m.ContainerId
+	}
+	return nil
+}
+
+// Adds a new resource provider config file.
+//
+// The content of the 'info' field will be written into a new config
+// file in the resource provider config directory. The 'info.id' field
+// should not be set. A resource provider will be launched based on
+// the new config asynchronously. Note that only config files that
+// exist at agent startup will be checked against this call.
+//
+// Returns 200 OK if a new config file is created.
+// Returns 400 Bad Request if 'info' is not well-formed.
+// Returns 403 Forbidden if the call is not authorized.
+// Returns 409 Conflict if another config file that describes a
+//   resource provider of the same type and name exists.
+// Returns 500 Internal Server Error if anything goes wrong.
+type Call_AddResourceProviderConfig struct {
+	Info             *mesos.ResourceProviderInfo `protobuf:"bytes,1,req,name=info" json:"info,omitempty"`
+	XXX_unrecognized []byte                      `json:"-"`
+}
+
+func (m *Call_AddResourceProviderConfig) Reset()         { *m = Call_AddResourceProviderConfig{} }
+func (m *Call_AddResourceProviderConfig) String() string { return proto.CompactTextString(m) }
+func (*Call_AddResourceProviderConfig) ProtoMessage()    {}
+func (*Call_AddResourceProviderConfig) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{0, 16}
+}
+
+func (m *Call_AddResourceProviderConfig) GetInfo() *mesos.ResourceProviderInfo {
+	if m != nil {
+		return m.Info
+	}
+	return nil
+}
+
+// Updates an existing resource provider config file.
+//
+// The content of the 'info' field  will be written into an existing
+// config file that describes a resource provider of the specified
+// type and name in the resource provider config directory. The
+// 'info.id' field should not be set. The resource provider will be
+// relaunched asynchronously to reflect the changes in its config.
+// Note that only config files that exist at agent startup can be
+// updated though this call.
+//
+// Returns 200 OK if an existing config file is updated.
+// Returns 400 Bad Request if 'info' is not well-formed.
+// Returns 403 Forbidden if the call is not authorized.
+// Returns 404 Not Found if no config file describes a resource
+//  provider of the same type and name exists.
+// Returns 500 Internal Server Error if anything goes wrong.
+type Call_UpdateResourceProviderConfig struct {
+	Info             *mesos.ResourceProviderInfo `protobuf:"bytes,1,req,name=info" json:"info,omitempty"`
+	XXX_unrecognized []byte                      `json:"-"`
+}
+
+func (m *Call_UpdateResourceProviderConfig) Reset()         { *m = Call_UpdateResourceProviderConfig{} }
+func (m *Call_UpdateResourceProviderConfig) String() string { return proto.CompactTextString(m) }
+func (*Call_UpdateResourceProviderConfig) ProtoMessage()    {}
+func (*Call_UpdateResourceProviderConfig) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{0, 17}
+}
+
+func (m *Call_UpdateResourceProviderConfig) GetInfo() *mesos.ResourceProviderInfo {
+	if m != nil {
+		return m.Info
+	}
+	return nil
+}
+
+// Removes a config file from the resource provider config directory.
+//
+// The config file that describes the resource provider of the
+// specified type and name will be removed. The resource provider will
+// be terminated asynchronously. Note that only config files that
+// exists at agent startup can be removed though this call.
+//
+// Returns 200 OK if the config file is removed.
+// Returns 403 Forbidden if the call is not authorized.
+// Returns 404 Not Found if the config file does not exist.
+// Returns 500 Internal Server Error if anything goes wrong.
+type Call_RemoveResourceProviderConfig struct {
+	Type             *string `protobuf:"bytes,1,req,name=type" json:"type,omitempty"`
+	Name             *string `protobuf:"bytes,2,req,name=name" json:"name,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *Call_RemoveResourceProviderConfig) Reset()         { *m = Call_RemoveResourceProviderConfig{} }
+func (m *Call_RemoveResourceProviderConfig) String() string { return proto.CompactTextString(m) }
+func (*Call_RemoveResourceProviderConfig) ProtoMessage()    {}
+func (*Call_RemoveResourceProviderConfig) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{0, 18}
+}
+
+func (m *Call_RemoveResourceProviderConfig) GetType() string {
+	if m != nil && m.Type != nil {
+		return *m.Type
+	}
+	return ""
+}
+
+func (m *Call_RemoveResourceProviderConfig) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
+	}
+	return ""
+}
+
+// Prune unused container images from image store.
+//
+// Images and layers referenced by active containers as well as
+// image references specified in `excluded_images` will not be pruned.
+type Call_PruneImages struct {
+	ExcludedImages   []*mesos.Image `protobuf:"bytes,1,rep,name=excluded_images" json:"excluded_images,omitempty"`
+	XXX_unrecognized []byte         `json:"-"`
+}
+
+func (m *Call_PruneImages) Reset()                    { *m = Call_PruneImages{} }
+func (m *Call_PruneImages) String() string            { return proto.CompactTextString(m) }
+func (*Call_PruneImages) ProtoMessage()               {}
+func (*Call_PruneImages) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{0, 19} }
+
+func (m *Call_PruneImages) GetExcludedImages() []*mesos.Image {
+	if m != nil {
+		return m.ExcludedImages
+	}
+	return nil
+}
+
 // *
-// Synchronous responses for all calls made to the v1 agent API.
+// Synchronous responses for all calls made to the agent API.
 type Response struct {
-	Type                *Response_Type                `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.Response_Type" json:"type,omitempty"`
-	GetHealth           *Response_GetHealth           `protobuf:"bytes,2,opt,name=get_health" json:"get_health,omitempty"`
-	GetFlags            *Response_GetFlags            `protobuf:"bytes,3,opt,name=get_flags" json:"get_flags,omitempty"`
-	GetVersion          *Response_GetVersion          `protobuf:"bytes,4,opt,name=get_version" json:"get_version,omitempty"`
-	GetMetrics          *Response_GetMetrics          `protobuf:"bytes,5,opt,name=get_metrics" json:"get_metrics,omitempty"`
-	GetLoggingLevel     *Response_GetLoggingLevel     `protobuf:"bytes,6,opt,name=get_logging_level" json:"get_logging_level,omitempty"`
-	ListFiles           *Response_ListFiles           `protobuf:"bytes,7,opt,name=list_files" json:"list_files,omitempty"`
-	ReadFile            *Response_ReadFile            `protobuf:"bytes,8,opt,name=read_file" json:"read_file,omitempty"`
-	GetState            *Response_GetState            `protobuf:"bytes,9,opt,name=get_state" json:"get_state,omitempty"`
-	GetContainers       *Response_GetContainers       `protobuf:"bytes,10,opt,name=get_containers" json:"get_containers,omitempty"`
-	GetFrameworks       *Response_GetFrameworks       `protobuf:"bytes,11,opt,name=get_frameworks" json:"get_frameworks,omitempty"`
-	GetExecutors        *Response_GetExecutors        `protobuf:"bytes,12,opt,name=get_executors" json:"get_executors,omitempty"`
-	GetTasks            *Response_GetTasks            `protobuf:"bytes,13,opt,name=get_tasks" json:"get_tasks,omitempty"`
-	GetAgent            *Response_GetAgent            `protobuf:"bytes,15,opt,name=get_agent" json:"get_agent,omitempty"`
-	WaitNestedContainer *Response_WaitNestedContainer `protobuf:"bytes,14,opt,name=wait_nested_container" json:"wait_nested_container,omitempty"`
-	XXX_unrecognized    []byte                        `json:"-"`
+	Type                 *Response_Type                 `protobuf:"varint,1,opt,name=type,enum=mesos.agent.Response_Type" json:"type,omitempty"`
+	GetHealth            *Response_GetHealth            `protobuf:"bytes,2,opt,name=get_health" json:"get_health,omitempty"`
+	GetFlags             *Response_GetFlags             `protobuf:"bytes,3,opt,name=get_flags" json:"get_flags,omitempty"`
+	GetVersion           *Response_GetVersion           `protobuf:"bytes,4,opt,name=get_version" json:"get_version,omitempty"`
+	GetMetrics           *Response_GetMetrics           `protobuf:"bytes,5,opt,name=get_metrics" json:"get_metrics,omitempty"`
+	GetLoggingLevel      *Response_GetLoggingLevel      `protobuf:"bytes,6,opt,name=get_logging_level" json:"get_logging_level,omitempty"`
+	ListFiles            *Response_ListFiles            `protobuf:"bytes,7,opt,name=list_files" json:"list_files,omitempty"`
+	ReadFile             *Response_ReadFile             `protobuf:"bytes,8,opt,name=read_file" json:"read_file,omitempty"`
+	GetState             *Response_GetState             `protobuf:"bytes,9,opt,name=get_state" json:"get_state,omitempty"`
+	GetContainers        *Response_GetContainers        `protobuf:"bytes,10,opt,name=get_containers" json:"get_containers,omitempty"`
+	GetFrameworks        *Response_GetFrameworks        `protobuf:"bytes,11,opt,name=get_frameworks" json:"get_frameworks,omitempty"`
+	GetExecutors         *Response_GetExecutors         `protobuf:"bytes,12,opt,name=get_executors" json:"get_executors,omitempty"`
+	GetTasks             *Response_GetTasks             `protobuf:"bytes,13,opt,name=get_tasks" json:"get_tasks,omitempty"`
+	GetAgent             *Response_GetAgent             `protobuf:"bytes,15,opt,name=get_agent" json:"get_agent,omitempty"`
+	GetResourceProviders *Response_GetResourceProviders `protobuf:"bytes,17,opt,name=get_resource_providers" json:"get_resource_providers,omitempty"`
+	WaitNestedContainer  *Response_WaitNestedContainer  `protobuf:"bytes,14,opt,name=wait_nested_container" json:"wait_nested_container,omitempty"`
+	WaitContainer        *Response_WaitContainer        `protobuf:"bytes,16,opt,name=wait_container" json:"wait_container,omitempty"`
+	XXX_unrecognized     []byte                         `json:"-"`
 }
 
 func (m *Response) Reset()                    { *m = Response{} }
@@ -910,9 +1353,23 @@ func (m *Response) GetGetAgent() *Response_GetAgent {
 	return nil
 }
 
+func (m *Response) GetGetResourceProviders() *Response_GetResourceProviders {
+	if m != nil {
+		return m.GetResourceProviders
+	}
+	return nil
+}
+
 func (m *Response) GetWaitNestedContainer() *Response_WaitNestedContainer {
 	if m != nil {
 		return m.WaitNestedContainer
+	}
+	return nil
+}
+
+func (m *Response) GetWaitContainer() *Response_WaitContainer {
+	if m != nil {
+		return m.WaitContainer
 	}
 	return nil
 }
@@ -938,8 +1395,8 @@ func (m *Response_GetHealth) GetHealthy() bool {
 
 // Contains the flag configuration of the agent.
 type Response_GetFlags struct {
-	Flags            []*mesos_v1.Flag `protobuf:"bytes,1,rep,name=flags" json:"flags,omitempty"`
-	XXX_unrecognized []byte           `json:"-"`
+	Flags            []*mesos.Flag `protobuf:"bytes,1,rep,name=flags" json:"flags,omitempty"`
+	XXX_unrecognized []byte        `json:"-"`
 }
 
 func (m *Response_GetFlags) Reset()                    { *m = Response_GetFlags{} }
@@ -947,7 +1404,7 @@ func (m *Response_GetFlags) String() string            { return proto.CompactTex
 func (*Response_GetFlags) ProtoMessage()               {}
 func (*Response_GetFlags) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 1} }
 
-func (m *Response_GetFlags) GetFlags() []*mesos_v1.Flag {
+func (m *Response_GetFlags) GetFlags() []*mesos.Flag {
 	if m != nil {
 		return m.Flags
 	}
@@ -956,8 +1413,8 @@ func (m *Response_GetFlags) GetFlags() []*mesos_v1.Flag {
 
 // Contains the version information of the agent.
 type Response_GetVersion struct {
-	VersionInfo      *mesos_v1.VersionInfo `protobuf:"bytes,1,req,name=version_info" json:"version_info,omitempty"`
-	XXX_unrecognized []byte                `json:"-"`
+	VersionInfo      *mesos.VersionInfo `protobuf:"bytes,1,req,name=version_info" json:"version_info,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
 }
 
 func (m *Response_GetVersion) Reset()                    { *m = Response_GetVersion{} }
@@ -965,7 +1422,7 @@ func (m *Response_GetVersion) String() string            { return proto.CompactT
 func (*Response_GetVersion) ProtoMessage()               {}
 func (*Response_GetVersion) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 2} }
 
-func (m *Response_GetVersion) GetVersionInfo() *mesos_v1.VersionInfo {
+func (m *Response_GetVersion) GetVersionInfo() *mesos.VersionInfo {
 	if m != nil {
 		return m.VersionInfo
 	}
@@ -974,8 +1431,8 @@ func (m *Response_GetVersion) GetVersionInfo() *mesos_v1.VersionInfo {
 
 // Contains a snapshot of the current metrics.
 type Response_GetMetrics struct {
-	Metrics          []*mesos_v1.Metric `protobuf:"bytes,1,rep,name=metrics" json:"metrics,omitempty"`
-	XXX_unrecognized []byte             `json:"-"`
+	Metrics          []*mesos.Metric `protobuf:"bytes,1,rep,name=metrics" json:"metrics,omitempty"`
+	XXX_unrecognized []byte          `json:"-"`
 }
 
 func (m *Response_GetMetrics) Reset()                    { *m = Response_GetMetrics{} }
@@ -983,7 +1440,7 @@ func (m *Response_GetMetrics) String() string            { return proto.CompactT
 func (*Response_GetMetrics) ProtoMessage()               {}
 func (*Response_GetMetrics) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 3} }
 
-func (m *Response_GetMetrics) GetMetrics() []*mesos_v1.Metric {
+func (m *Response_GetMetrics) GetMetrics() []*mesos.Metric {
 	if m != nil {
 		return m.Metrics
 	}
@@ -1010,8 +1467,8 @@ func (m *Response_GetLoggingLevel) GetLevel() uint32 {
 
 // Contains the file listing(similar to `ls -l`) for a directory.
 type Response_ListFiles struct {
-	FileInfos        []*mesos_v1.FileInfo `protobuf:"bytes,1,rep,name=file_infos" json:"file_infos,omitempty"`
-	XXX_unrecognized []byte               `json:"-"`
+	FileInfos        []*mesos.FileInfo `protobuf:"bytes,1,rep,name=file_infos" json:"file_infos,omitempty"`
+	XXX_unrecognized []byte            `json:"-"`
 }
 
 func (m *Response_ListFiles) Reset()                    { *m = Response_ListFiles{} }
@@ -1019,7 +1476,7 @@ func (m *Response_ListFiles) String() string            { return proto.CompactTe
 func (*Response_ListFiles) ProtoMessage()               {}
 func (*Response_ListFiles) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 5} }
 
-func (m *Response_ListFiles) GetFileInfos() []*mesos_v1.FileInfo {
+func (m *Response_ListFiles) GetFileInfos() []*mesos.FileInfo {
 	if m != nil {
 		return m.FileInfos
 	}
@@ -1109,13 +1566,13 @@ func (m *Response_GetContainers) GetContainers() []*Response_GetContainers_Conta
 }
 
 type Response_GetContainers_Container struct {
-	FrameworkId        *mesos_v1.FrameworkID        `protobuf:"bytes,1,req,name=framework_id" json:"framework_id,omitempty"`
-	ExecutorId         *mesos_v1.ExecutorID         `protobuf:"bytes,2,req,name=executor_id" json:"executor_id,omitempty"`
-	ExecutorName       *string                      `protobuf:"bytes,3,req,name=executor_name" json:"executor_name,omitempty"`
-	ContainerId        *mesos_v1.ContainerID        `protobuf:"bytes,4,req,name=container_id" json:"container_id,omitempty"`
-	ContainerStatus    *mesos_v1.ContainerStatus    `protobuf:"bytes,5,opt,name=container_status" json:"container_status,omitempty"`
-	ResourceStatistics *mesos_v1.ResourceStatistics `protobuf:"bytes,6,opt,name=resource_statistics" json:"resource_statistics,omitempty"`
-	XXX_unrecognized   []byte                       `json:"-"`
+	FrameworkId        *mesos.FrameworkID        `protobuf:"bytes,1,opt,name=framework_id" json:"framework_id,omitempty"`
+	ExecutorId         *mesos.ExecutorID         `protobuf:"bytes,2,opt,name=executor_id" json:"executor_id,omitempty"`
+	ExecutorName       *string                   `protobuf:"bytes,3,opt,name=executor_name" json:"executor_name,omitempty"`
+	ContainerId        *mesos.ContainerID        `protobuf:"bytes,4,req,name=container_id" json:"container_id,omitempty"`
+	ContainerStatus    *mesos.ContainerStatus    `protobuf:"bytes,5,opt,name=container_status" json:"container_status,omitempty"`
+	ResourceStatistics *mesos.ResourceStatistics `protobuf:"bytes,6,opt,name=resource_statistics" json:"resource_statistics,omitempty"`
+	XXX_unrecognized   []byte                    `json:"-"`
 }
 
 func (m *Response_GetContainers_Container) Reset()         { *m = Response_GetContainers_Container{} }
@@ -1125,14 +1582,14 @@ func (*Response_GetContainers_Container) Descriptor() ([]byte, []int) {
 	return fileDescriptorAgent, []int{1, 8, 0}
 }
 
-func (m *Response_GetContainers_Container) GetFrameworkId() *mesos_v1.FrameworkID {
+func (m *Response_GetContainers_Container) GetFrameworkId() *mesos.FrameworkID {
 	if m != nil {
 		return m.FrameworkId
 	}
 	return nil
 }
 
-func (m *Response_GetContainers_Container) GetExecutorId() *mesos_v1.ExecutorID {
+func (m *Response_GetContainers_Container) GetExecutorId() *mesos.ExecutorID {
 	if m != nil {
 		return m.ExecutorId
 	}
@@ -1146,21 +1603,21 @@ func (m *Response_GetContainers_Container) GetExecutorName() string {
 	return ""
 }
 
-func (m *Response_GetContainers_Container) GetContainerId() *mesos_v1.ContainerID {
+func (m *Response_GetContainers_Container) GetContainerId() *mesos.ContainerID {
 	if m != nil {
 		return m.ContainerId
 	}
 	return nil
 }
 
-func (m *Response_GetContainers_Container) GetContainerStatus() *mesos_v1.ContainerStatus {
+func (m *Response_GetContainers_Container) GetContainerStatus() *mesos.ContainerStatus {
 	if m != nil {
 		return m.ContainerStatus
 	}
 	return nil
 }
 
-func (m *Response_GetContainers_Container) GetResourceStatistics() *mesos_v1.ResourceStatistics {
+func (m *Response_GetContainers_Container) GetResourceStatistics() *mesos.ResourceStatistics {
 	if m != nil {
 		return m.ResourceStatistics
 	}
@@ -1195,8 +1652,8 @@ func (m *Response_GetFrameworks) GetCompletedFrameworks() []*Response_GetFramewo
 }
 
 type Response_GetFrameworks_Framework struct {
-	FrameworkInfo    *mesos_v1.FrameworkInfo `protobuf:"bytes,1,req,name=framework_info" json:"framework_info,omitempty"`
-	XXX_unrecognized []byte                  `json:"-"`
+	FrameworkInfo    *mesos.FrameworkInfo `protobuf:"bytes,1,req,name=framework_info" json:"framework_info,omitempty"`
+	XXX_unrecognized []byte               `json:"-"`
 }
 
 func (m *Response_GetFrameworks_Framework) Reset()         { *m = Response_GetFrameworks_Framework{} }
@@ -1206,7 +1663,7 @@ func (*Response_GetFrameworks_Framework) Descriptor() ([]byte, []int) {
 	return fileDescriptorAgent, []int{1, 9, 0}
 }
 
-func (m *Response_GetFrameworks_Framework) GetFrameworkInfo() *mesos_v1.FrameworkInfo {
+func (m *Response_GetFrameworks_Framework) GetFrameworkInfo() *mesos.FrameworkInfo {
 	if m != nil {
 		return m.FrameworkInfo
 	}
@@ -1241,8 +1698,8 @@ func (m *Response_GetExecutors) GetCompletedExecutors() []*Response_GetExecutors
 }
 
 type Response_GetExecutors_Executor struct {
-	ExecutorInfo     *mesos_v1.ExecutorInfo `protobuf:"bytes,1,req,name=executor_info" json:"executor_info,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	ExecutorInfo     *mesos.ExecutorInfo `protobuf:"bytes,1,req,name=executor_info" json:"executor_info,omitempty"`
+	XXX_unrecognized []byte              `json:"-"`
 }
 
 func (m *Response_GetExecutors_Executor) Reset()         { *m = Response_GetExecutors_Executor{} }
@@ -1252,7 +1709,7 @@ func (*Response_GetExecutors_Executor) Descriptor() ([]byte, []int) {
 	return fileDescriptorAgent, []int{1, 10, 0}
 }
 
-func (m *Response_GetExecutors_Executor) GetExecutorInfo() *mesos_v1.ExecutorInfo {
+func (m *Response_GetExecutors_Executor) GetExecutorInfo() *mesos.ExecutorInfo {
 	if m != nil {
 		return m.ExecutorInfo
 	}
@@ -1264,17 +1721,17 @@ func (m *Response_GetExecutors_Executor) GetExecutorInfo() *mesos_v1.ExecutorInf
 type Response_GetTasks struct {
 	// Tasks that are pending in the agent's queue before an executor is
 	// launched.
-	PendingTasks []*mesos_v1.Task `protobuf:"bytes,1,rep,name=pending_tasks" json:"pending_tasks,omitempty"`
+	PendingTasks []*mesos.Task `protobuf:"bytes,1,rep,name=pending_tasks" json:"pending_tasks,omitempty"`
 	// Tasks that are enqueued for a launched executor that has not yet
 	// registered.
-	QueuedTasks []*mesos_v1.Task `protobuf:"bytes,2,rep,name=queued_tasks" json:"queued_tasks,omitempty"`
+	QueuedTasks []*mesos.Task `protobuf:"bytes,2,rep,name=queued_tasks" json:"queued_tasks,omitempty"`
 	// Tasks that are running.
-	LaunchedTasks []*mesos_v1.Task `protobuf:"bytes,3,rep,name=launched_tasks" json:"launched_tasks,omitempty"`
+	LaunchedTasks []*mesos.Task `protobuf:"bytes,3,rep,name=launched_tasks" json:"launched_tasks,omitempty"`
 	// Tasks that are terminated but pending updates.
-	TerminatedTasks []*mesos_v1.Task `protobuf:"bytes,4,rep,name=terminated_tasks" json:"terminated_tasks,omitempty"`
+	TerminatedTasks []*mesos.Task `protobuf:"bytes,4,rep,name=terminated_tasks" json:"terminated_tasks,omitempty"`
 	// Tasks that are terminated and updates acked.
-	CompletedTasks   []*mesos_v1.Task `protobuf:"bytes,5,rep,name=completed_tasks" json:"completed_tasks,omitempty"`
-	XXX_unrecognized []byte           `json:"-"`
+	CompletedTasks   []*mesos.Task `protobuf:"bytes,5,rep,name=completed_tasks" json:"completed_tasks,omitempty"`
+	XXX_unrecognized []byte        `json:"-"`
 }
 
 func (m *Response_GetTasks) Reset()                    { *m = Response_GetTasks{} }
@@ -1282,35 +1739,35 @@ func (m *Response_GetTasks) String() string            { return proto.CompactTex
 func (*Response_GetTasks) ProtoMessage()               {}
 func (*Response_GetTasks) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 11} }
 
-func (m *Response_GetTasks) GetPendingTasks() []*mesos_v1.Task {
+func (m *Response_GetTasks) GetPendingTasks() []*mesos.Task {
 	if m != nil {
 		return m.PendingTasks
 	}
 	return nil
 }
 
-func (m *Response_GetTasks) GetQueuedTasks() []*mesos_v1.Task {
+func (m *Response_GetTasks) GetQueuedTasks() []*mesos.Task {
 	if m != nil {
 		return m.QueuedTasks
 	}
 	return nil
 }
 
-func (m *Response_GetTasks) GetLaunchedTasks() []*mesos_v1.Task {
+func (m *Response_GetTasks) GetLaunchedTasks() []*mesos.Task {
 	if m != nil {
 		return m.LaunchedTasks
 	}
 	return nil
 }
 
-func (m *Response_GetTasks) GetTerminatedTasks() []*mesos_v1.Task {
+func (m *Response_GetTasks) GetTerminatedTasks() []*mesos.Task {
 	if m != nil {
 		return m.TerminatedTasks
 	}
 	return nil
 }
 
-func (m *Response_GetTasks) GetCompletedTasks() []*mesos_v1.Task {
+func (m *Response_GetTasks) GetCompletedTasks() []*mesos.Task {
 	if m != nil {
 		return m.CompletedTasks
 	}
@@ -1319,8 +1776,8 @@ func (m *Response_GetTasks) GetCompletedTasks() []*mesos_v1.Task {
 
 // Contains the agent's information.
 type Response_GetAgent struct {
-	AgentInfo        *mesos_v1.AgentInfo `protobuf:"bytes,1,opt,name=agent_info" json:"agent_info,omitempty"`
-	XXX_unrecognized []byte              `json:"-"`
+	SlaveInfo        *mesos.SlaveInfo `protobuf:"bytes,1,opt,name=slave_info" json:"slave_info,omitempty"`
+	XXX_unrecognized []byte           `json:"-"`
 }
 
 func (m *Response_GetAgent) Reset()                    { *m = Response_GetAgent{} }
@@ -1328,24 +1785,82 @@ func (m *Response_GetAgent) String() string            { return proto.CompactTex
 func (*Response_GetAgent) ProtoMessage()               {}
 func (*Response_GetAgent) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 12} }
 
-func (m *Response_GetAgent) GetAgentInfo() *mesos_v1.AgentInfo {
+func (m *Response_GetAgent) GetSlaveInfo() *mesos.SlaveInfo {
 	if m != nil {
-		return m.AgentInfo
+		return m.SlaveInfo
+	}
+	return nil
+}
+
+// Lists information about all resource providers known to the agent
+// at the current time.
+type Response_GetResourceProviders struct {
+	ResourceProviders []*Response_GetResourceProviders_ResourceProvider `protobuf:"bytes,1,rep,name=resource_providers" json:"resource_providers,omitempty"`
+	XXX_unrecognized  []byte                                            `json:"-"`
+}
+
+func (m *Response_GetResourceProviders) Reset()         { *m = Response_GetResourceProviders{} }
+func (m *Response_GetResourceProviders) String() string { return proto.CompactTextString(m) }
+func (*Response_GetResourceProviders) ProtoMessage()    {}
+func (*Response_GetResourceProviders) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{1, 13}
+}
+
+func (m *Response_GetResourceProviders) GetResourceProviders() []*Response_GetResourceProviders_ResourceProvider {
+	if m != nil {
+		return m.ResourceProviders
+	}
+	return nil
+}
+
+type Response_GetResourceProviders_ResourceProvider struct {
+	ResourceProviderInfo *mesos.ResourceProviderInfo `protobuf:"bytes,1,req,name=resource_provider_info" json:"resource_provider_info,omitempty"`
+	XXX_unrecognized     []byte                      `json:"-"`
+}
+
+func (m *Response_GetResourceProviders_ResourceProvider) Reset() {
+	*m = Response_GetResourceProviders_ResourceProvider{}
+}
+func (m *Response_GetResourceProviders_ResourceProvider) String() string {
+	return proto.CompactTextString(m)
+}
+func (*Response_GetResourceProviders_ResourceProvider) ProtoMessage() {}
+func (*Response_GetResourceProviders_ResourceProvider) Descriptor() ([]byte, []int) {
+	return fileDescriptorAgent, []int{1, 13, 0}
+}
+
+func (m *Response_GetResourceProviders_ResourceProvider) GetResourceProviderInfo() *mesos.ResourceProviderInfo {
+	if m != nil {
+		return m.ResourceProviderInfo
 	}
 	return nil
 }
 
 // Returns termination information about the nested container.
 type Response_WaitNestedContainer struct {
-	ExitStatus       *int32 `protobuf:"varint,1,opt,name=exit_status" json:"exit_status,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	// Wait status of the lead process in the container. Note that this
+	// is the return value of `wait(2)`, so callers must use the `wait(2)`
+	// family of macros to extract whether the process exited cleanly and
+	// what the exit code was.
+	ExitStatus *int32 `protobuf:"varint,1,opt,name=exit_status" json:"exit_status,omitempty"`
+	// The `state` and `reason` fields may be populated if the Mesos agent
+	// terminates the container. In the absence of any special knowledge,
+	// executors should propagate this information via the `status` field
+	// of an `Update` call for the corresponding TaskID.
+	State  *mesos.TaskState         `protobuf:"varint,2,opt,name=state,enum=mesos.TaskState" json:"state,omitempty"`
+	Reason *mesos.TaskStatus_Reason `protobuf:"varint,3,opt,name=reason,enum=mesos.TaskStatus_Reason" json:"reason,omitempty"`
+	// This field will be populated if the task was terminated due to
+	// a resource limitation.
+	Limitation       *mesos.TaskResourceLimitation `protobuf:"bytes,4,opt,name=limitation" json:"limitation,omitempty"`
+	Message          *string                       `protobuf:"bytes,5,opt,name=message" json:"message,omitempty"`
+	XXX_unrecognized []byte                        `json:"-"`
 }
 
 func (m *Response_WaitNestedContainer) Reset()         { *m = Response_WaitNestedContainer{} }
 func (m *Response_WaitNestedContainer) String() string { return proto.CompactTextString(m) }
 func (*Response_WaitNestedContainer) ProtoMessage()    {}
 func (*Response_WaitNestedContainer) Descriptor() ([]byte, []int) {
-	return fileDescriptorAgent, []int{1, 13}
+	return fileDescriptorAgent, []int{1, 14}
 }
 
 func (m *Response_WaitNestedContainer) GetExitStatus() int32 {
@@ -1355,6 +1870,94 @@ func (m *Response_WaitNestedContainer) GetExitStatus() int32 {
 	return 0
 }
 
+func (m *Response_WaitNestedContainer) GetState() mesos.TaskState {
+	if m != nil && m.State != nil {
+		return *m.State
+	}
+	return mesos.TaskState_TASK_STAGING
+}
+
+func (m *Response_WaitNestedContainer) GetReason() mesos.TaskStatus_Reason {
+	if m != nil && m.Reason != nil {
+		return *m.Reason
+	}
+	return mesos.TaskStatus_REASON_COMMAND_EXECUTOR_FAILED
+}
+
+func (m *Response_WaitNestedContainer) GetLimitation() *mesos.TaskResourceLimitation {
+	if m != nil {
+		return m.Limitation
+	}
+	return nil
+}
+
+func (m *Response_WaitNestedContainer) GetMessage() string {
+	if m != nil && m.Message != nil {
+		return *m.Message
+	}
+	return ""
+}
+
+// Returns termination information about the standalone or nested container.
+type Response_WaitContainer struct {
+	// Wait status of the lead process in the container. Note that this
+	// is the return value of `wait(2)`, so callers must use the `wait(2)`
+	// family of macros to extract whether the process exited cleanly and
+	// what the exit code was.
+	ExitStatus *int32 `protobuf:"varint,1,opt,name=exit_status" json:"exit_status,omitempty"`
+	// The `state` and `reason` fields may be populated if the Mesos agent
+	// terminates the container. In the absence of any special knowledge,
+	// executors should propagate this information via the `status` field
+	// of an `Update` call for the corresponding TaskID.
+	State  *mesos.TaskState         `protobuf:"varint,2,opt,name=state,enum=mesos.TaskState" json:"state,omitempty"`
+	Reason *mesos.TaskStatus_Reason `protobuf:"varint,3,opt,name=reason,enum=mesos.TaskStatus_Reason" json:"reason,omitempty"`
+	// This field will be populated if the task was terminated due to
+	// a resource limitation.
+	Limitation       *mesos.TaskResourceLimitation `protobuf:"bytes,4,opt,name=limitation" json:"limitation,omitempty"`
+	Message          *string                       `protobuf:"bytes,5,opt,name=message" json:"message,omitempty"`
+	XXX_unrecognized []byte                        `json:"-"`
+}
+
+func (m *Response_WaitContainer) Reset()                    { *m = Response_WaitContainer{} }
+func (m *Response_WaitContainer) String() string            { return proto.CompactTextString(m) }
+func (*Response_WaitContainer) ProtoMessage()               {}
+func (*Response_WaitContainer) Descriptor() ([]byte, []int) { return fileDescriptorAgent, []int{1, 15} }
+
+func (m *Response_WaitContainer) GetExitStatus() int32 {
+	if m != nil && m.ExitStatus != nil {
+		return *m.ExitStatus
+	}
+	return 0
+}
+
+func (m *Response_WaitContainer) GetState() mesos.TaskState {
+	if m != nil && m.State != nil {
+		return *m.State
+	}
+	return mesos.TaskState_TASK_STAGING
+}
+
+func (m *Response_WaitContainer) GetReason() mesos.TaskStatus_Reason {
+	if m != nil && m.Reason != nil {
+		return *m.Reason
+	}
+	return mesos.TaskStatus_REASON_COMMAND_EXECUTOR_FAILED
+}
+
+func (m *Response_WaitContainer) GetLimitation() *mesos.TaskResourceLimitation {
+	if m != nil {
+		return m.Limitation
+	}
+	return nil
+}
+
+func (m *Response_WaitContainer) GetMessage() string {
+	if m != nil && m.Message != nil {
+		return *m.Message
+	}
+	return ""
+}
+
 // *
 // Streaming response to `Call::LAUNCH_NESTED_CONTAINER_SESSION` and
 // `Call::ATTACH_CONTAINER_OUTPUT`.
@@ -1362,7 +1965,7 @@ func (m *Response_WaitNestedContainer) GetExitStatus() int32 {
 // This message is also used to stream request data for
 // `Call::ATTACH_CONTAINER_INPUT`.
 type ProcessIO struct {
-	Type             *ProcessIO_Type    `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.ProcessIO_Type" json:"type,omitempty"`
+	Type             *ProcessIO_Type    `protobuf:"varint,1,opt,name=type,enum=mesos.agent.ProcessIO_Type" json:"type,omitempty"`
 	Data             *ProcessIO_Data    `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
 	Control          *ProcessIO_Control `protobuf:"bytes,3,opt,name=control" json:"control,omitempty"`
 	XXX_unrecognized []byte             `json:"-"`
@@ -1395,7 +1998,7 @@ func (m *ProcessIO) GetControl() *ProcessIO_Control {
 }
 
 type ProcessIO_Data struct {
-	Type             *ProcessIO_Data_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.ProcessIO_Data_Type" json:"type,omitempty"`
+	Type             *ProcessIO_Data_Type `protobuf:"varint,1,opt,name=type,enum=mesos.agent.ProcessIO_Data_Type" json:"type,omitempty"`
 	Data             []byte               `protobuf:"bytes,2,opt,name=data" json:"data,omitempty"`
 	XXX_unrecognized []byte               `json:"-"`
 }
@@ -1420,8 +2023,8 @@ func (m *ProcessIO_Data) GetData() []byte {
 }
 
 type ProcessIO_Control struct {
-	Type             *ProcessIO_Control_Type      `protobuf:"varint,1,opt,name=type,enum=mesos.v1.agent.ProcessIO_Control_Type" json:"type,omitempty"`
-	TtyInfo          *mesos_v1.TTYInfo            `protobuf:"bytes,2,opt,name=tty_info" json:"tty_info,omitempty"`
+	Type             *ProcessIO_Control_Type      `protobuf:"varint,1,opt,name=type,enum=mesos.agent.ProcessIO_Control_Type" json:"type,omitempty"`
+	TtyInfo          *mesos.TTYInfo               `protobuf:"bytes,2,opt,name=tty_info" json:"tty_info,omitempty"`
 	Heartbeat        *ProcessIO_Control_Heartbeat `protobuf:"bytes,3,opt,name=heartbeat" json:"heartbeat,omitempty"`
 	XXX_unrecognized []byte                       `json:"-"`
 }
@@ -1438,7 +2041,7 @@ func (m *ProcessIO_Control) GetType() ProcessIO_Control_Type {
 	return ProcessIO_Control_UNKNOWN
 }
 
-func (m *ProcessIO_Control) GetTtyInfo() *mesos_v1.TTYInfo {
+func (m *ProcessIO_Control) GetTtyInfo() *mesos.TTYInfo {
 	if m != nil {
 		return m.TtyInfo
 	}
@@ -1453,8 +2056,8 @@ func (m *ProcessIO_Control) GetHeartbeat() *ProcessIO_Control_Heartbeat {
 }
 
 type ProcessIO_Control_Heartbeat struct {
-	Interval         *mesos_v1.DurationInfo `protobuf:"bytes,1,opt,name=interval" json:"interval,omitempty"`
-	XXX_unrecognized []byte                 `json:"-"`
+	Interval         *mesos.DurationInfo `protobuf:"bytes,1,opt,name=interval" json:"interval,omitempty"`
+	XXX_unrecognized []byte              `json:"-"`
 }
 
 func (m *ProcessIO_Control_Heartbeat) Reset()         { *m = ProcessIO_Control_Heartbeat{} }
@@ -1464,7 +2067,7 @@ func (*ProcessIO_Control_Heartbeat) Descriptor() ([]byte, []int) {
 	return fileDescriptorAgent, []int{2, 1, 0}
 }
 
-func (m *ProcessIO_Control_Heartbeat) GetInterval() *mesos_v1.DurationInfo {
+func (m *ProcessIO_Control_Heartbeat) GetInterval() *mesos.DurationInfo {
 	if m != nil {
 		return m.Interval
 	}
@@ -1472,46 +2075,58 @@ func (m *ProcessIO_Control_Heartbeat) GetInterval() *mesos_v1.DurationInfo {
 }
 
 func init() {
-	proto.RegisterType((*Call)(nil), "mesos.v1.agent.Call")
-	proto.RegisterType((*Call_GetMetrics)(nil), "mesos.v1.agent.Call.GetMetrics")
-	proto.RegisterType((*Call_SetLoggingLevel)(nil), "mesos.v1.agent.Call.SetLoggingLevel")
-	proto.RegisterType((*Call_ListFiles)(nil), "mesos.v1.agent.Call.ListFiles")
-	proto.RegisterType((*Call_ReadFile)(nil), "mesos.v1.agent.Call.ReadFile")
-	proto.RegisterType((*Call_LaunchNestedContainer)(nil), "mesos.v1.agent.Call.LaunchNestedContainer")
-	proto.RegisterType((*Call_WaitNestedContainer)(nil), "mesos.v1.agent.Call.WaitNestedContainer")
-	proto.RegisterType((*Call_KillNestedContainer)(nil), "mesos.v1.agent.Call.KillNestedContainer")
-	proto.RegisterType((*Call_RemoveNestedContainer)(nil), "mesos.v1.agent.Call.RemoveNestedContainer")
-	proto.RegisterType((*Call_LaunchNestedContainerSession)(nil), "mesos.v1.agent.Call.LaunchNestedContainerSession")
-	proto.RegisterType((*Call_AttachContainerInput)(nil), "mesos.v1.agent.Call.AttachContainerInput")
-	proto.RegisterType((*Call_AttachContainerOutput)(nil), "mesos.v1.agent.Call.AttachContainerOutput")
-	proto.RegisterType((*Response)(nil), "mesos.v1.agent.Response")
-	proto.RegisterType((*Response_GetHealth)(nil), "mesos.v1.agent.Response.GetHealth")
-	proto.RegisterType((*Response_GetFlags)(nil), "mesos.v1.agent.Response.GetFlags")
-	proto.RegisterType((*Response_GetVersion)(nil), "mesos.v1.agent.Response.GetVersion")
-	proto.RegisterType((*Response_GetMetrics)(nil), "mesos.v1.agent.Response.GetMetrics")
-	proto.RegisterType((*Response_GetLoggingLevel)(nil), "mesos.v1.agent.Response.GetLoggingLevel")
-	proto.RegisterType((*Response_ListFiles)(nil), "mesos.v1.agent.Response.ListFiles")
-	proto.RegisterType((*Response_ReadFile)(nil), "mesos.v1.agent.Response.ReadFile")
-	proto.RegisterType((*Response_GetState)(nil), "mesos.v1.agent.Response.GetState")
-	proto.RegisterType((*Response_GetContainers)(nil), "mesos.v1.agent.Response.GetContainers")
-	proto.RegisterType((*Response_GetContainers_Container)(nil), "mesos.v1.agent.Response.GetContainers.Container")
-	proto.RegisterType((*Response_GetFrameworks)(nil), "mesos.v1.agent.Response.GetFrameworks")
-	proto.RegisterType((*Response_GetFrameworks_Framework)(nil), "mesos.v1.agent.Response.GetFrameworks.Framework")
-	proto.RegisterType((*Response_GetExecutors)(nil), "mesos.v1.agent.Response.GetExecutors")
-	proto.RegisterType((*Response_GetExecutors_Executor)(nil), "mesos.v1.agent.Response.GetExecutors.Executor")
-	proto.RegisterType((*Response_GetTasks)(nil), "mesos.v1.agent.Response.GetTasks")
-	proto.RegisterType((*Response_GetAgent)(nil), "mesos.v1.agent.Response.GetAgent")
-	proto.RegisterType((*Response_WaitNestedContainer)(nil), "mesos.v1.agent.Response.WaitNestedContainer")
-	proto.RegisterType((*ProcessIO)(nil), "mesos.v1.agent.ProcessIO")
-	proto.RegisterType((*ProcessIO_Data)(nil), "mesos.v1.agent.ProcessIO.Data")
-	proto.RegisterType((*ProcessIO_Control)(nil), "mesos.v1.agent.ProcessIO.Control")
-	proto.RegisterType((*ProcessIO_Control_Heartbeat)(nil), "mesos.v1.agent.ProcessIO.Control.Heartbeat")
-	proto.RegisterEnum("mesos.v1.agent.Call_Type", Call_Type_name, Call_Type_value)
-	proto.RegisterEnum("mesos.v1.agent.Call_AttachContainerInput_Type", Call_AttachContainerInput_Type_name, Call_AttachContainerInput_Type_value)
-	proto.RegisterEnum("mesos.v1.agent.Response_Type", Response_Type_name, Response_Type_value)
-	proto.RegisterEnum("mesos.v1.agent.ProcessIO_Type", ProcessIO_Type_name, ProcessIO_Type_value)
-	proto.RegisterEnum("mesos.v1.agent.ProcessIO_Data_Type", ProcessIO_Data_Type_name, ProcessIO_Data_Type_value)
-	proto.RegisterEnum("mesos.v1.agent.ProcessIO_Control_Type", ProcessIO_Control_Type_name, ProcessIO_Control_Type_value)
+	proto.RegisterType((*Call)(nil), "mesos.agent.Call")
+	proto.RegisterType((*Call_GetMetrics)(nil), "mesos.agent.Call.GetMetrics")
+	proto.RegisterType((*Call_SetLoggingLevel)(nil), "mesos.agent.Call.SetLoggingLevel")
+	proto.RegisterType((*Call_ListFiles)(nil), "mesos.agent.Call.ListFiles")
+	proto.RegisterType((*Call_ReadFile)(nil), "mesos.agent.Call.ReadFile")
+	proto.RegisterType((*Call_GetContainers)(nil), "mesos.agent.Call.GetContainers")
+	proto.RegisterType((*Call_LaunchNestedContainer)(nil), "mesos.agent.Call.LaunchNestedContainer")
+	proto.RegisterType((*Call_WaitNestedContainer)(nil), "mesos.agent.Call.WaitNestedContainer")
+	proto.RegisterType((*Call_KillNestedContainer)(nil), "mesos.agent.Call.KillNestedContainer")
+	proto.RegisterType((*Call_RemoveNestedContainer)(nil), "mesos.agent.Call.RemoveNestedContainer")
+	proto.RegisterType((*Call_LaunchNestedContainerSession)(nil), "mesos.agent.Call.LaunchNestedContainerSession")
+	proto.RegisterType((*Call_AttachContainerInput)(nil), "mesos.agent.Call.AttachContainerInput")
+	proto.RegisterType((*Call_AttachContainerOutput)(nil), "mesos.agent.Call.AttachContainerOutput")
+	proto.RegisterType((*Call_LaunchContainer)(nil), "mesos.agent.Call.LaunchContainer")
+	proto.RegisterType((*Call_WaitContainer)(nil), "mesos.agent.Call.WaitContainer")
+	proto.RegisterType((*Call_KillContainer)(nil), "mesos.agent.Call.KillContainer")
+	proto.RegisterType((*Call_RemoveContainer)(nil), "mesos.agent.Call.RemoveContainer")
+	proto.RegisterType((*Call_AddResourceProviderConfig)(nil), "mesos.agent.Call.AddResourceProviderConfig")
+	proto.RegisterType((*Call_UpdateResourceProviderConfig)(nil), "mesos.agent.Call.UpdateResourceProviderConfig")
+	proto.RegisterType((*Call_RemoveResourceProviderConfig)(nil), "mesos.agent.Call.RemoveResourceProviderConfig")
+	proto.RegisterType((*Call_PruneImages)(nil), "mesos.agent.Call.PruneImages")
+	proto.RegisterType((*Response)(nil), "mesos.agent.Response")
+	proto.RegisterType((*Response_GetHealth)(nil), "mesos.agent.Response.GetHealth")
+	proto.RegisterType((*Response_GetFlags)(nil), "mesos.agent.Response.GetFlags")
+	proto.RegisterType((*Response_GetVersion)(nil), "mesos.agent.Response.GetVersion")
+	proto.RegisterType((*Response_GetMetrics)(nil), "mesos.agent.Response.GetMetrics")
+	proto.RegisterType((*Response_GetLoggingLevel)(nil), "mesos.agent.Response.GetLoggingLevel")
+	proto.RegisterType((*Response_ListFiles)(nil), "mesos.agent.Response.ListFiles")
+	proto.RegisterType((*Response_ReadFile)(nil), "mesos.agent.Response.ReadFile")
+	proto.RegisterType((*Response_GetState)(nil), "mesos.agent.Response.GetState")
+	proto.RegisterType((*Response_GetContainers)(nil), "mesos.agent.Response.GetContainers")
+	proto.RegisterType((*Response_GetContainers_Container)(nil), "mesos.agent.Response.GetContainers.Container")
+	proto.RegisterType((*Response_GetFrameworks)(nil), "mesos.agent.Response.GetFrameworks")
+	proto.RegisterType((*Response_GetFrameworks_Framework)(nil), "mesos.agent.Response.GetFrameworks.Framework")
+	proto.RegisterType((*Response_GetExecutors)(nil), "mesos.agent.Response.GetExecutors")
+	proto.RegisterType((*Response_GetExecutors_Executor)(nil), "mesos.agent.Response.GetExecutors.Executor")
+	proto.RegisterType((*Response_GetTasks)(nil), "mesos.agent.Response.GetTasks")
+	proto.RegisterType((*Response_GetAgent)(nil), "mesos.agent.Response.GetAgent")
+	proto.RegisterType((*Response_GetResourceProviders)(nil), "mesos.agent.Response.GetResourceProviders")
+	proto.RegisterType((*Response_GetResourceProviders_ResourceProvider)(nil), "mesos.agent.Response.GetResourceProviders.ResourceProvider")
+	proto.RegisterType((*Response_WaitNestedContainer)(nil), "mesos.agent.Response.WaitNestedContainer")
+	proto.RegisterType((*Response_WaitContainer)(nil), "mesos.agent.Response.WaitContainer")
+	proto.RegisterType((*ProcessIO)(nil), "mesos.agent.ProcessIO")
+	proto.RegisterType((*ProcessIO_Data)(nil), "mesos.agent.ProcessIO.Data")
+	proto.RegisterType((*ProcessIO_Control)(nil), "mesos.agent.ProcessIO.Control")
+	proto.RegisterType((*ProcessIO_Control_Heartbeat)(nil), "mesos.agent.ProcessIO.Control.Heartbeat")
+	proto.RegisterEnum("mesos.agent.Call_Type", Call_Type_name, Call_Type_value)
+	proto.RegisterEnum("mesos.agent.Call_AttachContainerInput_Type", Call_AttachContainerInput_Type_name, Call_AttachContainerInput_Type_value)
+	proto.RegisterEnum("mesos.agent.Response_Type", Response_Type_name, Response_Type_value)
+	proto.RegisterEnum("mesos.agent.ProcessIO_Type", ProcessIO_Type_name, ProcessIO_Type_value)
+	proto.RegisterEnum("mesos.agent.ProcessIO_Data_Type", ProcessIO_Data_Type_name, ProcessIO_Data_Type_value)
+	proto.RegisterEnum("mesos.agent.ProcessIO_Control_Type", ProcessIO_Control_Type_name, ProcessIO_Control_Type_value)
 }
 func (m *Call) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -1643,6 +2258,108 @@ func (m *Call) MarshalTo(dAtA []byte) (int, error) {
 		}
 		i += n11
 	}
+	if m.LaunchContainer != nil {
+		dAtA[i] = 0x6a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.LaunchContainer.Size()))
+		n12, err := m.LaunchContainer.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n12
+	}
+	if m.WaitContainer != nil {
+		dAtA[i] = 0x72
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.WaitContainer.Size()))
+		n13, err := m.WaitContainer.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n13
+	}
+	if m.KillContainer != nil {
+		dAtA[i] = 0x7a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.KillContainer.Size()))
+		n14, err := m.KillContainer.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n14
+	}
+	if m.RemoveContainer != nil {
+		dAtA[i] = 0x82
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.RemoveContainer.Size()))
+		n15, err := m.RemoveContainer.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n15
+	}
+	if m.AddResourceProviderConfig != nil {
+		dAtA[i] = 0x8a
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.AddResourceProviderConfig.Size()))
+		n16, err := m.AddResourceProviderConfig.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n16
+	}
+	if m.UpdateResourceProviderConfig != nil {
+		dAtA[i] = 0x92
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.UpdateResourceProviderConfig.Size()))
+		n17, err := m.UpdateResourceProviderConfig.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n17
+	}
+	if m.RemoveResourceProviderConfig != nil {
+		dAtA[i] = 0x9a
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.RemoveResourceProviderConfig.Size()))
+		n18, err := m.RemoveResourceProviderConfig.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n18
+	}
+	if m.GetContainers != nil {
+		dAtA[i] = 0xa2
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetContainers.Size()))
+		n19, err := m.GetContainers.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n19
+	}
+	if m.PruneImages != nil {
+		dAtA[i] = 0xaa
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.PruneImages.Size()))
+		n20, err := m.PruneImages.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n20
+	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
@@ -1668,11 +2385,11 @@ func (m *Call_GetMetrics) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Timeout.Size()))
-		n12, err := m.Timeout.MarshalTo(dAtA[i:])
+		n21, err := m.Timeout.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n12
+		i += n21
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1708,11 +2425,11 @@ func (m *Call_SetLoggingLevel) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Duration.Size()))
-		n13, err := m.Duration.MarshalTo(dAtA[i:])
+		n22, err := m.Duration.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n13
+		i += n22
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1790,6 +2507,47 @@ func (m *Call_ReadFile) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Call_GetContainers) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_GetContainers) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ShowNested != nil {
+		dAtA[i] = 0x8
+		i++
+		if *m.ShowNested {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	if m.ShowStandalone != nil {
+		dAtA[i] = 0x10
+		i++
+		if *m.ShowStandalone {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *Call_LaunchNestedContainer) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -1811,31 +2569,31 @@ func (m *Call_LaunchNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n14, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n23, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n14
+		i += n23
 	}
 	if m.Command != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Command.Size()))
-		n15, err := m.Command.MarshalTo(dAtA[i:])
+		n24, err := m.Command.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n15
+		i += n24
 	}
 	if m.Container != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Container.Size()))
-		n16, err := m.Container.MarshalTo(dAtA[i:])
+		n25, err := m.Container.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n16
+		i += n25
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1864,11 +2622,11 @@ func (m *Call_WaitNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n17, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n26, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n17
+		i += n26
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1897,11 +2655,16 @@ func (m *Call_KillNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n18, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n27, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n18
+		i += n27
+	}
+	if m.Signal != nil {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.Signal))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1930,11 +2693,11 @@ func (m *Call_RemoveNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n19, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n28, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n19
+		i += n28
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -1963,31 +2726,31 @@ func (m *Call_LaunchNestedContainerSession) MarshalTo(dAtA []byte) (int, error) 
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n20, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n29, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n20
+		i += n29
 	}
 	if m.Command != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Command.Size()))
-		n21, err := m.Command.MarshalTo(dAtA[i:])
+		n30, err := m.Command.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n21
+		i += n30
 	}
 	if m.Container != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Container.Size()))
-		n22, err := m.Container.MarshalTo(dAtA[i:])
+		n31, err := m.Container.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n22
+		i += n31
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2019,21 +2782,21 @@ func (m *Call_AttachContainerInput) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n23, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n32, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n23
+		i += n32
 	}
 	if m.ProcessIo != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ProcessIo.Size()))
-		n24, err := m.ProcessIo.MarshalTo(dAtA[i:])
+		n33, err := m.ProcessIo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n24
+		i += n33
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2062,11 +2825,316 @@ func (m *Call_AttachContainerOutput) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n25, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n34, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n25
+		i += n34
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_LaunchContainer) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_LaunchContainer) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ContainerId == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
+		n35, err := m.ContainerId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n35
+	}
+	if m.Command != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Command.Size()))
+		n36, err := m.Command.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n36
+	}
+	if len(m.Resources) > 0 {
+		for _, msg := range m.Resources {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintAgent(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Container != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Container.Size()))
+		n37, err := m.Container.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n37
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_WaitContainer) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_WaitContainer) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ContainerId == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
+		n38, err := m.ContainerId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n38
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_KillContainer) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_KillContainer) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ContainerId == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
+		n39, err := m.ContainerId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n39
+	}
+	if m.Signal != nil {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.Signal))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_RemoveContainer) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_RemoveContainer) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ContainerId == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
+		n40, err := m.ContainerId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n40
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_AddResourceProviderConfig) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_AddResourceProviderConfig) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Info == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Info.Size()))
+		n41, err := m.Info.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n41
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_UpdateResourceProviderConfig) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_UpdateResourceProviderConfig) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Info == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Info.Size()))
+		n42, err := m.Info.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n42
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_RemoveResourceProviderConfig) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_RemoveResourceProviderConfig) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Type == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(len(*m.Type)))
+		i += copy(dAtA[i:], *m.Type)
+	}
+	if m.Name == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(len(*m.Name)))
+		i += copy(dAtA[i:], *m.Name)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_PruneImages) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_PruneImages) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.ExcludedImages) > 0 {
+		for _, msg := range m.ExcludedImages {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintAgent(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2098,141 +3166,165 @@ func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetHealth.Size()))
-		n26, err := m.GetHealth.MarshalTo(dAtA[i:])
+		n43, err := m.GetHealth.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n26
+		i += n43
 	}
 	if m.GetFlags != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetFlags.Size()))
-		n27, err := m.GetFlags.MarshalTo(dAtA[i:])
+		n44, err := m.GetFlags.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n27
+		i += n44
 	}
 	if m.GetVersion != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetVersion.Size()))
-		n28, err := m.GetVersion.MarshalTo(dAtA[i:])
+		n45, err := m.GetVersion.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n28
+		i += n45
 	}
 	if m.GetMetrics != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetMetrics.Size()))
-		n29, err := m.GetMetrics.MarshalTo(dAtA[i:])
+		n46, err := m.GetMetrics.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n46
 	}
 	if m.GetLoggingLevel != nil {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetLoggingLevel.Size()))
-		n30, err := m.GetLoggingLevel.MarshalTo(dAtA[i:])
+		n47, err := m.GetLoggingLevel.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n47
 	}
 	if m.ListFiles != nil {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ListFiles.Size()))
-		n31, err := m.ListFiles.MarshalTo(dAtA[i:])
+		n48, err := m.ListFiles.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n31
+		i += n48
 	}
 	if m.ReadFile != nil {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ReadFile.Size()))
-		n32, err := m.ReadFile.MarshalTo(dAtA[i:])
+		n49, err := m.ReadFile.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n32
+		i += n49
 	}
 	if m.GetState != nil {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetState.Size()))
-		n33, err := m.GetState.MarshalTo(dAtA[i:])
+		n50, err := m.GetState.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n33
+		i += n50
 	}
 	if m.GetContainers != nil {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetContainers.Size()))
-		n34, err := m.GetContainers.MarshalTo(dAtA[i:])
+		n51, err := m.GetContainers.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n34
+		i += n51
 	}
 	if m.GetFrameworks != nil {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetFrameworks.Size()))
-		n35, err := m.GetFrameworks.MarshalTo(dAtA[i:])
+		n52, err := m.GetFrameworks.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n35
+		i += n52
 	}
 	if m.GetExecutors != nil {
 		dAtA[i] = 0x62
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetExecutors.Size()))
-		n36, err := m.GetExecutors.MarshalTo(dAtA[i:])
+		n53, err := m.GetExecutors.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n36
+		i += n53
 	}
 	if m.GetTasks != nil {
 		dAtA[i] = 0x6a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetTasks.Size()))
-		n37, err := m.GetTasks.MarshalTo(dAtA[i:])
+		n54, err := m.GetTasks.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n37
+		i += n54
 	}
 	if m.WaitNestedContainer != nil {
 		dAtA[i] = 0x72
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.WaitNestedContainer.Size()))
-		n38, err := m.WaitNestedContainer.MarshalTo(dAtA[i:])
+		n55, err := m.WaitNestedContainer.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n38
+		i += n55
 	}
 	if m.GetAgent != nil {
 		dAtA[i] = 0x7a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetAgent.Size()))
-		n39, err := m.GetAgent.MarshalTo(dAtA[i:])
+		n56, err := m.GetAgent.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n39
+		i += n56
+	}
+	if m.WaitContainer != nil {
+		dAtA[i] = 0x82
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.WaitContainer.Size()))
+		n57, err := m.WaitContainer.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n57
+	}
+	if m.GetResourceProviders != nil {
+		dAtA[i] = 0x8a
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.GetResourceProviders.Size()))
+		n58, err := m.GetResourceProviders.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n58
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2327,11 +3419,11 @@ func (m *Response_GetVersion) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.VersionInfo.Size()))
-		n40, err := m.VersionInfo.MarshalTo(dAtA[i:])
+		n59, err := m.VersionInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n40
+		i += n59
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2488,31 +3580,31 @@ func (m *Response_GetState) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetTasks.Size()))
-		n41, err := m.GetTasks.MarshalTo(dAtA[i:])
+		n60, err := m.GetTasks.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n41
+		i += n60
 	}
 	if m.GetExecutors != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetExecutors.Size()))
-		n42, err := m.GetExecutors.MarshalTo(dAtA[i:])
+		n61, err := m.GetExecutors.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n42
+		i += n61
 	}
 	if m.GetFrameworks != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.GetFrameworks.Size()))
-		n43, err := m.GetFrameworks.MarshalTo(dAtA[i:])
+		n62, err := m.GetFrameworks.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n43
+		i += n62
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2568,33 +3660,27 @@ func (m *Response_GetContainers_Container) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.FrameworkId == nil {
-		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
-	} else {
+	if m.FrameworkId != nil {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.FrameworkId.Size()))
-		n44, err := m.FrameworkId.MarshalTo(dAtA[i:])
+		n63, err := m.FrameworkId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n44
+		i += n63
 	}
-	if m.ExecutorId == nil {
-		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
-	} else {
+	if m.ExecutorId != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ExecutorId.Size()))
-		n45, err := m.ExecutorId.MarshalTo(dAtA[i:])
+		n64, err := m.ExecutorId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n45
+		i += n64
 	}
-	if m.ExecutorName == nil {
-		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
-	} else {
+	if m.ExecutorName != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(len(*m.ExecutorName)))
@@ -2606,31 +3692,31 @@ func (m *Response_GetContainers_Container) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerId.Size()))
-		n46, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n65, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n46
+		i += n65
 	}
 	if m.ContainerStatus != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ContainerStatus.Size()))
-		n47, err := m.ContainerStatus.MarshalTo(dAtA[i:])
+		n66, err := m.ContainerStatus.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n47
+		i += n66
 	}
 	if m.ResourceStatistics != nil {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ResourceStatistics.Size()))
-		n48, err := m.ResourceStatistics.MarshalTo(dAtA[i:])
+		n67, err := m.ResourceStatistics.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n48
+		i += n67
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2704,11 +3790,11 @@ func (m *Response_GetFrameworks_Framework) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.FrameworkInfo.Size()))
-		n49, err := m.FrameworkInfo.MarshalTo(dAtA[i:])
+		n68, err := m.FrameworkInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n49
+		i += n68
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2782,11 +3868,11 @@ func (m *Response_GetExecutors_Executor) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.ExecutorInfo.Size()))
-		n50, err := m.ExecutorInfo.MarshalTo(dAtA[i:])
+		n69, err := m.ExecutorInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n50
+		i += n69
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2890,15 +3976,81 @@ func (m *Response_GetAgent) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.AgentInfo != nil {
+	if m.SlaveInfo != nil {
 		dAtA[i] = 0xa
 		i++
-		i = encodeVarintAgent(dAtA, i, uint64(m.AgentInfo.Size()))
-		n51, err := m.AgentInfo.MarshalTo(dAtA[i:])
+		i = encodeVarintAgent(dAtA, i, uint64(m.SlaveInfo.Size()))
+		n70, err := m.SlaveInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n51
+		i += n70
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Response_GetResourceProviders) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Response_GetResourceProviders) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.ResourceProviders) > 0 {
+		for _, msg := range m.ResourceProviders {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintAgent(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Response_GetResourceProviders_ResourceProvider) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Response_GetResourceProviders_ResourceProvider) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ResourceProviderInfo == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.ResourceProviderInfo.Size()))
+		n71, err := m.ResourceProviderInfo.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n71
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2925,6 +4077,84 @@ func (m *Response_WaitNestedContainer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x8
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(*m.ExitStatus))
+	}
+	if m.State != nil {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.State))
+	}
+	if m.Reason != nil {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.Reason))
+	}
+	if m.Limitation != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Limitation.Size()))
+		n72, err := m.Limitation.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n72
+	}
+	if m.Message != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(len(*m.Message)))
+		i += copy(dAtA[i:], *m.Message)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Response_WaitContainer) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Response_WaitContainer) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ExitStatus != nil {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.ExitStatus))
+	}
+	if m.State != nil {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.State))
+	}
+	if m.Reason != nil {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(*m.Reason))
+	}
+	if m.Limitation != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(m.Limitation.Size()))
+		n73, err := m.Limitation.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n73
+	}
+	if m.Message != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintAgent(dAtA, i, uint64(len(*m.Message)))
+		i += copy(dAtA[i:], *m.Message)
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -2956,21 +4186,21 @@ func (m *ProcessIO) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Data.Size()))
-		n52, err := m.Data.MarshalTo(dAtA[i:])
+		n74, err := m.Data.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n52
+		i += n74
 	}
 	if m.Control != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Control.Size()))
-		n53, err := m.Control.MarshalTo(dAtA[i:])
+		n75, err := m.Control.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n53
+		i += n75
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -3034,21 +4264,21 @@ func (m *ProcessIO_Control) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.TtyInfo.Size()))
-		n54, err := m.TtyInfo.MarshalTo(dAtA[i:])
+		n76, err := m.TtyInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n54
+		i += n76
 	}
 	if m.Heartbeat != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Heartbeat.Size()))
-		n55, err := m.Heartbeat.MarshalTo(dAtA[i:])
+		n77, err := m.Heartbeat.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n55
+		i += n77
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -3075,11 +4305,11 @@ func (m *ProcessIO_Control_Heartbeat) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintAgent(dAtA, i, uint64(m.Interval.Size()))
-		n56, err := m.Interval.MarshalTo(dAtA[i:])
+		n78, err := m.Interval.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n56
+		i += n78
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -3164,6 +4394,42 @@ func (m *Call) Size() (n int) {
 		l = m.RemoveNestedContainer.Size()
 		n += 1 + l + sovAgent(uint64(l))
 	}
+	if m.LaunchContainer != nil {
+		l = m.LaunchContainer.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.WaitContainer != nil {
+		l = m.WaitContainer.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.KillContainer != nil {
+		l = m.KillContainer.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.RemoveContainer != nil {
+		l = m.RemoveContainer.Size()
+		n += 2 + l + sovAgent(uint64(l))
+	}
+	if m.AddResourceProviderConfig != nil {
+		l = m.AddResourceProviderConfig.Size()
+		n += 2 + l + sovAgent(uint64(l))
+	}
+	if m.UpdateResourceProviderConfig != nil {
+		l = m.UpdateResourceProviderConfig.Size()
+		n += 2 + l + sovAgent(uint64(l))
+	}
+	if m.RemoveResourceProviderConfig != nil {
+		l = m.RemoveResourceProviderConfig.Size()
+		n += 2 + l + sovAgent(uint64(l))
+	}
+	if m.GetContainers != nil {
+		l = m.GetContainers.Size()
+		n += 2 + l + sovAgent(uint64(l))
+	}
+	if m.PruneImages != nil {
+		l = m.PruneImages.Size()
+		n += 2 + l + sovAgent(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -3231,6 +4497,21 @@ func (m *Call_ReadFile) Size() (n int) {
 	return n
 }
 
+func (m *Call_GetContainers) Size() (n int) {
+	var l int
+	_ = l
+	if m.ShowNested != nil {
+		n += 2
+	}
+	if m.ShowStandalone != nil {
+		n += 2
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *Call_LaunchNestedContainer) Size() (n int) {
 	var l int
 	_ = l
@@ -3271,6 +4552,9 @@ func (m *Call_KillNestedContainer) Size() (n int) {
 	if m.ContainerId != nil {
 		l = m.ContainerId.Size()
 		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Signal != nil {
+		n += 1 + sovAgent(uint64(*m.Signal))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3345,6 +4629,133 @@ func (m *Call_AttachContainerOutput) Size() (n int) {
 	return n
 }
 
+func (m *Call_LaunchContainer) Size() (n int) {
+	var l int
+	_ = l
+	if m.ContainerId != nil {
+		l = m.ContainerId.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Command != nil {
+		l = m.Command.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if len(m.Resources) > 0 {
+		for _, e := range m.Resources {
+			l = e.Size()
+			n += 1 + l + sovAgent(uint64(l))
+		}
+	}
+	if m.Container != nil {
+		l = m.Container.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_WaitContainer) Size() (n int) {
+	var l int
+	_ = l
+	if m.ContainerId != nil {
+		l = m.ContainerId.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_KillContainer) Size() (n int) {
+	var l int
+	_ = l
+	if m.ContainerId != nil {
+		l = m.ContainerId.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Signal != nil {
+		n += 1 + sovAgent(uint64(*m.Signal))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_RemoveContainer) Size() (n int) {
+	var l int
+	_ = l
+	if m.ContainerId != nil {
+		l = m.ContainerId.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_AddResourceProviderConfig) Size() (n int) {
+	var l int
+	_ = l
+	if m.Info != nil {
+		l = m.Info.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_UpdateResourceProviderConfig) Size() (n int) {
+	var l int
+	_ = l
+	if m.Info != nil {
+		l = m.Info.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_RemoveResourceProviderConfig) Size() (n int) {
+	var l int
+	_ = l
+	if m.Type != nil {
+		l = len(*m.Type)
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Name != nil {
+		l = len(*m.Name)
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_PruneImages) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.ExcludedImages) > 0 {
+		for _, e := range m.ExcludedImages {
+			l = e.Size()
+			n += 1 + l + sovAgent(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *Response) Size() (n int) {
 	var l int
 	_ = l
@@ -3406,6 +4817,14 @@ func (m *Response) Size() (n int) {
 	if m.GetAgent != nil {
 		l = m.GetAgent.Size()
 		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.WaitContainer != nil {
+		l = m.WaitContainer.Size()
+		n += 2 + l + sovAgent(uint64(l))
+	}
+	if m.GetResourceProviders != nil {
+		l = m.GetResourceProviders.Size()
+		n += 2 + l + sovAgent(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -3690,8 +5109,36 @@ func (m *Response_GetTasks) Size() (n int) {
 func (m *Response_GetAgent) Size() (n int) {
 	var l int
 	_ = l
-	if m.AgentInfo != nil {
-		l = m.AgentInfo.Size()
+	if m.SlaveInfo != nil {
+		l = m.SlaveInfo.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Response_GetResourceProviders) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.ResourceProviders) > 0 {
+		for _, e := range m.ResourceProviders {
+			l = e.Size()
+			n += 1 + l + sovAgent(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Response_GetResourceProviders_ResourceProvider) Size() (n int) {
+	var l int
+	_ = l
+	if m.ResourceProviderInfo != nil {
+		l = m.ResourceProviderInfo.Size()
 		n += 1 + l + sovAgent(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -3705,6 +5152,46 @@ func (m *Response_WaitNestedContainer) Size() (n int) {
 	_ = l
 	if m.ExitStatus != nil {
 		n += 1 + sovAgent(uint64(*m.ExitStatus))
+	}
+	if m.State != nil {
+		n += 1 + sovAgent(uint64(*m.State))
+	}
+	if m.Reason != nil {
+		n += 1 + sovAgent(uint64(*m.Reason))
+	}
+	if m.Limitation != nil {
+		l = m.Limitation.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Message != nil {
+		l = len(*m.Message)
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Response_WaitContainer) Size() (n int) {
+	var l int
+	_ = l
+	if m.ExitStatus != nil {
+		n += 1 + sovAgent(uint64(*m.ExitStatus))
+	}
+	if m.State != nil {
+		n += 1 + sovAgent(uint64(*m.State))
+	}
+	if m.Reason != nil {
+		n += 1 + sovAgent(uint64(*m.Reason))
+	}
+	if m.Limitation != nil {
+		l = m.Limitation.Size()
+		n += 1 + l + sovAgent(uint64(l))
+	}
+	if m.Message != nil {
+		l = len(*m.Message)
+		n += 1 + l + sovAgent(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -4206,6 +5693,303 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LaunchContainer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LaunchContainer == nil {
+				m.LaunchContainer = &Call_LaunchContainer{}
+			}
+			if err := m.LaunchContainer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 14:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WaitContainer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.WaitContainer == nil {
+				m.WaitContainer = &Call_WaitContainer{}
+			}
+			if err := m.WaitContainer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 15:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field KillContainer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.KillContainer == nil {
+				m.KillContainer = &Call_KillContainer{}
+			}
+			if err := m.KillContainer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 16:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RemoveContainer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.RemoveContainer == nil {
+				m.RemoveContainer = &Call_RemoveContainer{}
+			}
+			if err := m.RemoveContainer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 17:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AddResourceProviderConfig", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AddResourceProviderConfig == nil {
+				m.AddResourceProviderConfig = &Call_AddResourceProviderConfig{}
+			}
+			if err := m.AddResourceProviderConfig.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 18:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdateResourceProviderConfig", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.UpdateResourceProviderConfig == nil {
+				m.UpdateResourceProviderConfig = &Call_UpdateResourceProviderConfig{}
+			}
+			if err := m.UpdateResourceProviderConfig.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 19:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RemoveResourceProviderConfig", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.RemoveResourceProviderConfig == nil {
+				m.RemoveResourceProviderConfig = &Call_RemoveResourceProviderConfig{}
+			}
+			if err := m.RemoveResourceProviderConfig.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 20:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetContainers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.GetContainers == nil {
+				m.GetContainers = &Call_GetContainers{}
+			}
+			if err := m.GetContainers.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 21:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PruneImages", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.PruneImages == nil {
+				m.PruneImages = &Call_PruneImages{}
+			}
+			if err := m.PruneImages.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAgent(dAtA[iNdEx:])
@@ -4284,7 +6068,7 @@ func (m *Call_GetMetrics) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Timeout == nil {
-				m.Timeout = &mesos_v1.DurationInfo{}
+				m.Timeout = &mesos.DurationInfo{}
 			}
 			if err := m.Timeout.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -4390,7 +6174,7 @@ func (m *Call_SetLoggingLevel) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Duration == nil {
-				m.Duration = &mesos_v1.DurationInfo{}
+				m.Duration = &mesos.DurationInfo{}
 			}
 			if err := m.Duration.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -4641,6 +6425,99 @@ func (m *Call_ReadFile) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *Call_GetContainers) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetContainers: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetContainers: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ShowNested", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.ShowNested = &b
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ShowStandalone", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.ShowStandalone = &b
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *Call_LaunchNestedContainer) Unmarshal(dAtA []byte) error {
 	var hasFields [1]uint64
 	l := len(dAtA)
@@ -4698,7 +6575,7 @@ func (m *Call_LaunchNestedContainer) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -4732,7 +6609,7 @@ func (m *Call_LaunchNestedContainer) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Command == nil {
-				m.Command = &mesos_v1.CommandInfo{}
+				m.Command = &mesos.CommandInfo{}
 			}
 			if err := m.Command.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -4765,7 +6642,7 @@ func (m *Call_LaunchNestedContainer) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Container == nil {
-				m.Container = &mesos_v1.ContainerInfo{}
+				m.Container = &mesos.ContainerInfo{}
 			}
 			if err := m.Container.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -4853,7 +6730,7 @@ func (m *Call_WaitNestedContainer) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -4942,13 +6819,33 @@ func (m *Call_KillNestedContainer) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
 			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signal", wireType)
+			}
+			var v int32
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Signal = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAgent(dAtA[iNdEx:])
@@ -5031,7 +6928,7 @@ func (m *Call_RemoveNestedContainer) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5120,7 +7017,7 @@ func (m *Call_LaunchNestedContainerSession) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5154,7 +7051,7 @@ func (m *Call_LaunchNestedContainerSession) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Command == nil {
-				m.Command = &mesos_v1.CommandInfo{}
+				m.Command = &mesos.CommandInfo{}
 			}
 			if err := m.Command.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5187,7 +7084,7 @@ func (m *Call_LaunchNestedContainerSession) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Container == nil {
-				m.Container = &mesos_v1.ContainerInfo{}
+				m.Container = &mesos.ContainerInfo{}
 			}
 			if err := m.Container.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5294,7 +7191,7 @@ func (m *Call_AttachContainerInput) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5412,7 +7309,7 @@ func (m *Call_AttachContainerOutput) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5437,6 +7334,859 @@ func (m *Call_AttachContainerOutput) Unmarshal(dAtA []byte) error {
 	}
 	if hasFields[0]&uint64(0x00000001) == 0 {
 		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_LaunchContainer) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: LaunchContainer: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: LaunchContainer: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ContainerId == nil {
+				m.ContainerId = &mesos.ContainerID{}
+			}
+			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Command", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Command == nil {
+				m.Command = &mesos.CommandInfo{}
+			}
+			if err := m.Command.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Resources = append(m.Resources, &mesos.Resource{})
+			if err := m.Resources[len(m.Resources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Container", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Container == nil {
+				m.Container = &mesos.ContainerInfo{}
+			}
+			if err := m.Container.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_WaitContainer) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: WaitContainer: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: WaitContainer: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ContainerId == nil {
+				m.ContainerId = &mesos.ContainerID{}
+			}
+			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_KillContainer) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: KillContainer: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: KillContainer: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ContainerId == nil {
+				m.ContainerId = &mesos.ContainerID{}
+			}
+			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signal", wireType)
+			}
+			var v int32
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Signal = &v
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_RemoveContainer) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemoveContainer: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemoveContainer: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ContainerId == nil {
+				m.ContainerId = &mesos.ContainerID{}
+			}
+			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_AddResourceProviderConfig) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AddResourceProviderConfig: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AddResourceProviderConfig: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Info == nil {
+				m.Info = &mesos.ResourceProviderInfo{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_UpdateResourceProviderConfig) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UpdateResourceProviderConfig: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UpdateResourceProviderConfig: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Info == nil {
+				m.Info = &mesos.ResourceProviderInfo{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_RemoveResourceProviderConfig) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RemoveResourceProviderConfig: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RemoveResourceProviderConfig: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Type = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Name = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_PruneImages) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PruneImages: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PruneImages: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExcludedImages", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ExcludedImages = append(m.ExcludedImages, &mesos.Image{})
+			if err := m.ExcludedImages[len(m.ExcludedImages)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
 	}
 
 	if iNdEx > l {
@@ -5955,6 +8705,72 @@ func (m *Response) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 16:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WaitContainer", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.WaitContainer == nil {
+				m.WaitContainer = &Response_WaitContainer{}
+			}
+			if err := m.WaitContainer.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 17:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field GetResourceProviders", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.GetResourceProviders == nil {
+				m.GetResourceProviders = &Response_GetResourceProviders{}
+			}
+			if err := m.GetResourceProviders.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAgent(dAtA[iNdEx:])
@@ -6109,7 +8925,7 @@ func (m *Response_GetFlags) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Flags = append(m.Flags, &mesos_v1.Flag{})
+			m.Flags = append(m.Flags, &mesos.Flag{})
 			if err := m.Flags[len(m.Flags)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -6193,7 +9009,7 @@ func (m *Response_GetVersion) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.VersionInfo == nil {
-				m.VersionInfo = &mesos_v1.VersionInfo{}
+				m.VersionInfo = &mesos.VersionInfo{}
 			}
 			if err := m.VersionInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -6280,7 +9096,7 @@ func (m *Response_GetMetrics) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Metrics = append(m.Metrics, &mesos_v1.Metric{})
+			m.Metrics = append(m.Metrics, &mesos.Metric{})
 			if err := m.Metrics[len(m.Metrics)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -6438,7 +9254,7 @@ func (m *Response_ListFiles) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.FileInfos = append(m.FileInfos, &mesos_v1.FileInfo{})
+			m.FileInfos = append(m.FileInfos, &mesos.FileInfo{})
 			if err := m.FileInfos[len(m.FileInfos)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -6865,13 +9681,12 @@ func (m *Response_GetContainers_Container) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.FrameworkId == nil {
-				m.FrameworkId = &mesos_v1.FrameworkID{}
+				m.FrameworkId = &mesos.FrameworkID{}
 			}
 			if err := m.FrameworkId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
-			hasFields[0] |= uint64(0x00000001)
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ExecutorId", wireType)
@@ -6899,13 +9714,12 @@ func (m *Response_GetContainers_Container) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ExecutorId == nil {
-				m.ExecutorId = &mesos_v1.ExecutorID{}
+				m.ExecutorId = &mesos.ExecutorID{}
 			}
 			if err := m.ExecutorId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
-			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ExecutorName", wireType)
@@ -6936,7 +9750,6 @@ func (m *Response_GetContainers_Container) Unmarshal(dAtA []byte) error {
 			s := string(dAtA[iNdEx:postIndex])
 			m.ExecutorName = &s
 			iNdEx = postIndex
-			hasFields[0] |= uint64(0x00000004)
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ContainerId", wireType)
@@ -6964,13 +9777,13 @@ func (m *Response_GetContainers_Container) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerId == nil {
-				m.ContainerId = &mesos_v1.ContainerID{}
+				m.ContainerId = &mesos.ContainerID{}
 			}
 			if err := m.ContainerId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
-			hasFields[0] |= uint64(0x00000008)
+			hasFields[0] |= uint64(0x00000001)
 		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ContainerStatus", wireType)
@@ -6998,7 +9811,7 @@ func (m *Response_GetContainers_Container) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ContainerStatus == nil {
-				m.ContainerStatus = &mesos_v1.ContainerStatus{}
+				m.ContainerStatus = &mesos.ContainerStatus{}
 			}
 			if err := m.ContainerStatus.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -7031,7 +9844,7 @@ func (m *Response_GetContainers_Container) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ResourceStatistics == nil {
-				m.ResourceStatistics = &mesos_v1.ResourceStatistics{}
+				m.ResourceStatistics = &mesos.ResourceStatistics{}
 			}
 			if err := m.ResourceStatistics.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -7054,15 +9867,6 @@ func (m *Response_GetContainers_Container) Unmarshal(dAtA []byte) error {
 		}
 	}
 	if hasFields[0]&uint64(0x00000001) == 0 {
-		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
-	}
-	if hasFields[0]&uint64(0x00000002) == 0 {
-		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
-	}
-	if hasFields[0]&uint64(0x00000004) == 0 {
-		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
-	}
-	if hasFields[0]&uint64(0x00000008) == 0 {
 		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	}
 
@@ -7241,7 +10045,7 @@ func (m *Response_GetFrameworks_Framework) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.FrameworkInfo == nil {
-				m.FrameworkInfo = &mesos_v1.FrameworkInfo{}
+				m.FrameworkInfo = &mesos.FrameworkInfo{}
 			}
 			if err := m.FrameworkInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -7443,7 +10247,7 @@ func (m *Response_GetExecutors_Executor) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.ExecutorInfo == nil {
-				m.ExecutorInfo = &mesos_v1.ExecutorInfo{}
+				m.ExecutorInfo = &mesos.ExecutorInfo{}
 			}
 			if err := m.ExecutorInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -7530,7 +10334,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.PendingTasks = append(m.PendingTasks, &mesos_v1.Task{})
+			m.PendingTasks = append(m.PendingTasks, &mesos.Task{})
 			if err := m.PendingTasks[len(m.PendingTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -7561,7 +10365,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.QueuedTasks = append(m.QueuedTasks, &mesos_v1.Task{})
+			m.QueuedTasks = append(m.QueuedTasks, &mesos.Task{})
 			if err := m.QueuedTasks[len(m.QueuedTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -7592,7 +10396,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LaunchedTasks = append(m.LaunchedTasks, &mesos_v1.Task{})
+			m.LaunchedTasks = append(m.LaunchedTasks, &mesos.Task{})
 			if err := m.LaunchedTasks[len(m.LaunchedTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -7623,7 +10427,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.TerminatedTasks = append(m.TerminatedTasks, &mesos_v1.Task{})
+			m.TerminatedTasks = append(m.TerminatedTasks, &mesos.Task{})
 			if err := m.TerminatedTasks[len(m.TerminatedTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -7654,7 +10458,7 @@ func (m *Response_GetTasks) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CompletedTasks = append(m.CompletedTasks, &mesos_v1.Task{})
+			m.CompletedTasks = append(m.CompletedTasks, &mesos.Task{})
 			if err := m.CompletedTasks[len(m.CompletedTasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -7712,7 +10516,7 @@ func (m *Response_GetAgent) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentInfo", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveInfo", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -7736,10 +10540,10 @@ func (m *Response_GetAgent) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentInfo == nil {
-				m.AgentInfo = &mesos_v1.AgentInfo{}
+			if m.SlaveInfo == nil {
+				m.SlaveInfo = &mesos.SlaveInfo{}
 			}
-			if err := m.AgentInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -7758,6 +10562,177 @@ func (m *Response_GetAgent) Unmarshal(dAtA []byte) error {
 			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_GetResourceProviders) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: GetResourceProviders: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: GetResourceProviders: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceProviders", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ResourceProviders = append(m.ResourceProviders, &Response_GetResourceProviders_ResourceProvider{})
+			if err := m.ResourceProviders[len(m.ResourceProviders)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_GetResourceProviders_ResourceProvider) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ResourceProvider: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ResourceProvider: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceProviderInfo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ResourceProviderInfo == nil {
+				m.ResourceProviderInfo = &mesos.ResourceProviderInfo{}
+			}
+			if err := m.ResourceProviderInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	}
 
 	if iNdEx > l {
@@ -7814,6 +10789,283 @@ func (m *Response_WaitNestedContainer) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.ExitStatus = &v
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var v mesos.TaskState
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (mesos.TaskState(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.State = &v
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Reason", wireType)
+			}
+			var v mesos.TaskStatus_Reason
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (mesos.TaskStatus_Reason(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Reason = &v
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Limitation", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Limitation == nil {
+				m.Limitation = &mesos.TaskResourceLimitation{}
+			}
+			if err := m.Limitation.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Message = &s
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipAgent(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthAgent
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Response_WaitContainer) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowAgent
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: WaitContainer: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: WaitContainer: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExitStatus", wireType)
+			}
+			var v int32
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ExitStatus = &v
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var v mesos.TaskState
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (mesos.TaskState(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.State = &v
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Reason", wireType)
+			}
+			var v mesos.TaskStatus_Reason
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (mesos.TaskStatus_Reason(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Reason = &v
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Limitation", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Limitation == nil {
+				m.Limitation = &mesos.TaskResourceLimitation{}
+			}
+			if err := m.Limitation.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowAgent
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthAgent
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Message = &s
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipAgent(dAtA[iNdEx:])
@@ -8151,7 +11403,7 @@ func (m *ProcessIO_Control) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.TtyInfo == nil {
-				m.TtyInfo = &mesos_v1.TTYInfo{}
+				m.TtyInfo = &mesos.TTYInfo{}
 			}
 			if err := m.TtyInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -8268,7 +11520,7 @@ func (m *ProcessIO_Control_Heartbeat) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Interval == nil {
-				m.Interval = &mesos_v1.DurationInfo{}
+				m.Interval = &mesos.DurationInfo{}
 			}
 			if err := m.Interval.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -8404,125 +11656,160 @@ var (
 func init() { proto.RegisterFile("lib/operator/agent/agent.proto", fileDescriptorAgent) }
 
 var fileDescriptorAgent = []byte{
-	// 1907 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x58, 0xcb, 0x72, 0xdb, 0xc8,
-	0x15, 0x1d, 0x50, 0x94, 0x48, 0x5e, 0x3e, 0x04, 0xb5, 0x4c, 0x9b, 0x42, 0x3c, 0xb2, 0x86, 0x9e,
-	0x91, 0xe5, 0x87, 0x28, 0x5b, 0x7e, 0xd4, 0x38, 0xe5, 0x9a, 0x14, 0x4c, 0x42, 0x14, 0x22, 0x9a,
-	0x74, 0x11, 0x90, 0x9d, 0x99, 0x0d, 0x0a, 0x26, 0x5b, 0x24, 0x62, 0x10, 0x60, 0x80, 0xa6, 0x26,
-	0xce, 0x26, 0x5f, 0x30, 0xeb, 0x4c, 0x56, 0xf9, 0x93, 0xac, 0xb3, 0x4c, 0x65, 0x93, 0x64, 0x97,
-	0xf2, 0x2c, 0x92, 0x5d, 0x7e, 0x21, 0xd5, 0x8d, 0xb7, 0x08, 0x51, 0xd2, 0x2c, 0x32, 0x1b, 0x95,
-	0x80, 0x3e, 0xe7, 0xf4, 0xed, 0xdb, 0xf7, 0x76, 0x1f, 0x10, 0x36, 0x4d, 0xe3, 0xdd, 0x9e, 0x3d,
-	0xc5, 0x8e, 0x4e, 0x6c, 0x67, 0x4f, 0x1f, 0x61, 0x8b, 0x78, 0x7f, 0x1b, 0x53, 0xc7, 0x26, 0x36,
-	0xaa, 0x4c, 0xb0, 0x6b, 0xbb, 0x8d, 0xd3, 0x47, 0x0d, 0xf6, 0x56, 0x78, 0x3a, 0x32, 0xc8, 0x78,
-	0xf6, 0xae, 0x31, 0xb0, 0x27, 0x7b, 0xb6, 0x35, 0x74, 0xf0, 0xaf, 0x77, 0xdd, 0x89, 0x6d, 0xea,
-	0x7b, 0x0c, 0xb7, 0x3b, 0xb2, 0x77, 0xc7, 0x84, 0x4c, 0xf7, 0xa8, 0xaa, 0xc7, 0x64, 0x32, 0xf5,
-	0x3f, 0x22, 0xc8, 0x36, 0x75, 0xd3, 0x44, 0x77, 0x20, 0x4b, 0x3e, 0x4c, 0x71, 0x8d, 0xdb, 0xe2,
-	0x76, 0x2a, 0xfb, 0x1b, 0x8d, 0xa4, 0x7c, 0x83, 0x62, 0x1a, 0xea, 0x87, 0x29, 0x46, 0x4f, 0xa0,
-	0x38, 0xc2, 0x44, 0x9b, 0x60, 0xe2, 0x18, 0x03, 0xb7, 0x96, 0xd9, 0xe2, 0x76, 0x8a, 0xfb, 0xb7,
-	0x52, 0xf1, 0x6d, 0x4c, 0x5e, 0x79, 0x30, 0xf4, 0x0b, 0x58, 0x73, 0x31, 0xd1, 0x4c, 0x7b, 0x34,
-	0x32, 0xac, 0x91, 0x66, 0xe2, 0x53, 0x6c, 0xd6, 0x96, 0x18, 0xf7, 0xf3, 0x54, 0xae, 0x82, 0x49,
-	0xc7, 0x03, 0x77, 0x28, 0x16, 0xed, 0x03, 0x98, 0x86, 0x4b, 0xb4, 0x13, 0xc3, 0xc4, 0x6e, 0x2d,
-	0xcb, 0x98, 0x9b, 0xa9, 0xcc, 0x8e, 0xe1, 0x92, 0x03, 0x8a, 0x42, 0x0f, 0xa1, 0xe0, 0x60, 0x7d,
-	0xc8, 0x38, 0xb5, 0x65, 0x46, 0xf9, 0x34, 0x95, 0xd2, 0xc7, 0xfa, 0x90, 0x52, 0xd0, 0x11, 0xdc,
-	0x30, 0xf5, 0x99, 0x35, 0x18, 0x6b, 0x16, 0x76, 0x09, 0x1e, 0x6a, 0x03, 0xdb, 0x22, 0xba, 0x61,
-	0x61, 0xa7, 0xb6, 0xc2, 0xf8, 0xf7, 0xd2, 0xa7, 0x64, 0x9c, 0x2e, 0xa3, 0x34, 0x03, 0x06, 0x6a,
-	0x43, 0xf5, 0x5b, 0xdd, 0x20, 0xf3, 0x52, 0x39, 0x26, 0xb5, 0x93, 0x2a, 0xf5, 0x56, 0x37, 0x48,
-	0x8a, 0xd0, 0x7b, 0xc3, 0x34, 0xe7, 0x85, 0xf2, 0x0b, 0x84, 0x8e, 0x0c, 0xd3, 0x3c, 0x2b, 0xf4,
-	0x0d, 0xdc, 0x3a, 0x67, 0x79, 0x9a, 0x8b, 0x5d, 0xd7, 0xb0, 0xad, 0x5a, 0x81, 0x49, 0x3e, 0xba,
-	0xfc, 0x32, 0x15, 0x8f, 0x88, 0x64, 0xb8, 0xae, 0x13, 0xa2, 0x0f, 0xc6, 0x31, 0x51, 0xc3, 0x9a,
-	0xce, 0x48, 0x0d, 0x98, 0xe4, 0xdd, 0x54, 0x49, 0x91, 0x51, 0x42, 0x31, 0x99, 0x12, 0xe8, 0x2e,
-	0xcc, 0x49, 0xd9, 0x33, 0x42, 0xb5, 0x8a, 0x0b, 0x76, 0xe1, 0x8c, 0x56, 0x8f, 0x31, 0xa8, 0x98,
-	0x83, 0x27, 0xf6, 0x29, 0x9e, 0x4f, 0x5f, 0x69, 0x81, 0x58, 0x9f, 0x71, 0xce, 0xac, 0x55, 0x78,
-	0x0a, 0x10, 0x2b, 0xea, 0x3b, 0x90, 0x23, 0xc6, 0x04, 0xdb, 0x33, 0xc2, 0xda, 0xa6, 0xb8, 0x7f,
-	0x3d, 0x92, 0x6a, 0xcd, 0x1c, 0x9d, 0x18, 0xb6, 0x25, 0x5b, 0x27, 0xb6, 0xf0, 0x4b, 0x58, 0x3d,
-	0x5b, 0xcf, 0x65, 0x58, 0xf6, 0x9a, 0x80, 0xdb, 0xca, 0xec, 0x94, 0xd1, 0x0e, 0xe4, 0x87, 0x3e,
-	0xa3, 0x96, 0xd9, 0xca, 0x2c, 0xd0, 0xda, 0x80, 0x42, 0x54, 0xe1, 0x25, 0xc8, 0x4e, 0x75, 0x32,
-	0x66, 0x22, 0x05, 0xe1, 0x4b, 0xc8, 0x87, 0x95, 0x9c, 0x18, 0x41, 0x15, 0x58, 0xb1, 0x4f, 0x4e,
-	0x5c, 0x4c, 0x98, 0x78, 0x96, 0x3e, 0x9b, 0xd8, 0x1a, 0x91, 0x31, 0xeb, 0xc1, 0xac, 0xf0, 0x3d,
-	0x07, 0xd5, 0xf4, 0x22, 0xbe, 0x0f, 0xa5, 0xd8, 0x7e, 0x0e, 0x99, 0x5e, 0x71, 0xbf, 0x1a, 0x05,
-	0x17, 0xed, 0x5d, 0x0b, 0x6d, 0x43, 0x6e, 0x60, 0x4f, 0x26, 0xba, 0x35, 0xf4, 0xcf, 0x85, 0x04,
-	0x8e, 0x0d, 0xd0, 0x35, 0xa0, 0x7b, 0x50, 0x88, 0x76, 0xc1, 0x3b, 0x05, 0x6e, 0xa4, 0x29, 0xd2,
-	0xf5, 0xbe, 0x84, 0xf5, 0xb4, 0x9e, 0xb8, 0x4a, 0x5c, 0x54, 0x23, 0xad, 0x1d, 0xae, 0xa4, 0xd1,
-	0x82, 0x6a, 0x6a, 0x4d, 0x5c, 0x4d, 0xe5, 0x4f, 0x1c, 0xdc, 0x5c, 0xd8, 0x46, 0x3f, 0x79, 0xbe,
-	0xff, 0xcd, 0xc1, 0xb5, 0xd4, 0xae, 0x7c, 0x91, 0xb8, 0x21, 0x1a, 0x97, 0x6e, 0x67, 0xef, 0xda,
-	0x38, 0xbb, 0xae, 0x94, 0x78, 0xa3, 0x75, 0xed, 0x02, 0x4c, 0x1d, 0x7b, 0x80, 0x5d, 0x57, 0x33,
-	0x6c, 0x3f, 0xe0, 0xb9, 0x2b, 0xe9, 0xb5, 0x87, 0x90, 0x7b, 0xf5, 0xa7, 0x90, 0x65, 0x73, 0x14,
-	0x21, 0x77, 0xdc, 0x3d, 0xea, 0xf6, 0xde, 0x76, 0xf9, 0x4f, 0x10, 0x0f, 0xa5, 0x66, 0xaf, 0xab,
-	0x8a, 0x72, 0x57, 0xea, 0x6b, 0x72, 0x8b, 0xe7, 0x50, 0x05, 0xe0, 0x75, 0xbf, 0xd7, 0x94, 0x14,
-	0x45, 0x93, 0x7b, 0x7c, 0x86, 0xee, 0x68, 0xfa, 0x91, 0x71, 0x95, 0x3d, 0xa8, 0xff, 0x7d, 0x29,
-	0x6d, 0xf6, 0x0a, 0x40, 0x5b, 0x52, 0xb5, 0x43, 0x49, 0xec, 0xa8, 0x87, 0x3c, 0x87, 0xca, 0x50,
-	0xa0, 0xcf, 0x07, 0x1d, 0xb1, 0xad, 0xf0, 0x19, 0xb4, 0x0a, 0x45, 0xfa, 0xf8, 0x46, 0xea, 0x2b,
-	0x72, 0xaf, 0xcb, 0x2f, 0x05, 0x2f, 0x5e, 0x49, 0x6a, 0x5f, 0x6e, 0x2a, 0x7c, 0x16, 0x55, 0x61,
-	0x8d, 0xbe, 0xe8, 0xf4, 0xda, 0x6d, 0xb9, 0xdb, 0xd6, 0x3a, 0xd2, 0x1b, 0xa9, 0xc3, 0x2f, 0xd3,
-	0xd7, 0xca, 0xdc, 0xeb, 0x15, 0x3a, 0x5d, 0x47, 0x56, 0x54, 0xed, 0x40, 0xee, 0x48, 0x0a, 0x9f,
-	0xa3, 0xd3, 0xf5, 0x25, 0xb1, 0xc5, 0x9e, 0xf9, 0x7c, 0x30, 0xbb, 0xa2, 0x8a, 0xaa, 0xc4, 0x17,
-	0x10, 0x82, 0x0a, 0x7d, 0x0c, 0xd3, 0xa3, 0xf0, 0x10, 0xbc, 0x3b, 0xe8, 0x8b, 0xaf, 0xa4, 0xb7,
-	0xbd, 0xfe, 0x91, 0xc2, 0x17, 0xd1, 0x1a, 0x94, 0xe9, 0x3b, 0xe9, 0x57, 0x52, 0xf3, 0x58, 0xed,
-	0xf5, 0x15, 0xbe, 0x14, 0x28, 0xa9, 0xa2, 0x72, 0xa4, 0xf0, 0xe5, 0xe0, 0x51, 0x6c, 0x4b, 0x5d,
-	0x95, 0xbf, 0x86, 0x7e, 0x06, 0x37, 0x3a, 0xe2, 0x71, 0xb7, 0x79, 0xa8, 0x75, 0x25, 0x45, 0x95,
-	0x5a, 0xd1, 0x14, 0x7c, 0x05, 0x6d, 0x40, 0xf5, 0xad, 0x28, 0xab, 0xf3, 0x43, 0xab, 0x74, 0xe8,
-	0x48, 0xee, 0x74, 0xe6, 0x87, 0x78, 0x2a, 0xd9, 0x97, 0x5e, 0xf5, 0xde, 0x48, 0xf3, 0x83, 0x55,
-	0x74, 0x1b, 0x6e, 0x9d, 0x33, 0x9f, 0xa6, 0x48, 0x0a, 0x4b, 0xed, 0x1a, 0x12, 0xe0, 0xba, 0xa8,
-	0xaa, 0x62, 0xf3, 0x30, 0x36, 0x2a, 0x77, 0x5f, 0x1f, 0xab, 0x3c, 0xa2, 0xea, 0x73, 0x63, 0xbd,
-	0x63, 0x95, 0x0e, 0xae, 0xd7, 0xff, 0x53, 0xa5, 0xe7, 0xa9, 0x3b, 0xb5, 0x2d, 0x97, 0xd6, 0x6f,
-	0xbc, 0xfa, 0xe7, 0x6c, 0x44, 0x80, 0xf3, 0x8a, 0xfd, 0x19, 0x00, 0xf5, 0x48, 0x63, 0xac, 0x9b,
-	0x64, 0xec, 0x97, 0x7a, 0xfd, 0x5c, 0x4a, 0x1b, 0x93, 0x43, 0x86, 0x44, 0x4f, 0xa0, 0x40, 0x79,
-	0x27, 0xa6, 0x3e, 0x72, 0xfd, 0xb2, 0xff, 0x6c, 0x11, 0xed, 0x80, 0x02, 0xd1, 0x97, 0x9e, 0x23,
-	0x3b, 0xc5, 0x0e, 0xbb, 0xc1, 0x3d, 0x6f, 0x74, 0x7b, 0x11, 0xef, 0x8d, 0x07, 0x0d, 0x98, 0x81,
-	0x97, 0x5b, 0xbe, 0x98, 0x19, 0x5c, 0x7d, 0x4d, 0x58, 0x1b, 0xcd, 0xf9, 0xb9, 0x95, 0x74, 0x3b,
-	0x12, 0xe7, 0x27, 0xee, 0xc0, 0x67, 0x09, 0x4f, 0x97, 0xbb, 0x20, 0x4d, 0xd1, 0xad, 0xf7, 0x24,
-	0xee, 0xeb, 0xf2, 0x17, 0xa4, 0x29, 0xbc, 0x11, 0xfd, 0xe4, 0xba, 0x44, 0x27, 0xd8, 0xb7, 0x39,
-	0x0b, 0x93, 0xab, 0x50, 0x20, 0xfa, 0x0a, 0x2a, 0x94, 0x15, 0x9e, 0x07, 0xae, 0x6f, 0x67, 0xb6,
-	0x17, 0x51, 0xc3, 0xf3, 0xc1, 0x0d, 0xf8, 0x27, 0x8e, 0x3e, 0xc1, 0xdf, 0xda, 0xce, 0x7b, 0xd7,
-	0xb7, 0x30, 0x0b, 0xf9, 0x07, 0x21, 0x1a, 0xbd, 0x80, 0x32, 0xe5, 0xe3, 0xdf, 0xe2, 0xc1, 0x8c,
-	0xd8, 0x8e, 0xeb, 0x9b, 0x96, 0x2f, 0x16, 0xd1, 0xa5, 0x00, 0x1c, 0xac, 0x99, 0xe8, 0xee, 0x7b,
-	0xb7, 0x56, 0xbe, 0x78, 0xcd, 0x2a, 0x05, 0xa2, 0xa3, 0xf3, 0x8c, 0x6b, 0x85, 0x29, 0x3c, 0x38,
-	0x57, 0x21, 0xed, 0xa2, 0xf6, 0x43, 0x60, 0xc8, 0xda, 0xea, 0xc5, 0x21, 0x88, 0xec, 0x73, 0xe6,
-	0x26, 0x14, 0xa2, 0xb6, 0x58, 0x85, 0x9c, 0xd7, 0x4a, 0x1f, 0xd8, 0x51, 0x9c, 0x17, 0xee, 0x42,
-	0x3e, 0xac, 0xfe, 0x4f, 0x61, 0xd9, 0xeb, 0x17, 0x6e, 0x6b, 0x69, 0xa7, 0xb8, 0x5f, 0x89, 0xb4,
-	0xe9, 0xb8, 0xf0, 0x9c, 0x39, 0xb6, 0xa0, 0xe0, 0xef, 0x43, 0xc9, 0x6f, 0x13, 0xcd, 0xb0, 0x4e,
-	0xec, 0xf9, 0x93, 0xdd, 0x07, 0xb2, 0x9b, 0x70, 0x2f, 0x61, 0xf6, 0x3e, 0x83, 0x5c, 0xd0, 0x27,
-	0xde, 0x4c, 0x7c, 0xc4, 0xf2, 0x30, 0xc2, 0x16, 0xac, 0xb6, 0x17, 0xda, 0x3c, 0xe1, 0x71, 0xdc,
-	0xbc, 0x6d, 0x03, 0xd0, 0x0a, 0x66, 0x91, 0x04, 0xa2, 0x28, 0x16, 0xbe, 0x61, 0x62, 0x16, 0xc7,
-	0x76, 0xd2, 0xd6, 0xb9, 0xc6, 0xef, 0x30, 0x93, 0xcb, 0xd2, 0xa7, 0xa1, 0x4e, 0x74, 0x66, 0xea,
-	0x4a, 0xc2, 0x9f, 0x39, 0x96, 0x16, 0xaf, 0x6e, 0x13, 0x3b, 0xcf, 0x5d, 0x76, 0xe7, 0xe7, 0xaa,
-	0x2d, 0x73, 0x95, 0x6a, 0x9b, 0xaf, 0xf5, 0xa5, 0xab, 0xd4, 0xba, 0xf0, 0xdf, 0x0c, 0x94, 0x93,
-	0xdd, 0xd3, 0x02, 0x88, 0x75, 0x9e, 0x97, 0xa2, 0x87, 0x97, 0xeb, 0xbc, 0xe8, 0x92, 0x16, 0xfe,
-	0x90, 0x81, 0x42, 0xc2, 0xaf, 0x85, 0x11, 0xa6, 0xde, 0xee, 0x61, 0x44, 0x72, 0x0b, 0xdd, 0x85,
-	0x62, 0x90, 0x0c, 0xcf, 0xb5, 0x50, 0xec, 0xb5, 0x08, 0x1b, 0x2c, 0x5e, 0x6e, 0xa1, 0x2a, 0x94,
-	0x43, 0xa8, 0xa5, 0x4f, 0x70, 0x6d, 0x89, 0x59, 0xef, 0xb3, 0x66, 0x22, 0xbb, 0xc8, 0xd0, 0x3d,
-	0x06, 0x3e, 0xf6, 0x49, 0x46, 0x74, 0x32, 0x0b, 0x4e, 0xe5, 0x8d, 0x14, 0x82, 0xc2, 0x00, 0xe8,
-	0x39, 0xac, 0x3b, 0xd8, 0xb5, 0x67, 0xce, 0x00, 0x33, 0x8e, 0xe1, 0x12, 0x5a, 0xa5, 0xde, 0x69,
-	0x7c, 0x33, 0xe2, 0xf5, 0x7d, 0x90, 0x12, 0x62, 0x84, 0x1f, 0x38, 0x96, 0xf1, 0xd8, 0x79, 0xd3,
-	0x02, 0x88, 0xed, 0xdf, 0x25, 0x32, 0x1e, 0x71, 0xa3, 0xc4, 0xa1, 0x2e, 0x5c, 0x1b, 0xd8, 0x93,
-	0xa9, 0x89, 0xe9, 0xf9, 0x11, 0xd3, 0xcb, 0xfc, 0x38, 0x3d, 0xe1, 0x05, 0x14, 0x22, 0xf1, 0x3d,
-	0xa8, 0xc4, 0x36, 0x30, 0x6a, 0xe3, 0x1b, 0x69, 0x5b, 0x48, 0x1b, 0xe8, 0x9f, 0x1c, 0x94, 0x12,
-	0x85, 0x2a, 0x42, 0x21, 0x2a, 0x71, 0x6f, 0x8d, 0x8d, 0x4b, 0x95, 0x78, 0xb8, 0xdf, 0xe8, 0x08,
-	0xd6, 0xa3, 0x15, 0xc6, 0xfb, 0xe5, 0x47, 0x88, 0x09, 0xcf, 0x21, 0x1f, 0x0a, 0xef, 0xc6, 0xca,
-	0x28, 0xb6, 0xb8, 0xeb, 0x29, 0x35, 0x47, 0xd7, 0xf6, 0x37, 0xaf, 0xe9, 0xbd, 0xf6, 0xfd, 0x02,
-	0xca, 0x53, 0x6c, 0x0d, 0xe9, 0x8d, 0x1c, 0x34, 0xfe, 0x99, 0x33, 0x91, 0xe2, 0xd0, 0xe7, 0x50,
-	0xfa, 0xcd, 0x0c, 0xcf, 0xf0, 0xd0, 0x47, 0x65, 0x52, 0x51, 0xdb, 0x50, 0xf1, 0x7e, 0x2c, 0x08,
-	0x71, 0x4b, 0xa9, 0xb8, 0x1d, 0xe0, 0x09, 0x76, 0x26, 0x86, 0xa5, 0x93, 0x10, 0x99, 0x4d, 0x45,
-	0xde, 0x81, 0xd5, 0x28, 0x67, 0x1e, 0x70, 0x39, 0x0d, 0x28, 0x3c, 0x66, 0x6b, 0x62, 0x37, 0x01,
-	0xba, 0x03, 0xc0, 0x72, 0x18, 0x24, 0x83, 0x16, 0xf5, 0x7a, 0x84, 0x67, 0x20, 0x96, 0x89, 0x7b,
-	0xe9, 0x1f, 0x8a, 0xeb, 0xb4, 0x83, 0x0d, 0x12, 0x74, 0x13, 0x15, 0x58, 0xae, 0x7f, 0x97, 0xf9,
-	0x7f, 0x9a, 0xf6, 0xa4, 0x3b, 0x5f, 0x49, 0xba, 0xf3, 0x5c, 0xd2, 0x9d, 0xe7, 0x53, 0xdc, 0x79,
-	0x21, 0xc5, 0x9d, 0xc3, 0xbc, 0x3b, 0x2f, 0x26, 0xdd, 0x79, 0x29, 0xe9, 0xce, 0x17, 0x18, 0xf0,
-	0x72, 0xfd, 0x1f, 0x59, 0x28, 0x84, 0xdf, 0x53, 0xe8, 0x41, 0xc2, 0xeb, 0x6e, 0x9e, 0xfb, 0xe1,
-	0xe5, 0x99, 0xdd, 0x07, 0xe1, 0x25, 0x94, 0xfa, 0x9b, 0x5c, 0x84, 0x6e, 0xe9, 0x44, 0x47, 0xfb,
-	0xf4, 0x93, 0xd5, 0x22, 0x8e, 0x6d, 0x9e, 0x67, 0x70, 0x23, 0x42, 0xd3, 0x03, 0x0a, 0xbf, 0x87,
-	0x2c, 0xe3, 0x3e, 0x4a, 0xc4, 0x75, 0x7b, 0xf1, 0x4c, 0x5e, 0x70, 0xa5, 0x58, 0x70, 0xa5, 0xfa,
-	0xb3, 0xb4, 0x5d, 0x2f, 0xc0, 0xb2, 0xa2, 0xb6, 0xe4, 0x2e, 0xcf, 0x21, 0x80, 0x15, 0x45, 0x6d,
-	0xf5, 0x8e, 0x55, 0x3e, 0xe3, 0xff, 0x2f, 0xf5, 0xfb, 0xfc, 0x92, 0xf0, 0x5d, 0x06, 0x72, 0x7e,
-	0x30, 0xe8, 0x49, 0x22, 0x88, 0xed, 0x0b, 0xa3, 0xf7, 0xe2, 0xb8, 0x0d, 0x79, 0x42, 0x3e, 0x78,
-	0x35, 0xec, 0x25, 0x6a, 0x2d, 0x56, 0xf3, 0xea, 0xd7, 0xec, 0x33, 0xfd, 0x2b, 0x28, 0x8c, 0xb1,
-	0xee, 0x90, 0x77, 0x58, 0x27, 0x7e, 0x76, 0xee, 0x5f, 0xac, 0x7f, 0x18, 0x50, 0x84, 0xa7, 0x50,
-	0x08, 0x1f, 0xd0, 0x0e, 0xe4, 0x0d, 0x8b, 0x60, 0xe7, 0x54, 0x37, 0x17, 0xff, 0x3a, 0x55, 0x7f,
-	0x98, 0x96, 0x95, 0x12, 0xe4, 0x55, 0xf5, 0x6b, 0x4d, 0xee, 0x1e, 0xf4, 0xbc, 0x4e, 0x38, 0x94,
-	0xc4, 0xbe, 0xfa, 0x52, 0x12, 0x55, 0x3e, 0x53, 0xbf, 0x97, 0xc6, 0xc8, 0x43, 0xb6, 0x25, 0xaa,
-	0x22, 0xcf, 0xd1, 0xd7, 0xb4, 0xb8, 0xfa, 0xbd, 0x0e, 0x9f, 0x79, 0xf9, 0xf3, 0xbf, 0x7c, 0xdc,
-	0xe4, 0xfe, 0xfa, 0x71, 0x93, 0xfb, 0xd7, 0xc7, 0x4d, 0xee, 0xfb, 0x1f, 0x36, 0x3f, 0x81, 0x0d,
-	0xdb, 0x19, 0x35, 0xf4, 0xa9, 0x3e, 0x18, 0xe3, 0x33, 0xab, 0x7b, 0xb9, 0xf2, 0xda, 0xb1, 0x89,
-	0xed, 0x7e, 0xb3, 0xcc, 0x1e, 0xff, 0x17, 0x00, 0x00, 0xff, 0xff, 0x42, 0xb3, 0xde, 0x2e, 0x05,
-	0x17, 0x00, 0x00,
+	// 2472 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xd4, 0x59, 0x4b, 0x73, 0xe3, 0x58,
+	0xf5, 0x1f, 0x39, 0x76, 0x62, 0x1f, 0xbf, 0x94, 0x9b, 0x97, 0x5b, 0x9d, 0x4e, 0x32, 0xee, 0xc7,
+	0xa4, 0x7b, 0xa6, 0x93, 0xee, 0xcc, 0x7f, 0x7a, 0xfe, 0x4d, 0x78, 0x69, 0x62, 0xc5, 0x11, 0x71,
+	0xdb, 0xc1, 0x52, 0x3a, 0x0c, 0x1b, 0x97, 0x26, 0xbe, 0x71, 0xc4, 0xc8, 0x92, 0x91, 0xae, 0x33,
+	0xd3, 0x14, 0x1b, 0x76, 0xec, 0xd8, 0x51, 0x7c, 0x09, 0x56, 0x14, 0x54, 0xb1, 0x1b, 0x8a, 0x0d,
+	0xcb, 0xd9, 0xb0, 0xa1, 0x0a, 0x8a, 0x1a, 0xbe, 0x06, 0x0b, 0xea, 0x5e, 0x49, 0x96, 0x64, 0x49,
+	0x6e, 0xf7, 0x14, 0x05, 0xc5, 0x26, 0x15, 0x5d, 0xfd, 0x7e, 0xe7, 0x9e, 0x73, 0xee, 0x3d, 0x2f,
+	0x19, 0xb6, 0x0c, 0xfd, 0x93, 0x7d, 0x6b, 0x84, 0x6d, 0x8d, 0x58, 0xf6, 0xbe, 0x36, 0xc0, 0x26,
+	0x71, 0xff, 0xee, 0x8d, 0x6c, 0x8b, 0x58, 0xa8, 0x38, 0xc4, 0x8e, 0xe5, 0xec, 0xb1, 0x25, 0xe1,
+	0x83, 0x81, 0x4e, 0xae, 0xc7, 0x9f, 0xec, 0x5d, 0x5a, 0xc3, 0x7d, 0xcb, 0xec, 0xdb, 0xf8, 0x47,
+	0x8f, 0x9d, 0xa1, 0x65, 0x68, 0xfb, 0x0c, 0xf4, 0x78, 0x60, 0x3d, 0xbe, 0x26, 0x64, 0xb4, 0x4f,
+	0x45, 0xba, 0x34, 0x26, 0xa3, 0xfe, 0xcf, 0x3b, 0x90, 0x3d, 0xd2, 0x0c, 0x03, 0xdd, 0x83, 0x2c,
+	0x79, 0x35, 0xc2, 0x35, 0x6e, 0x87, 0xdb, 0xad, 0x1c, 0xac, 0xef, 0x85, 0x64, 0xef, 0x51, 0xc0,
+	0x9e, 0xfa, 0x6a, 0x84, 0xd1, 0x53, 0x28, 0x0e, 0x30, 0xe9, 0x0d, 0x31, 0xb1, 0xf5, 0x4b, 0xa7,
+	0x96, 0xd9, 0xe1, 0x76, 0x8b, 0x07, 0x9b, 0x71, 0x70, 0x13, 0x93, 0x17, 0x2e, 0x06, 0x7d, 0x13,
+	0x96, 0x1d, 0x4c, 0x7a, 0x86, 0x35, 0x18, 0xe8, 0xe6, 0xa0, 0x67, 0xe0, 0x1b, 0x6c, 0xd4, 0x16,
+	0x18, 0xf1, 0xed, 0x38, 0x51, 0xc1, 0xa4, 0xe5, 0x22, 0x5b, 0x14, 0x88, 0xf6, 0x01, 0x0c, 0xdd,
+	0x21, 0xbd, 0x2b, 0xdd, 0xc0, 0x4e, 0x2d, 0xcb, 0x68, 0xb7, 0xe3, 0xb4, 0x96, 0xee, 0x90, 0x63,
+	0x0a, 0x41, 0x8f, 0xa1, 0x60, 0x63, 0xad, 0xcf, 0x08, 0xb5, 0x1c, 0xc3, 0x0b, 0x71, 0x7c, 0x17,
+	0x6b, 0x7d, 0x8a, 0x47, 0x2d, 0xd8, 0x30, 0xb4, 0xb1, 0x79, 0x79, 0xdd, 0x33, 0xb1, 0x43, 0x70,
+	0xbf, 0x77, 0x69, 0x99, 0x44, 0xd3, 0x4d, 0x6c, 0xd7, 0x16, 0x19, 0xf9, 0x9d, 0x84, 0xcd, 0x18,
+	0xa1, 0xcd, 0xf0, 0x47, 0x3e, 0xfc, 0xa3, 0x4c, 0x8d, 0x43, 0x27, 0xb0, 0xf6, 0x99, 0xa6, 0x93,
+	0xb8, 0xac, 0x25, 0x26, 0xeb, 0x7e, 0x5c, 0xd6, 0x85, 0xa6, 0x93, 0x14, 0x49, 0x9f, 0xea, 0x86,
+	0x11, 0x97, 0x94, 0x4f, 0x93, 0x74, 0xaa, 0x1b, 0x46, 0x92, 0xa4, 0x0b, 0xd8, 0x4e, 0xb1, 0xb0,
+	0xe7, 0x60, 0xc7, 0xd1, 0x2d, 0xb3, 0x56, 0x60, 0x32, 0xf7, 0xe6, 0xb4, 0x54, 0x71, 0x59, 0xe8,
+	0x18, 0xd6, 0x35, 0x42, 0xb4, 0xcb, 0xeb, 0x90, 0x44, 0xdd, 0x1c, 0x8d, 0x49, 0x0d, 0x98, 0xbc,
+	0x07, 0x71, 0x79, 0x22, 0xc3, 0x4f, 0x24, 0xc9, 0x14, 0x8d, 0x4e, 0x60, 0x23, 0x26, 0xc7, 0x1a,
+	0x13, 0x2a, 0xa8, 0x98, 0x76, 0x04, 0x53, 0x82, 0x3a, 0x0c, 0x4e, 0x0f, 0xd3, 0xc6, 0x43, 0xeb,
+	0x06, 0xc7, 0xdd, 0x56, 0x4a, 0x93, 0xd4, 0x65, 0x84, 0x24, 0xc7, 0x1d, 0x02, 0xef, 0x39, 0x2e,
+	0x10, 0x53, 0x4e, 0xbb, 0xb7, 0xae, 0xa7, 0x26, 0x02, 0xd0, 0x87, 0x50, 0x61, 0x37, 0x21, 0xa0,
+	0x56, 0x18, 0x75, 0x3b, 0xf9, 0x0a, 0x44, 0x88, 0xec, 0xe0, 0x03, 0x62, 0x35, 0x8d, 0x48, 0x4f,
+	0x3c, 0x20, 0x1e, 0x02, 0xef, 0x19, 0x1f, 0x50, 0xf9, 0x34, 0x75, 0x5d, 0xab, 0x03, 0xf2, 0xf7,
+	0x61, 0x53, 0xeb, 0xf7, 0x7b, 0x36, 0x76, 0xac, 0xb1, 0x7d, 0x89, 0x7b, 0x23, 0xdb, 0xba, 0xd1,
+	0xfb, 0xd8, 0xa6, 0xb2, 0xae, 0xf4, 0x41, 0x6d, 0x99, 0x09, 0x7a, 0x37, 0xe1, 0x20, 0xfa, 0xfd,
+	0xae, 0x47, 0x3a, 0xf3, 0x38, 0x47, 0x8c, 0x42, 0xef, 0xdd, 0x78, 0xd4, 0xd7, 0x08, 0x4e, 0x97,
+	0x8a, 0xd2, 0xee, 0xdd, 0x39, 0x23, 0xa6, 0x0b, 0xf6, 0x0c, 0x4d, 0x15, 0xbc, 0x92, 0x26, 0xd8,
+	0xb5, 0x3b, 0x45, 0xf0, 0x87, 0x50, 0xa1, 0xc9, 0x6d, 0xe2, 0x3e, 0xa7, 0xb6, 0x9a, 0xe6, 0xfa,
+	0x26, 0x0e, 0x8e, 0xcc, 0x41, 0xef, 0x43, 0x69, 0x64, 0x8f, 0x4d, 0xdc, 0xd3, 0x87, 0xda, 0x00,
+	0x3b, 0xb5, 0x35, 0x46, 0xbb, 0x13, 0xa7, 0x9d, 0x51, 0x94, 0xcc, 0x40, 0xc2, 0x01, 0x40, 0x28,
+	0x4b, 0xde, 0x83, 0x25, 0xa2, 0x0f, 0xb1, 0x35, 0x26, 0x2c, 0x03, 0x17, 0x0f, 0x56, 0x3c, 0x76,
+	0x63, 0x6c, 0x6b, 0x44, 0xb7, 0x4c, 0xd9, 0xbc, 0xb2, 0x84, 0x26, 0x54, 0xa7, 0x13, 0x64, 0x19,
+	0x72, 0x6e, 0x4a, 0xe5, 0x76, 0x32, 0xbb, 0x65, 0x74, 0x1f, 0xf2, 0x7d, 0x8f, 0x51, 0xcb, 0xec,
+	0x64, 0xd2, 0x04, 0xdd, 0x82, 0x42, 0x90, 0x32, 0x4b, 0x90, 0x1d, 0x69, 0xe4, 0x9a, 0x49, 0x28,
+	0x08, 0xff, 0x0f, 0xf9, 0x49, 0x76, 0x8c, 0xbc, 0x41, 0x15, 0x58, 0xb4, 0xae, 0xae, 0x1c, 0x4c,
+	0x98, 0xe4, 0x2c, 0x7d, 0x36, 0xb0, 0x39, 0x20, 0xd7, 0x2c, 0x9d, 0x67, 0x85, 0x6f, 0x41, 0x39,
+	0xea, 0x97, 0x15, 0x28, 0x3a, 0xd7, 0xd6, 0x67, 0x5e, 0x34, 0x32, 0xc3, 0xf2, 0x68, 0x03, 0xaa,
+	0x6c, 0xd1, 0x21, 0x9a, 0xd9, 0xd7, 0x0c, 0xcb, 0xc4, 0xac, 0x8c, 0xe4, 0x85, 0x5f, 0x70, 0xb0,
+	0x96, 0x98, 0x70, 0xd0, 0x2e, 0x94, 0x42, 0x29, 0xa6, 0xcf, 0xd4, 0x29, 0x1e, 0x20, 0xcf, 0xb0,
+	0x20, 0x9d, 0x34, 0xd0, 0x5d, 0x58, 0xba, 0xb4, 0x86, 0x43, 0xcd, 0xec, 0x7b, 0xb5, 0x29, 0x00,
+	0xb1, 0x55, 0x6a, 0x3c, 0x7a, 0x07, 0x0a, 0x41, 0x88, 0xb8, 0x95, 0x68, 0x35, 0x26, 0x8b, 0x7a,
+	0xe9, 0x3b, 0xb0, 0x92, 0x90, 0x9f, 0xe7, 0x57, 0x47, 0xe8, 0xc0, 0x4a, 0x42, 0x5a, 0x7e, 0x03,
+	0x7b, 0x2a, 0xb0, 0xe8, 0xe8, 0x03, 0x53, 0x33, 0x98, 0x39, 0x39, 0x41, 0x84, 0xb5, 0xc4, 0x84,
+	0xf5, 0x06, 0x3a, 0xfd, 0x92, 0x83, 0xcd, 0x99, 0x79, 0xfd, 0xbf, 0xe5, 0xed, 0xbf, 0x71, 0xb0,
+	0x9a, 0x58, 0x20, 0x9e, 0x47, 0x5a, 0x93, 0x77, 0xe7, 0x2b, 0x2b, 0x6e, 0xbf, 0x32, 0x6d, 0xcb,
+	0xb4, 0x9a, 0x81, 0x2d, 0x8f, 0x00, 0x46, 0xb6, 0x75, 0x89, 0x1d, 0xa7, 0xa7, 0x5b, 0x9e, 0x9e,
+	0xd1, 0x2e, 0xe8, 0xcc, 0x7d, 0x2d, 0x77, 0xea, 0x1f, 0x40, 0x96, 0x49, 0x2f, 0xc2, 0xd2, 0x79,
+	0xfb, 0xb4, 0xdd, 0xb9, 0x68, 0xf3, 0x6f, 0x21, 0x1e, 0x4a, 0x47, 0x9d, 0xb6, 0x2a, 0xca, 0x6d,
+	0xa9, 0xdb, 0x93, 0x1b, 0x3c, 0x87, 0x2a, 0x00, 0x67, 0xdd, 0xce, 0x91, 0xa4, 0x28, 0x3d, 0xb9,
+	0xc3, 0x67, 0xe8, 0xe1, 0x25, 0xd7, 0xad, 0xf9, 0x0f, 0xef, 0xd7, 0x1c, 0x54, 0xa7, 0x4b, 0xcd,
+	0xbf, 0xf9, 0xbc, 0xea, 0xb4, 0x81, 0x72, 0xf3, 0xa3, 0x53, 0x5b, 0xd8, 0x59, 0xd8, 0x2d, 0x1e,
+	0x54, 0x3d, 0x98, 0x9f, 0x37, 0xa3, 0x67, 0x9a, 0x9d, 0x71, 0xa6, 0xcf, 0xa1, 0x1c, 0x2d, 0x6f,
+	0xf3, 0x9b, 0x2a, 0x43, 0x39, 0x5a, 0xe0, 0xbe, 0x7e, 0xd4, 0x1c, 0x42, 0x75, 0xba, 0xe0, 0xcd,
+	0xaf, 0xc7, 0x31, 0xdc, 0x4a, 0x2f, 0x72, 0x0f, 0x21, 0xab, 0x9b, 0x57, 0x96, 0x47, 0xbf, 0x3d,
+	0xe5, 0x27, 0x1f, 0xcc, 0x5c, 0x21, 0xc3, 0xe6, 0xcc, 0xb2, 0xf6, 0x06, 0xa2, 0xbe, 0x01, 0x9b,
+	0x33, 0x0b, 0x59, 0x69, 0x12, 0x30, 0x34, 0x6d, 0x97, 0x20, 0x6b, 0x6a, 0x43, 0xcc, 0x92, 0x76,
+	0x41, 0xf8, 0x3f, 0x28, 0x86, 0xaa, 0x10, 0xba, 0x0f, 0x55, 0xfc, 0xf9, 0xa5, 0x31, 0xee, 0xe3,
+	0xbe, 0x5f, 0xbd, 0x38, 0x76, 0xe6, 0x25, 0x4f, 0x01, 0x86, 0xab, 0xff, 0x39, 0x97, 0x74, 0xe5,
+	0x2b, 0x00, 0x4d, 0x49, 0xed, 0x9d, 0x48, 0x62, 0x4b, 0x3d, 0xe1, 0x39, 0x54, 0x86, 0x02, 0x7d,
+	0x3e, 0x6e, 0x89, 0x4d, 0x85, 0xcf, 0xa0, 0x2a, 0x14, 0xe9, 0xe3, 0x4b, 0xa9, 0xab, 0xc8, 0x9d,
+	0x36, 0xbf, 0xe0, 0x2f, 0xbc, 0x90, 0xd4, 0xae, 0x7c, 0xa4, 0xf0, 0x59, 0xb4, 0x06, 0xcb, 0x74,
+	0xa1, 0xd5, 0x69, 0x36, 0xe5, 0x76, 0xb3, 0xd7, 0x92, 0x5e, 0x4a, 0x2d, 0x3e, 0x47, 0x97, 0x95,
+	0xd8, 0xf2, 0x22, 0xdd, 0xae, 0x25, 0x2b, 0x6a, 0xef, 0x58, 0x6e, 0x49, 0x0a, 0xbf, 0x44, 0xb7,
+	0xeb, 0x4a, 0x62, 0x83, 0x3d, 0xf3, 0x79, 0x7f, 0x77, 0x45, 0x15, 0x55, 0x89, 0x2f, 0x20, 0x04,
+	0x15, 0xfa, 0x38, 0x89, 0x49, 0x85, 0x07, 0x7f, 0xed, 0xb8, 0x2b, 0xbe, 0x90, 0x2e, 0x3a, 0xdd,
+	0x53, 0x85, 0x2f, 0xa2, 0x65, 0x28, 0xd3, 0x35, 0xe9, 0x07, 0xd2, 0xd1, 0xb9, 0xda, 0xe9, 0x2a,
+	0x7c, 0xc9, 0x97, 0xa4, 0x8a, 0xca, 0xa9, 0xc2, 0x97, 0xfd, 0x47, 0xb1, 0x29, 0xb5, 0x55, 0x7e,
+	0x15, 0x09, 0xb0, 0x4e, 0x1f, 0xbb, 0x92, 0xd2, 0x39, 0xef, 0x1e, 0x49, 0xbd, 0xb3, 0x6e, 0xe7,
+	0xa5, 0xdc, 0xa0, 0x1b, 0x08, 0x68, 0x1b, 0x36, 0x5a, 0xe2, 0x79, 0xfb, 0xe8, 0xa4, 0xd7, 0x96,
+	0x14, 0x55, 0x6a, 0x04, 0xdb, 0xf3, 0x15, 0x21, 0x93, 0xe7, 0xd0, 0x1d, 0x58, 0xbb, 0x10, 0x65,
+	0x35, 0xfe, 0xba, 0xea, 0xbf, 0x3e, 0x95, 0x5b, 0xad, 0xf8, 0x6b, 0x9e, 0xbd, 0xde, 0x86, 0x8d,
+	0xae, 0xf4, 0xa2, 0xf3, 0x52, 0x8a, 0x03, 0xd6, 0x18, 0xe0, 0x2e, 0x6c, 0xa7, 0xec, 0xdf, 0x53,
+	0x24, 0x85, 0x1d, 0xc3, 0x32, 0x35, 0x40, 0x54, 0x55, 0xf1, 0xe8, 0x24, 0xf4, 0x56, 0x6e, 0x9f,
+	0x9d, 0xab, 0x3c, 0x42, 0xb7, 0x61, 0x23, 0xf6, 0xae, 0x73, 0xae, 0xd2, 0x97, 0x2b, 0x68, 0x15,
+	0x78, 0x4f, 0x7a, 0xb0, 0xef, 0x3a, 0x75, 0x2a, 0x33, 0x29, 0x58, 0xdb, 0xa0, 0x6b, 0xcc, 0x8e,
+	0x60, 0xad, 0x46, 0xd9, 0x9e, 0xf2, 0xc1, 0xea, 0x2d, 0xb4, 0x03, 0x9b, 0x62, 0xa3, 0x11, 0xf7,
+	0x26, 0x05, 0x1d, 0xcb, 0x4d, 0xfe, 0x36, 0xb5, 0xe9, 0xfc, 0xac, 0x21, 0xaa, 0x52, 0x3a, 0x68,
+	0x93, 0x82, 0x3c, 0xe1, 0xa9, 0xa0, 0x3b, 0x34, 0x45, 0x9f, 0x75, 0xcf, 0xdb, 0x52, 0x4f, 0x7e,
+	0x21, 0x36, 0x25, 0x85, 0xdf, 0xaa, 0xff, 0x4e, 0xa0, 0xdd, 0x8e, 0x33, 0xb2, 0x4c, 0x87, 0x16,
+	0x8b, 0x70, 0x9d, 0x89, 0x4e, 0x8d, 0x3e, 0xc8, 0x2d, 0x2b, 0xef, 0x03, 0xd0, 0x4e, 0xf1, 0x1a,
+	0x6b, 0x06, 0xb9, 0xf6, 0x72, 0xe9, 0x76, 0x32, 0xbe, 0x89, 0xc9, 0x09, 0x83, 0xa1, 0xa7, 0x50,
+	0xa0, 0xa4, 0x2b, 0x43, 0x1b, 0x38, 0x5e, 0x81, 0xd9, 0x4a, 0xe5, 0x1c, 0x53, 0x14, 0xfa, 0xc0,
+	0x1d, 0xb7, 0x6f, 0xb0, 0xcd, 0xe6, 0x34, 0x37, 0xd3, 0xee, 0xa4, 0x92, 0x5e, 0xba, 0x38, 0x9f,
+	0xe6, 0x4f, 0xe9, 0xb9, 0xd7, 0xd0, 0xfc, 0x1e, 0xf4, 0xbb, 0xb0, 0x3c, 0x88, 0x4d, 0xea, 0x8b,
+	0x09, 0xf3, 0x66, 0x98, 0x1c, 0x69, 0x46, 0xdf, 0x8f, 0x4c, 0xeb, 0x4b, 0xb3, 0xfc, 0x12, 0xb4,
+	0x9f, 0x4f, 0xc3, 0x13, 0x7b, 0x7e, 0x96, 0x5f, 0x26, 0x7d, 0xa9, 0xe7, 0x4a, 0x87, 0x68, 0x04,
+	0x7b, 0xd3, 0x6b, 0xba, 0x2b, 0x15, 0x8a, 0x42, 0x87, 0xb1, 0xe6, 0xde, 0x9d, 0x52, 0xef, 0xa6,
+	0xf2, 0x42, 0x8d, 0xac, 0x47, 0xbe, 0xb2, 0xb5, 0x21, 0xfe, 0xcc, 0xb2, 0x3f, 0x75, 0xbc, 0xc9,
+	0x34, 0x9d, 0x7c, 0x3c, 0x81, 0xa2, 0xe7, 0x50, 0xa6, 0x64, 0xfc, 0x39, 0xbe, 0x1c, 0x13, 0xcb,
+	0x76, 0xbc, 0x59, 0xb4, 0x9e, 0xca, 0x95, 0x7c, 0xa4, 0x6f, 0x27, 0xd1, 0x9c, 0x4f, 0x1d, 0x6f,
+	0xf6, 0x4c, 0xb7, 0x53, 0xa5, 0xa8, 0xf4, 0x4f, 0x10, 0xee, 0xfc, 0xf9, 0x30, 0x99, 0x9e, 0xd4,
+	0xe6, 0x7a, 0x9b, 0x33, 0xa4, 0x37, 0x84, 0xa6, 0x6f, 0x2e, 0xd2, 0x15, 0xea, 0xa7, 0xa9, 0xa9,
+	0x97, 0x9f, 0xe5, 0xa7, 0x68, 0x6b, 0xf0, 0x3d, 0x58, 0xa7, 0xfb, 0xc5, 0x86, 0x3a, 0xc7, 0x9b,
+	0x3e, 0x1f, 0xa5, 0x6e, 0x3e, 0x5d, 0x06, 0x1d, 0x61, 0x13, 0x0a, 0x41, 0xe0, 0x55, 0x61, 0xc9,
+	0x8d, 0xd4, 0x57, 0xac, 0x22, 0xe6, 0x85, 0x07, 0x90, 0x9f, 0x84, 0x98, 0x00, 0x39, 0x37, 0x22,
+	0xdd, 0xb2, 0x57, 0xf4, 0x36, 0xa1, 0x2f, 0x85, 0x67, 0x6c, 0x44, 0xf3, 0xa3, 0x6a, 0x17, 0x4a,
+	0x5e, 0x20, 0xf6, 0x42, 0x85, 0xda, 0x6f, 0x19, 0x3c, 0x14, 0xab, 0xcf, 0xef, 0x45, 0x46, 0xbb,
+	0x2d, 0x58, 0xf2, 0x23, 0xd1, 0xdd, 0xa3, 0xec, 0x51, 0x5c, 0x80, 0xb0, 0x03, 0xd5, 0xe6, 0xcc,
+	0xa1, 0x4e, 0x78, 0x12, 0x9e, 0xd6, 0xee, 0x02, 0xd0, 0x48, 0x61, 0x3a, 0xf8, 0x12, 0xfd, 0x06,
+	0x8d, 0x22, 0x98, 0x06, 0x0f, 0xa2, 0x43, 0x9c, 0xa3, 0xff, 0xc4, 0xed, 0x06, 0xb2, 0xf4, 0xa9,
+	0xaf, 0x11, 0x8d, 0x75, 0x03, 0x25, 0xe1, 0xb7, 0x1c, 0x73, 0x85, 0x1b, 0x22, 0x91, 0xdb, 0xc6,
+	0xcd, 0x75, 0xdb, 0x62, 0x77, 0x3b, 0x33, 0xf7, 0xdd, 0x8e, 0xc7, 0xd4, 0xc2, 0xdc, 0x31, 0x25,
+	0xfc, 0x35, 0x33, 0x3d, 0x6b, 0x8a, 0x00, 0xa1, 0xd8, 0x76, 0xdd, 0xf2, 0x78, 0x8e, 0xd8, 0x0e,
+	0x7a, 0x3d, 0xe1, 0xe7, 0x19, 0x28, 0x44, 0x3a, 0xc4, 0x89, 0x6e, 0x6e, 0x87, 0x18, 0xee, 0x98,
+	0x27, 0xba, 0xc8, 0x0d, 0xf4, 0x00, 0x8a, 0xbe, 0x03, 0x82, 0x19, 0x63, 0xd9, 0x03, 0xfa, 0x06,
+	0xcb, 0x0d, 0xb4, 0x06, 0xe5, 0x09, 0x8e, 0x75, 0x64, 0xd4, 0xe0, 0x42, 0xac, 0x15, 0xcd, 0xa6,
+	0xf6, 0xb5, 0x4f, 0x80, 0x0f, 0x7d, 0xbc, 0x23, 0x1a, 0x19, 0xfb, 0xc9, 0x7d, 0x7d, 0x1a, 0xad,
+	0xb0, 0xb7, 0xe8, 0x19, 0xac, 0x4c, 0xe2, 0x89, 0x12, 0x74, 0x87, 0xd0, 0x7b, 0xe8, 0x26, 0xf5,
+	0x5b, 0x53, 0x3d, 0xa6, 0x32, 0x01, 0x08, 0x7f, 0xe1, 0x98, 0x7f, 0x43, 0x59, 0x4c, 0x04, 0x08,
+	0x1d, 0xd5, 0xeb, 0xfc, 0x1b, 0x10, 0x03, 0x4f, 0xa1, 0x53, 0x58, 0xbd, 0xb4, 0x86, 0x23, 0x03,
+	0xd3, 0xc4, 0x14, 0x12, 0x96, 0xf9, 0x1a, 0xc2, 0x84, 0xe7, 0x50, 0x08, 0x24, 0xbf, 0x07, 0x95,
+	0xd0, 0x59, 0x05, 0xc1, 0xb9, 0x1a, 0x3b, 0x2d, 0x1a, 0x1c, 0x5f, 0x72, 0x50, 0x8a, 0x5c, 0xc5,
+	0x6f, 0x43, 0x21, 0xb8, 0xc1, 0xae, 0x69, 0xef, 0xbe, 0xfe, 0x06, 0x4f, 0x8e, 0x16, 0x9d, 0xc0,
+	0x4a, 0x60, 0x58, 0x38, 0x16, 0xde, 0x54, 0x92, 0xf0, 0x0c, 0xf2, 0x13, 0xa9, 0x8f, 0x42, 0xd7,
+	0x25, 0x64, 0xd3, 0xca, 0xf4, 0xc5, 0xa2, 0x26, 0xfd, 0xd1, 0x8d, 0x63, 0x37, 0x28, 0xeb, 0x50,
+	0x1e, 0x61, 0xb3, 0x4f, 0x6b, 0xb8, 0x1f, 0xcb, 0xe1, 0xd4, 0x46, 0x41, 0xe8, 0x6d, 0x28, 0xfd,
+	0x78, 0x8c, 0xc7, 0xb8, 0xef, 0x41, 0x32, 0x71, 0xc8, 0x5d, 0xa8, 0xb8, 0xdf, 0x3f, 0x27, 0xa0,
+	0x85, 0x38, 0xe8, 0x3e, 0xf0, 0x04, 0xdb, 0x43, 0xdd, 0xd4, 0xc8, 0x04, 0x96, 0x8d, 0xc3, 0xee,
+	0x41, 0x35, 0xf0, 0x90, 0x8b, 0xca, 0xc5, 0x50, 0xc2, 0x13, 0x66, 0x84, 0x5b, 0x4a, 0xee, 0x01,
+	0x38, 0x86, 0x76, 0x83, 0x7d, 0xd3, 0xe9, 0x85, 0xe5, 0x3d, 0xb0, 0x42, 0x5f, 0x30, 0xbb, 0xbf,
+	0xe0, 0x60, 0x35, 0xa9, 0x00, 0xa0, 0x0b, 0x40, 0x09, 0x85, 0xc4, 0x75, 0xc4, 0xe1, 0xfc, 0x85,
+	0x24, 0x36, 0x7f, 0x09, 0x1d, 0xe0, 0xa7, 0xd7, 0xd0, 0x21, 0xac, 0xc7, 0x3f, 0x45, 0xce, 0x3b,
+	0xcc, 0xfd, 0x9e, 0x4b, 0xfe, 0xca, 0xb4, 0x42, 0xb3, 0x8a, 0x4e, 0xfc, 0x38, 0xa7, 0x1e, 0xc8,
+	0xa1, 0x6d, 0xc8, 0xb9, 0x4d, 0x4f, 0x86, 0xf5, 0xa8, 0x7c, 0xc8, 0x7b, 0x6e, 0x0e, 0xdf, 0x85,
+	0x45, 0x1b, 0x6b, 0x8e, 0x65, 0xb2, 0xe4, 0x52, 0x39, 0xa8, 0x4d, 0x21, 0xc6, 0x54, 0x0b, 0xfa,
+	0x1e, 0x3d, 0xa5, 0xbd, 0xda, 0x50, 0x27, 0xee, 0xb7, 0xc2, 0x6c, 0xe4, 0x93, 0x25, 0x45, 0xfb,
+	0xca, 0xb6, 0x26, 0x20, 0x5a, 0x48, 0x87, 0xd8, 0x71, 0xb4, 0x81, 0xfb, 0xcb, 0x4a, 0x41, 0xf8,
+	0x0d, 0x37, 0x3d, 0xdf, 0xff, 0x0f, 0x68, 0x5d, 0xff, 0x43, 0xe6, 0x3f, 0x39, 0xcc, 0x46, 0xa7,
+	0xd6, 0xc5, 0xe8, 0xd4, 0xba, 0x14, 0x9d, 0x5a, 0xf3, 0x09, 0x53, 0x6b, 0x21, 0x61, 0x6a, 0x85,
+	0xf8, 0xd4, 0x5a, 0x8c, 0x4e, 0xad, 0xa5, 0xe8, 0xd4, 0x5a, 0x99, 0x31, 0xb5, 0xf2, 0xe9, 0x43,
+	0x69, 0x99, 0x0d, 0x95, 0xf1, 0x01, 0xaf, 0x5a, 0xff, 0x22, 0x0b, 0x85, 0xc9, 0x07, 0x31, 0xf4,
+	0x30, 0x32, 0x39, 0xdd, 0x4e, 0xfe, 0x6c, 0xe6, 0x8e, 0x4e, 0x0f, 0x27, 0xfd, 0x47, 0xfc, 0xa7,
+	0xbc, 0x00, 0xda, 0xd0, 0x88, 0x86, 0xf6, 0x61, 0x89, 0x96, 0x3b, 0xdb, 0x32, 0x12, 0xc7, 0xa5,
+	0x00, 0x7d, 0xe4, 0xa2, 0x84, 0x9f, 0x42, 0x96, 0x11, 0xf7, 0x22, 0xea, 0xec, 0xcc, 0xd8, 0xc3,
+	0xd5, 0xa9, 0x14, 0xd2, 0xa9, 0x54, 0x7f, 0x96, 0x74, 0x3b, 0x0a, 0x90, 0x53, 0xd4, 0x86, 0xdc,
+	0xe6, 0x39, 0x04, 0xb0, 0xa8, 0xa8, 0x8d, 0xce, 0xb9, 0xca, 0x67, 0xbc, 0xff, 0xa5, 0x6e, 0x97,
+	0x5f, 0x10, 0x7e, 0x96, 0x81, 0x25, 0x4f, 0x13, 0xf4, 0x34, 0xa2, 0xc1, 0xdd, 0xd9, 0x7a, 0xbb,
+	0x4a, 0xec, 0x40, 0x9e, 0x90, 0x57, 0x6e, 0xda, 0x70, 0x9d, 0x53, 0xf1, 0xef, 0xb5, 0xfa, 0x31,
+	0xfb, 0x32, 0x77, 0x08, 0x85, 0x6b, 0xac, 0xd9, 0xe4, 0x13, 0xac, 0x11, 0xcf, 0x23, 0xbb, 0xaf,
+	0x91, 0x7c, 0xe2, 0xe3, 0x85, 0x03, 0x28, 0x4c, 0x1e, 0xd0, 0x7d, 0xc8, 0xeb, 0x26, 0xc1, 0xf6,
+	0x8d, 0x66, 0xcc, 0xf8, 0xb9, 0xa1, 0xfe, 0x24, 0xc9, 0x13, 0x25, 0xc8, 0xab, 0xea, 0xc7, 0x3d,
+	0xb9, 0x7d, 0xdc, 0x71, 0xa3, 0xe4, 0x44, 0x12, 0xbb, 0xea, 0x47, 0x92, 0xa8, 0xf2, 0x99, 0xfa,
+	0xa3, 0x24, 0x46, 0x1e, 0xb2, 0x0d, 0x51, 0x15, 0x79, 0x8e, 0x2e, 0xd3, 0x4b, 0xd4, 0xed, 0xb4,
+	0xf8, 0xcc, 0x47, 0x1b, 0x7f, 0xfa, 0x6a, 0x8b, 0xfb, 0xf2, 0xab, 0x2d, 0xee, 0xef, 0x5f, 0x6d,
+	0x71, 0xbf, 0xfa, 0xc7, 0xd6, 0x5b, 0x3f, 0xcc, 0x31, 0x33, 0xfe, 0x15, 0x00, 0x00, 0xff, 0xff,
+	0x2a, 0xed, 0xb2, 0x45, 0xf8, 0x1e, 0x00, 0x00,
 }

@@ -16,9 +16,9 @@
 
 syntax = "proto2";
 
-package mesos.v1;
+package mesos;
 
-option java_package = "org.apache.mesos.v1";
+option java_package = "org.apache.mesos";
 option java_outer_classname = "Protos";
 option go_package = "mesos";
 
@@ -52,11 +52,11 @@ message OfferID {
 
 
 /**
- * A unique ID assigned to an agent. Currently, an agent gets a new ID
+ * A unique ID assigned to a slave. Currently, a slave gets a new ID
  * whenever it (re)registers with Mesos. Framework writers shouldn't
- * assume any binding between an agent ID and and a hostname.
+ * assume any binding between a slave ID and and a hostname.
  */
-message AgentID {
+message SlaveID {
   required string value = 1;
 }
 
@@ -65,8 +65,8 @@ message AgentID {
  * A framework-generated ID to distinguish a task. The ID must remain
  * unique while the task is active. A framework can reuse an ID _only_
  * if the previous task with the same ID has reached a terminal state
- * (e.g., TASK_FINISHED, TASK_LOST, TASK_KILLED, etc.). However,
- * reusing task IDs is strongly discouraged (MESOS-2198).
+ * (e.g., TASK_FINISHED, TASK_KILLED, etc.). However, reusing task IDs
+ * is strongly discouraged (MESOS-2198).
  */
 message TaskID {
   required string value = 1;
@@ -75,7 +75,7 @@ message TaskID {
 
 /**
  * A framework-generated ID to distinguish an executor. Only one
- * executor with the same ID can be active on the same agent at a
+ * executor with the same ID can be active on the same slave at a
  * time. However, reusing executor IDs is discouraged.
  */
 message ExecutorID {
@@ -100,6 +100,15 @@ message ContainerID {
  * provider gets a new ID whenever it (re)registers with Mesos.
  */
 message ResourceProviderID {
+  required string value = 1;
+}
+
+
+/**
+ * A framework-generated ID to distinguish an operation. The ID
+ * must be unique within the framework.
+ */
+message OperationID {
   required string value = 1;
 }
 
@@ -164,10 +173,10 @@ message Unavailability {
 
 
 /**
- * Represents a single machine, which may hold one or more agents.
+ * Represents a single machine, which may hold one or more slaves.
  *
- * NOTE: In order to match an agent to a machine, both the `hostname` and
- * `ip` must match the values advertised by the agent to the master.
+ * NOTE: In order to match a slave to a machine, both the `hostname` and
+ * `ip` must match the values advertised by the slave to the master.
  * Hostname is not case-sensitive.
  */
 message MachineID {
@@ -182,13 +191,13 @@ message MachineID {
  */
 message MachineInfo {
   // Describes the several states that a machine can be in.  A `Mode`
-  // applies to a machine and to all associated agents on the machine.
+  // applies to a machine and to all associated slaves on the machine.
   enum Mode {
     // In this mode, a machine is behaving normally;
     // offering resources, executing tasks, etc.
     UP = 1;
 
-    // In this mode, all agents on the machine are expected to cooperate with
+    // In this mode, all slaves on the machine are expected to cooperate with
     // frameworks to drain resources.  In general, draining is done ahead of
     // a pending `unavailability`.  The resources should be drained so as to
     // maximize utilization prior to the maintenance but without knowingly
@@ -196,7 +205,7 @@ message MachineInfo {
     DRAINING = 2;
 
     // In this mode, a machine is not running any tasks and will not offer
-    // any of its resources.  Agents on the machine will not be allowed to
+    // any of its resources.  Slaves on the machine will not be allowed to
     // register with the master.
     DOWN = 3;
   }
@@ -325,14 +334,16 @@ message FrameworkInfo {
       // Frameworks that enable this capability can define how they
       // would like to handle partitioned tasks. Frameworks will
       // receive TASK_UNREACHABLE for tasks on agents that are
-      // partitioned from the master. If/when a partitioned agent
-      // reregisters, tasks on the agent that were started by
-      // PARTITION_AWARE frameworks will not killed.
+      // partitioned from the master.
       //
       // Without this capability, frameworks will receive TASK_LOST
-      // for tasks on partitioned agents; such tasks will be killed by
-      // Mesos when the agent reregisters (unless the master has
-      // failed over).
+      // for tasks on partitioned agents.
+      // NOTE: Prior to Mesos 1.5, such tasks will be killed by Mesos
+      // when the agent reregisters (unless the master has failed over).
+      // However due to the lack of benefit in maintaining different
+      // behaviors depending on whether the master has failed over
+      // (see MESOS-7215), as of 1.5, Mesos will not kill these
+      // tasks in either case.
       PARTITION_AWARE = 5;
 
       // This expresses the ability for the framework to be
@@ -342,10 +353,45 @@ message FrameworkInfo {
       // expect that "single-tenant" schedulers eventually
       // provide this and move away from the deprecated
       // `role` field.
+      MULTI_ROLE = 6;
+
+      // This capability has two effects for a framework.
       //
-      // NOTE: The implementation for supporting multiple
-      // roles is not complete, DO NOT USE THIS.
-      MULTI_ROLE = 6; // EXPERIMENTAL.
+      // (1) The framework is offered resources in a new format.
+      //
+      //     The offered resources have the `Resource.reservations` field set
+      //     rather than `Resource.role` and `Resource.reservation`. In short,
+      //     an empty `reservations` field denotes unreserved resources, and
+      //     each `ReservationInfo` in the `reservations` field denotes a
+      //     reservation that refines the previous one.
+      //
+      //     See the 'Resource Format' section for more details.
+      //
+      // (2) The framework can create refined reservations.
+      //
+      //     A framework can refine an existing reservation via the
+      //     `Resource.reservations` field. For example, a reservation for role
+      //     `eng` can be refined to `eng/front_end`.
+      //
+      //     See `ReservationInfo.reservations` for more details.
+      //
+      // NOTE: Without this capability, a framework is not offered resources
+      // that have refined reservations. A resource is said to have refined
+      // reservations if it uses the `Resource.reservations` field, and
+      // `Resource.reservations_size() > 1`.
+      RESERVATION_REFINEMENT = 7; // EXPERIMENTAL.
+
+      // Indicates that the framework is prepared to receive offers
+      // for agents whose region is different from the master's
+      // region. Network links between hosts in different regions
+      // typically have higher latency and lower bandwidth than
+      // network links within a region, so frameworks should be
+      // careful to only place suitable workloads in remote regions.
+      // Frameworks that are not region-aware will never receive
+      // offers for remote agents; region-aware frameworks are assumed
+      // to implement their own logic to decide which workloads (if
+      // any) are suitable for placement on remote agents.
+      REGION_AWARE = 8;
     }
 
     // Enum fields should be optional, see: MESOS-4997.
@@ -469,6 +515,8 @@ message HealthCheck {
   // treat return codes between 200 and 399 as success; custom executors
   // may employ a different strategy, e.g. leveraging the `statuses` field.
   message HTTPCheckInfo {
+    optional NetworkInfo.Protocol protocol = 5 [default = IPv4];
+
     // Currently "http" and "https" are supported.
     optional string scheme = 3;
 
@@ -504,6 +552,8 @@ message HealthCheck {
   // Describes a TCP health check, i.e. based on establishing
   // a TCP connection to the specified port.
   message TCPCheckInfo {
+    optional NetworkInfo.Protocol protocol = 2 [default = IPv4];
+
     // Port expected to be open.
     required uint32 port = 1;
   }
@@ -531,7 +581,7 @@ message HealthCheck {
   optional uint32 consecutive_failures = 5 [default = 3];
 
   // Amount of time after the task is launched during which health check
-  // failures are ignored. Once the a check succeeds for the first time,
+  // failures are ignored. Once a check succeeds for the first time,
   // the grace period does not apply anymore. Note that it includes
   // `delay_seconds`, i.e., setting `grace_period_seconds` < `delay_seconds`
   // has no effect.
@@ -668,7 +718,7 @@ message ExecutorInfo {
     // 1) `command` must not be set when using a default executor.
     //
     // 2) Default executor only accepts a *single* `LAUNCH` or `LAUNCH_GROUP`
-    //    offer operation.
+    //    operation.
     //
     // 3) If `container` is set, `container.type` must be `MESOS`
     //    and `container.mesos.image` must not be set.
@@ -681,12 +731,12 @@ message ExecutorInfo {
   }
 
   // For backwards compatibility, if this field is not set when using `LAUNCH`
-  // offer operation, Mesos will infer the type by checking if `command` is
-  // set (`CUSTOM`) or unset (`DEFAULT`). `type` must be set when using
-  // `LAUNCH_GROUP` offer operation.
+  // operation, Mesos will infer the type by checking if `command` is set
+  // (`CUSTOM`) or unset (`DEFAULT`). `type` must be set when using
+  // `LAUNCH_GROUP` operation.
   //
-  // TODO(vinod): Add support for explicitly setting `type` to `DEFAULT `
-  // in `LAUNCH` offer operation.
+  // TODO(vinod): Add support for explicitly setting `type` to `DEFAULT` in
+  // `LAUNCH` operation.
   optional Type type = 15;
 
   required ExecutorID executor_id = 1;
@@ -706,7 +756,7 @@ message ExecutorInfo {
   // possible for different executor ids to be related semantically.
   //
   // NOTE: 'source' is exposed alongside the resource usage of the
-  // executor via JSON on the agent. This allows users to import usage
+  // executor via JSON on the slave. This allows users to import usage
   // information into a time series database for monitoring.
   //
   // This field is deprecated since 1.0. Please use labels for
@@ -731,12 +781,66 @@ message ExecutorInfo {
   optional DurationInfo shutdown_grace_period = 13;
 
   // Labels are free-form key value pairs which are exposed through
-  // master and agent endpoints. Labels will not be interpreted or
+  // master and slave endpoints. Labels will not be interpreted or
   // acted upon by Mesos itself. As opposed to the data field, labels
-  // will be kept in memory on master and agent processes. Therefore,
+  // will be kept in memory on master and slave processes. Therefore,
   // labels should be used to tag executors with lightweight metadata.
   // Labels should not contain duplicate key-value pairs.
   optional Labels labels = 14;
+}
+
+
+/**
+ * Describes a domain. A domain is a collection of hosts that have
+ * similar characteristics. Mesos currently only supports "fault
+ * domains", which identify groups of hosts with similar failure
+ * characteristics.
+ *
+ * Frameworks can generally assume that network links between hosts in
+ * the same fault domain have lower latency, higher bandwidth, and better
+ * availability than network links between hosts in different domains.
+ * Schedulers may prefer to place network-intensive workloads in the
+ * same domain, as this may improve performance. Conversely, a single
+ * failure that affects a host in a domain may be more likely to
+ * affect other hosts in the same domain; hence, schedulers may prefer
+ * to place workloads that require high availability in multiple
+ * domains. (For example, all the hosts in a single rack might lose
+ * power or network connectivity simultaneously.)
+ *
+ * There are two kinds of fault domains: regions and zones. Regions
+ * offer the highest degree of fault isolation, but network latency
+ * between regions is typically high (typically >50 ms). Zones offer a
+ * modest degree of fault isolation along with reasonably low network
+ * latency (typically <10 ms).
+ *
+ * The mapping from fault domains to physical infrastructure is up to
+ * the operator to configure. In cloud environments, regions and zones
+ * can be mapped to the "region" and "availability zone" concepts
+ * exposed by most cloud providers, respectively. In on-premise
+ * deployments, regions and zones can be mapped to data centers and
+ * racks, respectively.
+ *
+ * Both masters and agents can be configured with domains. Frameworks
+ * can compare the domains of two hosts to determine if the hosts are
+ * in the same zone, in different zones in the same region, or in
+ * different regions. Note that all masters in a given Mesos cluster
+ * must be in the same region.
+ */
+message DomainInfo {
+  message FaultDomain {
+    message RegionInfo {
+      required string name = 1;
+    }
+
+    message ZoneInfo {
+      required string name = 1;
+    }
+
+    required RegionInfo region = 1;
+    required ZoneInfo zone = 2;
+  }
+
+  optional FaultDomain fault_domain = 1;
 }
 
 
@@ -776,20 +880,54 @@ message MasterInfo {
   // and supersedes the use of `ip`, `port` and `hostname`.
   // Since Mesos 0.24.
   optional Address address = 7;
+
+  // The domain that this master belongs to. All masters in a Mesos
+  // cluster should belong to the same region.
+  optional DomainInfo domain = 8;
+
+  message Capability {
+    enum Type {
+      UNKNOWN = 0;
+
+      // The master can handle slaves whose state
+      // changes after re-registering.
+      AGENT_UPDATE = 1;
+    }
+    optional Type type = 1;
+  }
+
+  repeated Capability capabilities = 9;
 }
 
 
 /**
- * Describes an agent. Note that the 'id' field is only available
- * after an agent is registered with the master, and is made available
- * here to facilitate re-registration.
+ * Describes a slave. Note that the 'id' field is only available after
+ * a slave is registered with the master, and is made available here
+ * to facilitate re-registration.
  */
-message AgentInfo {
+message SlaveInfo {
   required string hostname = 1;
   optional int32 port = 8 [default = 5051];
+
+  // The configured resources at the agent. This does not include any
+  // dynamic reservations or persistent volumes that may currently
+  // exist at the agent.
   repeated Resource resources = 3;
+
   repeated Attribute attributes = 5;
-  optional AgentID id = 6;
+  optional SlaveID id = 6;
+
+  // The domain that this slave belongs to. If the slave's region
+  // differs from the master's region, it will not appear in resource
+  // offers to frameworks that have not enabled the REGION_AWARE
+  // capability.
+  optional DomainInfo domain = 10;
+
+  // Slave checkpointing is always enabled in recent Mesos versions;
+  // the value of this field is ignored.
+  // TODO(joerg84): Remove checkpoint field after deprecation cycle starting
+  // with 0.27 (MESOS-2317).
+  optional bool checkpoint = 7 [default = false];
 
   message Capability {
     enum Type {
@@ -801,15 +939,153 @@ message AgentInfo {
 
       // This expresses the ability for the agent to be able
       // to launch tasks of a 'multi-role' framework.
+      MULTI_ROLE = 1;
+
+      // This expresses the ability for the agent to be able to launch
+      // tasks, reserve resources, and create volumes using resources
+      // allocated to a 'hierarchical-role'.
+      // NOTE: This capability is required specifically for creating
+      // volumes because a hierchical role includes '/' (slashes) in them.
+      // Agents with this capability know to transform the '/' (slashes)
+      // into ' ' (spaces).
+      HIERARCHICAL_ROLE = 2;
+
+      // This capability has three effects for an agent.
       //
-      // NOTE: The implementation for supporting multiple
-      // roles is not complete, DO NOT USE THIS.
-      MULTI_ROLE = 1; // EXPERIMENTAL.
+      // (1) The format of the checkpointed resources, and
+      //     the resources reported to master.
+      //
+      //     These resources are reported in the "pre-reservation-refinement"
+      //     format if none of the resources have refined reservations. If any
+      //     of the resources have refined reservations, they are reported in
+      //     the "post-reservation-refinement" format. The purpose is to allow
+      //     downgrading of an agent as well as communication with a pre-1.4.0
+      //     master until the reservation refinement feature is actually used.
+      //
+      //     See the 'Resource Format' section for more details.
+      //
+      // (2) The format of the resources reported by the HTTP endpoints.
+      //
+      //     For resources reported by agent endpoints, the
+      //     "pre-reservation-refinement" format is "injected" if possible.
+      //     That is, resources without refined reservations will have the
+      //     `Resource.role` and `Resource.reservation` set, whereas
+      //     resources with refined reservations will not.
+      //
+      //     See the 'Resource Format' section for more details.
+      //
+      // (3) The ability for the agent to launch tasks, reserve resources, and
+      //     create volumes using resources that have refined reservations.
+      //
+      //     See `ReservationInfo.reservations` section for more details.
+      //
+      // NOTE: Resources are said to have refined reservations if it uses the
+      // `Resource.reservations` field, and `Resource.reservations_size() > 1`.
+      RESERVATION_REFINEMENT = 3;
+
+      // This expresses the ability for the agent to handle resource
+      // provider related operations. This includes the following:
+      //
+      // (1) The ability to report resources that are provided by some
+      //     local resource providers through the resource provider API.
+      //
+      // (2) The ability to provide operation feedback.
+      RESOURCE_PROVIDER = 4;
     }
 
     // Enum fields should be optional, see: MESOS-4997.
     optional Type type = 1;
   }
+}
+
+
+/**
+ * Describes the container configuration to run a CSI plugin component.
+ */
+message CSIPluginContainerInfo {
+  enum Service {
+    UNKNOWN = 0;
+    CONTROLLER_SERVICE = 1;
+    NODE_SERVICE = 2;
+  }
+
+  repeated Service services = 1;
+  optional CommandInfo command = 2;
+  repeated Resource resources = 3;
+  optional ContainerInfo container = 4;
+}
+
+
+/**
+ * Describes a CSI plugin.
+ */
+message CSIPluginInfo {
+  // The type of the CSI service. This uniquely identifies a CSI
+  // implementation. For instance:
+  //     org.apache.mesos.csi.test
+  //
+  // Please follow to Java package naming convention
+  // (https://en.wikipedia.org/wiki/Java_package#Package_naming_conventions)
+  // to avoid conflicts on type names.
+  required string type = 1;
+
+  // The name of the CSI service. There could be mutliple instances of a
+  // type of CSI service. The name field is used to distinguish these
+  // instances. It should be a legal Java identifier
+  // (https://docs.oracle.com/javase/tutorial/java/nutsandbolts/variables.html)
+  // to avoid conflicts on concatenation of type and name.
+  required string name = 2;
+
+  // A list of container configurations to run CSI plugin components.
+  // The controller service will be served by the first configuration
+  // that contains `CONTROLLER_SERVICE`, and the node service will be
+  // served by the first configuration that contains `NODE_SERVICE`.
+  repeated CSIPluginContainerInfo containers = 3;
+}
+
+
+/**
+ * Describes a resource provider. Note that the 'id' field is only available
+ * after a resource provider is registered with the master, and is made
+ * available here to facilitate re-registration.
+ */
+message ResourceProviderInfo {
+  optional ResourceProviderID id = 1;
+  repeated Attribute attributes = 2;
+
+  // The type of the resource provider. This uniquely identifies a
+  // resource provider implementation. For instance:
+  //     org.apache.mesos.rp.local.storage
+  //
+  // Please follow to Java package naming convention
+  // (https://en.wikipedia.org/wiki/Java_package#Package_naming_conventions)
+  // to avoid conflicts on type names.
+  required string type = 3;
+
+  // The name of the resource provider. There could be multiple
+  // instances of a type of resource provider. The name field is used
+  // to distinguish these instances. It should be a legal Java identifier
+  // (https://docs.oracle.com/javase/tutorial/java/nutsandbolts/variables.html)
+  // to avoid conflicts on concatenation of type and name.
+  required string name = 4;
+
+  // The stack of default reservations. If this field is not empty, it
+  // indicates that resources from this resource provider are reserved
+  // by default, except for the resources that have been reserved or
+  // unreserved through operations. The first `ReservationInfo`
+  // may have type `STATIC` or `DYNAMIC`, but the rest must have
+  // `DYNAMIC`. One can create a new reservation on top of an existing
+  // one by pushing a new `ReservationInfo` to the back. The last
+  // `ReservationInfo` in this stack is the "current" reservation. The
+  // new reservation's role must be a child of the current one.
+  repeated Resource.ReservationInfo default_reservations = 5; // EXPERIMENTAL.
+
+  // Storage resource provider related information.
+  message Storage {
+    required CSIPluginInfo plugin = 1;
+  }
+
+  optional Storage storage = 6; // EXPERIMENTAL.
 }
 
 
@@ -902,14 +1178,17 @@ message Resource {
   // The role that this resource is reserved for. If "*", this indicates
   // that the resource is unreserved. Otherwise, the resource will only
   // be offered to frameworks that belong to this role.
-  optional string role = 6 [default = "*"];
+  //
+  // NOTE: Frameworks must not set this field if `reservations` is set.
+  //       See the 'Resource Format' section for more details.
+  //
+  // TODO(mpark): Deprecate once `reservations` is no longer experimental.
+  optional string role = 6 [default = "*", deprecated=true];
 
   // This was initially introduced to support MULTI_ROLE capable
   // frameworks. Frameworks that are not MULTI_ROLE capable can
   // continue to assume that the offered resources are allocated
   // to their role.
-  //
-  // NOTE: Implementation of this is in-progress, DO NOT USE!
   message AllocationInfo {
     // If set, this resource is allocated to a role. Note that in the
     // future, this may be unset and the scheduler may be responsible
@@ -922,13 +1201,137 @@ message Resource {
 
   optional AllocationInfo allocation_info = 11;
 
+  // Resource Format:
+  //
+  // Frameworks receive resource offers in one of two formats, depending on
+  // whether the RESERVATION_REFINEMENT capability is enabled.
+  //
+  // __WITHOUT__ the RESERVATION_REFINEMENT capability, the framework is offered
+  // resources in the "pre-reservation-refinement" format. In this format, the
+  // `Resource.role` and `Resource.reservation` fields are used in conjunction
+  // to describe the reservation state of a `Resource` message.
+  //
+  // The following is an overview of the possible reservation states:
+  //
+  // +------------+------------------------------------------------------------+
+  // | unreserved | {                                                          |
+  // |            |   role: "*",                                               |
+  // |            |   reservation: <not set>,                                  |
+  // |            |   reservations: <unused>                                   |
+  // |            | }                                                          |
+  // +------------+------------------------------------------------------------+
+  // | static     | {                                                          |
+  // |            |   role: "eng",                                             |
+  // |            |   reservation: <not set>,                                  |
+  // |            |   reservations: <unused>                                   |
+  // |            | }                                                          |
+  // +------------+------------------------------------------------------------+
+  // | dynamic    | {                                                          |
+  // |            |   role: "eng",                                             |
+  // |            |   reservation: {                                           |
+  // |            |     type: <unused>,                                        |
+  // |            |     role: <unused>,                                        |
+  // |            |     principal: <optional>,                                 |
+  // |            |     labels: <optional>                                     |
+  // |            |   },                                                       |
+  // |            |   reservations: <unused>                                   |
+  // |            | }                                                          |
+  // +------------+------------------------------------------------------------+
+  //
+  // __WITH__ the RESERVATION_REFINEMENT capability, the framework is offered
+  // resources in the "post-reservation-refinement" format. In this format, the
+  // reservation state of a `Resource` message is expressed solely in
+  // `Resource.reservations` field.
+  //
+  // The following is an overview of the possible reservation states:
+  //
+  // +------------+------------------------------------------------------------+
+  // | unreserved | {                                                          |
+  // |            |   role: <unused>,                                          |
+  // |            |   reservation: <unused>,                                   |
+  // |            |   reservations: []                                         |
+  // |            | }                                                          |
+  // +------------+------------------------------------------------------------+
+  // | static     | {                                                          |
+  // |            |   role: <unused>,                                          |
+  // |            |   reservation: <unused>,                                   |
+  // |            |   reservations: [                                          |
+  // |            |     {                                                      |
+  // |            |       type: STATIC,                                        |
+  // |            |       role: "eng",                                         |
+  // |            |       principal: <optional>,                               |
+  // |            |       labels: <optional>                                   |
+  // |            |     }                                                      |
+  // |            |   ]                                                        |
+  // |            | }                                                          |
+  // +------------+------------------------------------------------------------+
+  // | dynamic    | {                                                          |
+  // |            |   role: <unused>,                                          |
+  // |            |   reservation: <unused>,                                   |
+  // |            |   reservations: [                                          |
+  // |            |     {                                                      |
+  // |            |       type: DYNAMIC,                                       |
+  // |            |       role: "eng",                                         |
+  // |            |       principal: <optional>,                               |
+  // |            |       labels: <optional>                                   |
+  // |            |     }                                                      |
+  // |            |   ]                                                        |
+  // |            | }                                                          |
+  // +------------+------------------------------------------------------------+
+  //
+  // We can also __refine__ reservations with this capability like so:
+  //
+  // +------------+------------------------------------------------------------+
+  // | refined    | {                                                          |
+  // |            |   role: <unused>,                                          |
+  // |            |   reservation: <unused>,                                   |
+  // |            |   reservations: [                                          |
+  // |            |     {                                                      |
+  // |            |       type: STATIC or DYNAMIC,                             |
+  // |            |       role: "eng",                                         |
+  // |            |       principal: <optional>,                               |
+  // |            |       labels: <optional>                                   |
+  // |            |     },                                                     |
+  // |            |     {                                                      |
+  // |            |       type: DYNAMIC,                                       |
+  // |            |       role: "eng/front_end",                               |
+  // |            |       principal: <optional>,                               |
+  // |            |       labels: <optional>                                   |
+  // |            |     }                                                      |
+  // |            |   ]                                                        |
+  // |            | }                                                          |
+  // +------------+------------------------------------------------------------+
+  //
+  // NOTE: Each `ReservationInfo` in the `reservations` field denotes
+  //       a reservation that refines the previous `ReservationInfo`.
+
   message ReservationInfo {
-    // Describes a dynamic reservation. A dynamic reservation is
-    // acquired by an operator via the '/reserve' HTTP endpoint or by
-    // a framework via the offer cycle by sending back an
+    // Describes a reservation. A static reservation is set by the operator on
+    // the command-line and they are immutable without agent restart. A dynamic
+    // reservation is made by an operator via the '/reserve' HTTP endpoint
+    // or by a framework via the offer cycle by sending back an
     // 'Offer::Operation::Reserve' message.
-    // NOTE: We currently do not allow frameworks with role "*" to
-    // make dynamic reservations.
+    //
+    // NOTE: We currently do not allow frameworks with role "*" to make dynamic
+    // reservations.
+
+    enum Type {
+      UNKNOWN = 0;
+      STATIC = 1;
+      DYNAMIC = 2;
+    }
+
+    // The type of this reservation.
+    //
+    // NOTE: This field must not be set for `Resource.reservation`.
+    //       See the 'Resource Format' section for more details.
+    optional Type type = 4;
+
+    // The role to which this reservation is made for.
+    //
+    // NOTE: This field must not be set for `Resource.reservation`.
+    //       See the 'Resource Format' section for more details.
+    optional string role = 3;
 
     // Indicates the principal, if any, of the framework or operator
     // that reserved this resource. If reserved by a framework, the
@@ -942,7 +1345,7 @@ message Resource {
     // associate arbitrary metadata with a reserved resource.  For
     // example, frameworks can use labels to identify the intended
     // purpose for a portion of the resources the framework has
-    // reserved at a given agent. Labels should not contain duplicate
+    // reserved at a given slave. Labels should not contain duplicate
     // key-value pairs.
     optional Labels labels = 2;
   }
@@ -950,21 +1353,40 @@ message Resource {
   // If this is set, this resource was dynamically reserved by an
   // operator or a framework. Otherwise, this resource is either unreserved
   // or statically reserved by an operator via the --resources flag.
+  //
+  // NOTE: Frameworks must not set this field if `reservations` is set.
+  //       See the 'Resource Format' section for more details.
+  //
+  // TODO(mpark): Deprecate once `reservations` is no longer experimental.
   optional ReservationInfo reservation = 8;
+
+  // The stack of reservations. If this field is empty, it indicates that this
+  // resource is unreserved. Otherwise, the resource is reserved. The first
+  // `ReservationInfo` may have type `STATIC` or `DYNAMIC`, but the rest must
+  // have `DYNAMIC`. One can create a new reservation on top of an existing
+  // one by pushing a new `ReservationInfo` to the back. The last
+  // `ReservationInfo` in this stack is the "current" reservation. The new
+  // reservation's role must be a child of the current reservation's role.
+  //
+  // NOTE: Frameworks must not set this field if `reservation` is set.
+  //       See the 'Resource Format' section for more details.
+  //
+  // TODO(mpark): Deprecate `role` and `reservation` once this is stable.
+  repeated ReservationInfo reservations = 13;  // EXPERIMENTAL.
 
   message DiskInfo {
     // Describes a persistent disk volume.
     //
     // A persistent disk volume will not be automatically garbage
-    // collected if the task/executor/agent terminates, but will be
+    // collected if the task/executor/slave terminates, but will be
     // re-offered to the framework(s) belonging to the 'role'.
     //
     // NOTE: Currently, we do not allow persistent disk volumes
     // without a reservation (i.e., 'role' cannot be '*').
     message Persistence {
       // A unique ID for the persistent disk volume. This ID must be
-      // unique per role on each agent. Although it is possible to use
-      // the same ID on different agents in the cluster and to reuse
+      // unique per role on each slave. Although it is possible to use
+      // the same ID on different slaves in the cluster and to reuse
       // IDs after a volume with that ID has been destroyed, both
       // practices are discouraged.
       required string id = 1;
@@ -993,18 +1415,20 @@ message Resource {
     optional Volume volume = 2;
 
     // Describes where a disk originates from.
-    // TODO(jmlvanre): Add support for BLOCK devices.
     message Source {
       enum Type {
         UNKNOWN = 0;
         PATH = 1;
         MOUNT = 2;
+        BLOCK = 3;
+        RAW = 4;
       }
 
       // A folder that can be located on a separate disk device. This
       // can be shared and carved up as necessary between frameworks.
       message Path {
-        // Path to the folder (e.g., /mnt/raid/disk0).
+        // Path to the folder (e.g., /mnt/raid/disk0). If the path is a
+        // relative path, it is relative to the agent work directory.
         optional string root = 1;
       }
 
@@ -1012,13 +1436,32 @@ message Resource {
       // can only be used exclusively: a framework cannot accept a
       // partial amount of this disk.
       message Mount {
-        // Path to mount point (e.g., /mnt/raid/disk0).
+        // Path to mount point (e.g., /mnt/raid/disk0). If the path is a
+        // relative path, it is relative to the agent work directory.
         optional string root = 1;
       }
 
       required Type type = 1;
       optional Path path = 2;
       optional Mount mount = 3;
+
+      // An identifier for this source. This field maps onto CSI
+      // volume IDs and is not expected to be set by frameworks.
+      optional string id = 4; // EXPERIMENTAL.
+
+      // Additional metadata for this source. This field maps onto CSI
+      // volume metadata and is not expected to be set by frameworks.
+      optional Labels metadata = 5; // EXPERIMENTAL.
+
+      // This field serves as an indirection to a set of storage
+      // vendor specific disk parameters which describe the properties
+      // of the disk. The operator will setup mappings between a
+      // profile name to a set of vendor specific disk parameters. And
+      // the framework will do disk selection based on profile names,
+      // instead of vendor specific disk parameters.
+      //
+      // Also see the DiskProfile module.
+      optional string profile = 6; // EXPERIMENTAL.
     }
 
     optional Source source = 3;
@@ -1087,15 +1530,15 @@ message TrafficControlStatistics {
 
 
 message IpStatistics {
-  optional int64 Forwarding =  1;
-  optional int64 DefaultTTL =  2;
-  optional int64 InReceives =  3;
-  optional int64 InHdrErrors =  4;
-  optional int64 InAddrErrors =  5;
-  optional int64 ForwDatagrams =  6;
+  optional int64 Forwarding = 1;
+  optional int64 DefaultTTL = 2;
+  optional int64 InReceives = 3;
+  optional int64 InHdrErrors = 4;
+  optional int64 InAddrErrors = 5;
+  optional int64 ForwDatagrams = 6;
   optional int64 InUnknownProtos = 7;
-  optional int64 InDiscards =  8;
-  optional int64 InDelivers  = 9;
+  optional int64 InDiscards = 8;
+  optional int64 InDelivers = 9;
   optional int64 OutRequests = 10;
   optional int64 OutDiscards = 11;
   optional int64 OutNoRoutes = 12;
@@ -1111,11 +1554,11 @@ message IpStatistics {
 
 message IcmpStatistics {
   optional int64 InMsgs = 1;
-  optional int64 InErrors =  2;
+  optional int64 InErrors = 2;
   optional int64 InCsumErrors = 3;
-  optional int64 InDestUnreachs =  4;
+  optional int64 InDestUnreachs = 4;
   optional int64 InTimeExcds = 5;
-  optional int64 InParmProbs =  6;
+  optional int64 InParmProbs = 6;
   optional int64 InSrcQuenchs = 7;
   optional int64 InRedirects = 8;
   optional int64 InEchos = 9;
@@ -1250,7 +1693,7 @@ message ResourceStatistics {
 
   // Number of occurrences of different levels of memory pressure
   // events reported by memory cgroup. Pressure listening (re)starts
-  // with these values set to 0 when agent (re)starts. See
+  // with these values set to 0 when slave (re)starts. See
   // https://www.kernel.org/doc/Documentation/cgroups/memory.txt for
   // more details.
   optional uint64 mem_low_pressure_counter = 32;
@@ -1263,6 +1706,9 @@ message ResourceStatistics {
 
   // Per disk (resource) statistics.
   repeated DiskStatistics disk_statistics = 43;
+
+  // Cgroups blkio statistics.
+  optional CgroupInfo.Blkio.Statistics blkio_statistics = 44;
 
   // Perf statistics.
   optional PerfStatistics perf = 13;
@@ -1328,7 +1774,7 @@ message ResourceUsage {
 
   repeated Executor executors = 1;
 
-  // Agent's total resources including checkpointed dynamic
+  // Slave's total resources including checkpointed dynamic
   // reservations and persistent volumes.
   repeated Resource total = 2;
 }
@@ -1411,28 +1857,31 @@ message PerfStatistics {
 
 /**
  * Describes a request for resources that can be used by a framework
- * to proactively influence the allocator.  If 'agent_id' is provided
+ * to proactively influence the allocator.  If 'slave_id' is provided
  * then this request is assumed to only apply to resources on that
- * agent.
+ * slave.
  */
 message Request {
-  optional AgentID agent_id = 1;
+  optional SlaveID slave_id = 1;
   repeated Resource resources = 2;
 }
 
 
 /**
- * Describes some resources available on an agent. An offer only
- * contains resources from a single agent.
+ * Describes some resources available on a slave. An offer only
+ * contains resources from a single slave.
  */
 message Offer {
   required OfferID id = 1;
   required FrameworkID framework_id = 2;
-  required AgentID agent_id = 3;
+  required SlaveID slave_id = 3;
   required string hostname = 4;
 
-  // URL for reaching the agent running on the host.
+  // URL for reaching the slave running on the host.
   optional URL url = 8;
+
+  // The domain of the slave.
+  optional DomainInfo domain = 11;
 
   repeated Resource resources = 5;
   repeated Attribute attributes = 7;
@@ -1454,8 +1903,6 @@ message Offer {
   // roles managed by the scheduler. (Therefore, each
   // `Offer.resources[i].allocation_info` will match the
   // top level `Offer.allocation_info`).
-  //
-  // NOTE: Implementation of this is in-progress, DO NOT USE!
   optional Resource.AllocationInfo allocation_info = 10;
 
   // Defines an operation that can be performed against offers.
@@ -1468,6 +1915,10 @@ message Offer {
       UNRESERVE = 3;
       CREATE = 4;
       DESTROY = 5;
+      CREATE_VOLUME = 7;
+      DESTROY_VOLUME = 8;
+      CREATE_BLOCK = 9;
+      DESTROY_BLOCK = 10;
     }
 
     // TODO(vinod): Deprecate this in favor of `LaunchGroup` below.
@@ -1504,13 +1955,40 @@ message Offer {
       repeated Resource volumes = 1;
     }
 
+    message CreateVolume {
+      required Resource source = 1;
+      required Resource.DiskInfo.Source.Type target_type = 2;
+    }
+
+    message DestroyVolume {
+      required Resource volume = 1;
+    }
+
+    message CreateBlock {
+      required Resource source = 1;
+    }
+
+    message DestroyBlock {
+      required Resource block = 1;
+    }
+
     optional Type type = 1;
+
+    // NOTE: The `id` field will allow frameworks to indicate that they wish to
+    // receive feedback about an operation. Since this feature is not yet
+    // implemented, the `id` field should NOT be set at present. See MESOS-8054.
+    optional OperationID id = 12; // Experimental.
+
     optional Launch launch = 2;
     optional LaunchGroup launch_group = 7;
     optional Reserve reserve = 3;
     optional Unreserve unreserve = 4;
     optional Create create = 5;
     optional Destroy destroy = 6;
+    optional CreateVolume create_volume = 8;
+    optional DestroyVolume destroy_volume = 9;
+    optional CreateBlock create_block = 10;
+    optional DestroyBlock destroy_block = 11;
   }
 }
 
@@ -1523,23 +2001,23 @@ message InverseOffer {
   // re-use of some of the OfferID-only messages.
   required OfferID id = 1;
 
-  // URL for reaching the agent running on the host.  This enables some
+  // URL for reaching the slave running on the host.  This enables some
   // optimizations as described in MESOS-3012, such as allowing the
-  // scheduler driver to bypass the master and talk directly with an agent.
+  // scheduler driver to bypass the master and talk directly with a slave.
   optional URL url = 2;
 
   // The framework that should release its resources.
-  // If no specifics are provided (i.e. which agent), all the framework's
+  // If no specifics are provided (i.e. which slave), all the framework's
   // resources are requested back.
   required FrameworkID framework_id = 3;
 
-  // Specified if the resources need to be released from a particular agent.
-  // All the framework's resources on this agent are requested back,
+  // Specified if the resources need to be released from a particular slave.
+  // All the framework's resources on this slave are requested back,
   // unless further qualified by the `resources` field.
-  optional AgentID agent_id = 4;
+  optional SlaveID slave_id = 4;
 
   // This InverseOffer represents a planned unavailability event in the
-  // specified interval.  Any tasks running on the given framework or agent
+  // specified interval.  Any tasks running on the given framework or slave
   // may be killed when the interval arrives.  Therefore, frameworks should
   // aim to gracefully terminate tasks prior to the arrival of the interval.
   //
@@ -1555,7 +2033,7 @@ message InverseOffer {
   required Unavailability unavailability = 5;
 
   // A list of resources being requested back from the framework,
-  // on the agent identified by `agent_id`.  If no resources are specified
+  // on the slave identified by `slave_id`.  If no resources are specified
   // then all resources are being requested back.  For the purpose of
   // maintenance, this field is always empty (maintenance always requests
   // all resources back).
@@ -1576,7 +2054,7 @@ message InverseOffer {
 message TaskInfo {
   required string name = 1;
   required TaskID task_id = 2;
-  required AgentID agent_id = 3;
+  required SlaveID slave_id = 3;
   repeated Resource resources = 4;
   optional ExecutorInfo executor = 5;
   optional CommandInfo command = 7;
@@ -1609,9 +2087,9 @@ message TaskInfo {
   optional bytes data = 6;
 
   // Labels are free-form key value pairs which are exposed through
-  // master and agent endpoints. Labels will not be interpreted or
+  // master and slave endpoints. Labels will not be interpreted or
   // acted upon by Mesos itself. As opposed to the data field, labels
-  // will be kept in memory on master and agent processes. Therefore,
+  // will be kept in memory on master and slave processes. Therefore,
   // labels should be used to tag tasks with light-weight meta-data.
   // Labels should not contain duplicate key-value pairs.
   optional Labels labels = 10;
@@ -1641,7 +2119,7 @@ message TaskGroupInfo {
 
 // TODO(bmahler): Add executor_uuid here, and send it to the master. This will
 // allow us to expose executor work directories for tasks in the webui when
-// looking from the master level. Currently only the agent knows which run the
+// looking from the master level. Currently only the slave knows which run the
 // task belongs to.
 /**
  * Describes a task, similar to `TaskInfo`.
@@ -1661,7 +2139,7 @@ message Task {
   required TaskID task_id = 2;
   required FrameworkID framework_id = 3;
   optional ExecutorID executor_id = 4;
-  required AgentID agent_id = 5;
+  required SlaveID slave_id = 5;
   required TaskState state = 6; // Latest state of the task.
   repeated Resource resources = 7;
   repeated TaskStatus statuses = 8;
@@ -1704,16 +2182,22 @@ enum TaskState {
   // the TASK_KILLING_STATE capability.
   TASK_KILLING = 8;  // The task is being killed by the executor.
 
-  TASK_FINISHED = 2; // TERMINAL: The task finished successfully.
+  // The task finished successfully on its own without external interference.
+  TASK_FINISHED = 2; // TERMINAL.
+
   TASK_FAILED = 3;   // TERMINAL: The task failed to finish successfully.
   TASK_KILLED = 4;   // TERMINAL: The task was killed by the executor.
   TASK_ERROR = 7;    // TERMINAL: The task description contains an error.
 
   // In Mesos 1.3, this will only be sent when the framework does NOT
   // opt-in to the PARTITION_AWARE capability.
-  TASK_LOST = 5;     // TERMINAL: The task failed but can be rescheduled.
+  //
+  // NOTE: This state is not always terminal. For example, tasks might
+  // transition from TASK_LOST to TASK_RUNNING or other states when a
+  // partitioned agent re-registers.
+  TASK_LOST = 5;     // The task failed but can be rescheduled.
 
-  // The following task statuses are only sent when the framework
+  // The following task states are only sent when the framework
   // opts-in to the PARTITION_AWARE capability.
 
   // The task failed to launch because of a transient error. The
@@ -1749,6 +2233,89 @@ enum TaskState {
   // its metadata about the task. The task may or may not still be
   // running.
   TASK_UNKNOWN = 13;
+}
+
+
+/**
+ * Describes a resource limitation that caused a task failure.
+ */
+message TaskResourceLimitation {
+  // This field contains the resource whose limits were violated.
+  //
+  // NOTE: 'Resources' is used here because the resource may span
+  // multiple roles (e.g. `"mem(*):1;mem(role):2"`).
+  repeated Resource resources = 1;
+}
+
+
+/**
+ * Describes a UUID.
+ */
+message UUID {
+  required bytes value = 1;
+}
+
+
+/**
+ * Describes an operation, similar to `Offer.Operation`, with
+ * some additional information.
+ */
+message Operation {
+  optional FrameworkID framework_id = 1;
+  optional SlaveID slave_id = 2;
+  required Offer.Operation info = 3;
+  required OperationStatus latest_status = 4;
+
+  // All the statuses known to this operation. Some of the statuses in this
+  // list might not have been acknowledged yet. The statuses are ordered.
+  repeated OperationStatus statuses = 5;
+
+  // This is the internal UUID for the operation, which is kept independently
+  // from the framework-specified operation ID, which is optional.
+  required UUID uuid = 6;
+}
+
+
+/**
+ * Describes possible operation states.
+ */
+enum OperationState {
+  // Default value if the enum is not set. See MESOS-4997.
+  OPERATION_UNSUPPORTED = 0;
+
+  // Initial state.
+  OPERATION_PENDING = 1;
+
+  // TERMINAL: The operation was successfully applied.
+  OPERATION_FINISHED = 2;
+
+  // TERMINAL: The operation failed to apply.
+  OPERATION_FAILED = 3;
+
+  // TERMINAL: The operation description contains an error.
+  OPERATION_ERROR = 4;
+
+  // TERMINAL: The operation was dropped due to a transient error.
+  OPERATION_DROPPED = 5;
+}
+
+
+/**
+ * Describes the current status of an operation.
+ */
+message OperationStatus {
+  optional OperationID operation_id = 1;
+  required OperationState state = 2;
+  optional string message = 3;
+
+  // Converted resources after applying the operation. This only
+  // applies if the `state` is `OPERATION_FINISHED`.
+  repeated Resource converted_resources = 4;
+
+  // Statuses that are delivered reliably to the scheduler will
+  // include a `uuid`. The status is considered delivered once
+  // it is acknowledged by the scheduler.
+  optional UUID uuid = 5;
 }
 
 
@@ -1812,14 +2379,12 @@ message TaskStatus {
   // Describes the source of the task status update.
   enum Source {
     SOURCE_MASTER = 0;
-    SOURCE_AGENT = 1;
+    SOURCE_SLAVE = 1;
     SOURCE_EXECUTOR = 2;
   }
 
   // Detailed reason for the task status update.
-  //
-  // TODO(bmahler): Differentiate between agent removal reasons
-  // (e.g. unhealthy vs. unregistered for maintenance).
+  // Refer to docs/task-state-reasons.md for additional explanation.
   enum Reason {
     // TODO(jieyu): The default value when a caller doesn't check for
     // presence is 0 and so ideally the 0 reason is not a valid one.
@@ -1835,7 +2400,7 @@ message TaskStatus {
     REASON_EXECUTOR_REGISTRATION_TIMEOUT = 23;
     REASON_EXECUTOR_REREGISTRATION_TIMEOUT = 24;
     REASON_EXECUTOR_TERMINATED = 1;
-    REASON_EXECUTOR_UNREGISTERED = 2;
+    REASON_EXECUTOR_UNREGISTERED = 2; // No longer used.
     REASON_FRAMEWORK_REMOVED = 3;
     REASON_GC_ERROR = 4;
     REASON_INVALID_FRAMEWORKID = 5;
@@ -1844,11 +2409,15 @@ message TaskStatus {
     REASON_MASTER_DISCONNECTED = 7;
     REASON_RECONCILIATION = 9;
     REASON_RESOURCES_UNKNOWN = 18;
-    REASON_AGENT_DISCONNECTED = 10;
-    REASON_AGENT_REMOVED = 11;
-    REASON_AGENT_RESTARTED = 12;
-    REASON_AGENT_UNKNOWN = 13;
+    REASON_SLAVE_DISCONNECTED = 10;
+    REASON_SLAVE_REMOVED = 11;
+    REASON_SLAVE_REMOVED_BY_OPERATOR = 31;
+    REASON_SLAVE_REREGISTERED = 32;
+    REASON_SLAVE_RESTARTED = 12;
+    REASON_SLAVE_UNKNOWN = 13;
+    REASON_TASK_KILLED_DURING_LAUNCH = 30;
     REASON_TASK_CHECK_STATUS_UPDATED = 28;
+    REASON_TASK_HEALTH_CHECK_STATUS_UPDATED = 29;
     REASON_TASK_GROUP_INVALID = 25;
     REASON_TASK_GROUP_UNAUTHORIZED = 26;
     REASON_TASK_INVALID = 14;
@@ -1862,8 +2431,8 @@ message TaskStatus {
   optional Source source = 9;
   optional Reason reason = 10;
   optional bytes data = 3;
-  optional AgentID agent_id = 5;
-  optional ExecutorID executor_id = 7; // TODO(benh): Use in master/agent.
+  optional SlaveID slave_id = 5;
+  optional ExecutorID executor_id = 7; // TODO(benh): Use in master/slave.
   optional double timestamp = 6;
 
   // Statuses that are delivered reliably to the scheduler will
@@ -1895,11 +2464,11 @@ message TaskStatus {
   optional CheckStatusInfo check_status = 15;
 
   // Labels are free-form key value pairs which are exposed through
-  // master and agent endpoints. Labels will not be interpreted or
+  // master and slave endpoints. Labels will not be interpreted or
   // acted upon by Mesos itself. As opposed to the data field, labels
-  // will be kept in memory on master and agent processes. Therefore,
+  // will be kept in memory on master and slave processes. Therefore,
   // labels should be used to tag TaskStatus message with light-weight
-  // meta-data.  Labels should not contain duplicate key-value pairs.
+  // meta-data. Labels should not contain duplicate key-value pairs.
   optional Labels labels = 12;
 
   // Container related information that is resolved dynamically such as
@@ -1911,6 +2480,10 @@ message TaskStatus {
   // status updates for tasks running on agents that are unreachable
   // (e.g., partitioned away from the master).
   optional TimeInfo unreachable_time = 14;
+
+  // If the reason field indicates a container resource limitation,
+  // this field optionally contains additional information.
+  optional TaskResourceLimitation limitation = 16;
 }
 
 
@@ -1925,6 +2498,11 @@ message Filters {
   // SchedulerDriver::launchTasks. You MUST pass Filters with this
   // field set to change this behavior (i.e., get another offer which
   // includes unused resources sooner or later than the default).
+  //
+  // If this field is set to a number of seconds greater than 31536000
+  // (365 days), then the resources will be considered refused for 365
+  // days. If it is set to a negative number, then the default value
+  // will be used.
   optional double refuse_seconds = 1 [default = 5.0];
 }
 
@@ -2131,16 +2709,14 @@ message Image {
     // NOTE: This is not encrypted, therefore framework and operators
     // should enable SSL when passing this information.
     //
-    // This is field is never used in Mesos before and is deprecated
-    // since Mesos 1.3. Please use the `Secret::Value` field `config`
-    // below (see MESOS-7088 for details).
+    // This field has never been used in Mesos before and is
+    // deprecated since Mesos 1.3. Please use `config` below
+    // (see MESOS-7088 for details).
     optional Credential credential = 2 [deprecated = true]; // Since 1.3.
 
-    // The UTF-8 character encoded byte data, which is expected as
-    // a docker config file in JSON format. This field is used for
-    // supporting docker private registry credential per container.
-    // Users can specify different docker config files for pulling
-    // their private images from different registries.
+    // Docker config containing credentails to authenticate with
+    // docker registry. The secret is expected to be a docker
+    // config file in JSON format with UTF-8 character encoding.
     optional Secret config = 3;
   }
 
@@ -2155,6 +2731,31 @@ message Image {
   // the docker/appc image from the registry even if the image is
   // already downloaded on the agent.
   optional bool cached = 4 [default = true];
+}
+
+
+/**
+ * Describes how the mount will be propagated for a volume. See the
+ * following doc for more details about mount propagation:
+ * https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
+ */
+message MountPropagation {
+  enum Mode {
+    UNKNOWN = 0;
+
+    // The volume in a container will receive new mounts from the host
+    // or other containers, but filesystems mounted inside the
+    // container won't be propagated to the host or other containers.
+    // This is currently the default behavior for all volumes.
+    HOST_TO_CONTAINER = 1;
+
+    // The volume in a container will receive new mounts from the host
+    // or other containers, and its own mounts will be propagated from
+    // the container to the host or other containers.
+    BIDIRECTIONAL = 2;
+  }
+
+  optional Mode mode = 1;
 }
 
 
@@ -2197,8 +2798,9 @@ message Volume {
       // in a backwards-compatible way. See: MESOS-4997.
       UNKNOWN = 0;
 
-      // TODO(gyliu513): Add HOST_PATH and IMAGE as volume source type.
+      // TODO(gyliu513): Add IMAGE as volume source type.
       DOCKER_VOLUME = 1;
+      HOST_PATH = 4;
       SANDBOX_PATH = 2;
       SECRET = 3;
     }
@@ -2212,6 +2814,12 @@ message Volume {
 
       // Volume driver specific options.
       optional Parameters driver_options = 3;
+    }
+
+    // Absolute path pointing to a directory or file on the host.
+    message HostPath {
+      required string path = 1;
+      optional MountPropagation mount_propagation = 2;
     }
 
     // Describe a path from a container's sandbox. The container can
@@ -2242,6 +2850,7 @@ message Volume {
     // The source of the volume created by docker volume driver.
     optional DockerVolume docker_volume = 2;
 
+    optional HostPath host_path = 5;
     optional SandboxPath sandbox_path = 3;
 
     // The volume/secret isolator uses the secret-fetcher module (third-party or
@@ -2291,7 +2900,7 @@ message NetworkInfo {
     // request the network isolator on the Agent to assign an IP address to the
     // container being launched. If a specific IP address is specified in
     // ip_address, this field should not be set.
-    optional Protocol protocol = 1;
+    optional Protocol protocol = 1 [default = IPv4];
 
     // Statically assigned IP provided by the Framework. This IP will be
     // assigned to the container by the network isolator module on the Agent.
@@ -2400,8 +3009,24 @@ message CapabilityInfo {
  * E.g, capabilities, limits etc.
  */
 message LinuxInfo {
-  // Represents the capability whitelist.
-  optional CapabilityInfo capability_info = 1;
+  // Since 1.4.0, deprecated in favor of `effective_capabilities`.
+  optional CapabilityInfo capability_info = 1 [deprecated = true];
+
+  // The set of capabilities that are allowed but not initially
+  // granted to tasks.
+  optional CapabilityInfo bounding_capabilities = 2;
+
+  // Represents the set of capabilities that the task will
+  // be executed with.
+  optional CapabilityInfo effective_capabilities = 3;
+
+  // If set as 'true', the container shares the pid namespace with
+  // its parent. If the container is a top level container, it will
+  // share the pid namespace with the agent. If the container is a
+  // nested container, it will share the pid namespace with its
+  // parent container. This field will be ignored if 'namespaces/pid'
+  // isolator is not enabled.
+  optional bool share_pid_namespace = 4;
 }
 
 
@@ -2511,7 +3136,7 @@ message ContainerInfo {
 
     // With this flag set to true, the docker containerizer will
     // pull the docker image from the registry even if the image
-    // is already downloaded on the agent.
+    // is already downloaded on the slave.
     optional bool force_pull_image = 6;
 
     // The name of volume driver plugin.
@@ -2569,6 +3194,71 @@ message ContainerStatus {
  * Linux control group (cgroup) information.
  */
 message CgroupInfo {
+  // Configuration of a blkio cgroup subsystem.
+  message Blkio {
+    enum Operation {
+      UNKNOWN = 0;
+      TOTAL = 1;
+      READ = 2;
+      WRITE = 3;
+      SYNC = 4;
+      ASYNC = 5;
+    }
+
+    // Describes a stat value without the device descriptor part.
+    message Value {
+      optional Operation op = 1; // Required.
+      optional uint64 value = 2; // Required.
+    }
+
+    message CFQ {
+      message Statistics {
+        // Stats are grouped by block devices. If `device` is not
+        // set, it represents `Total`.
+        optional Device.Number device = 1;
+        // blkio.sectors
+        optional uint64 sectors = 2;
+        // blkio.time
+        optional uint64 time = 3;
+        // blkio.io_serviced
+        repeated Value io_serviced = 4;
+        // blkio.io_service_bytes
+        repeated Value io_service_bytes = 5;
+        // blkio.io_service_time
+        repeated Value io_service_time = 6;
+        // blkio.io_wait_time
+        repeated Value io_wait_time = 7;
+        // blkio.io_merged
+        repeated Value io_merged = 8;
+        // blkio.io_queued
+        repeated Value io_queued = 9;
+      }
+
+      // TODO(jasonlai): Add fields for blkio weight and weight
+      // device.
+    }
+
+    message Throttling {
+      message Statistics {
+        // Stats are grouped by block devices. If `device` is not
+        // set, it represents `Total`.
+        optional Device.Number device = 1;
+        // blkio.throttle.io_serviced
+        repeated Value io_serviced = 2;
+        // blkio.throttle.io_service_bytes
+        repeated Value io_service_bytes = 3;
+      }
+
+      // TODO(jasonlai): Add fields for blkio.throttle.*_device.
+    }
+
+    message Statistics {
+      repeated CFQ.Statistics cfq = 1;
+      repeated CFQ.Statistics cfq_recursive = 2;
+      repeated Throttling.Statistics throttling = 3;
+    }
+  }
+
   // Configuration of a net_cls cgroup subsystem.
   message NetCls {
     // The 32-bit classid consists of two parts, a 16 bit major handle
@@ -2752,7 +3442,13 @@ message FileInfo {
  * Describes information abount a device.
  */
 message Device {
-  required string path = 1;
+  message Number {
+    required uint64 major_number = 1;
+    required uint64 minor_number = 2;
+  }
+
+  optional string path = 1;
+  optional Number number = 2;
 }
 
 

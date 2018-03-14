@@ -2,20 +2,23 @@
 // source: lib/operator/resource_provider/resource_provider.proto
 
 /*
-Package resource_provider is a generated protocol buffer package.
+	Package resource_provider is a generated protocol buffer package.
 
-It is generated from these files:
-	lib/operator/resource_provider/resource_provider.proto
+	It is generated from these files:
+		lib/operator/resource_provider/resource_provider.proto
 
-It has these top-level messages:
-	Event
-	Call
+	It has these top-level messages:
+		Event
+		Call
 */
 package resource_provider
 
 import proto "github.com/golang/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import mesos "github.com/ondrej-smola/mesos-go-http/lib"
+
+import github_com_golang_protobuf_proto "github.com/golang/protobuf/proto"
 
 import io "io"
 
@@ -37,14 +40,29 @@ const (
 	// ensure that if 'type' is not set, the default value
 	// is UNKNOWN. This enables enum values to be added
 	// in a backwards-compatible way. See: MESOS-4997.
-	Event_UNKNOWN Event_Type = 0
+	Event_UNKNOWN                      Event_Type = 0
+	Event_SUBSCRIBED                   Event_Type = 1
+	Event_APPLY_OPERATION              Event_Type = 2
+	Event_PUBLISH_RESOURCES            Event_Type = 3
+	Event_ACKNOWLEDGE_OPERATION_STATUS Event_Type = 4
+	Event_RECONCILE_OPERATIONS         Event_Type = 5
 )
 
 var Event_Type_name = map[int32]string{
 	0: "UNKNOWN",
+	1: "SUBSCRIBED",
+	2: "APPLY_OPERATION",
+	3: "PUBLISH_RESOURCES",
+	4: "ACKNOWLEDGE_OPERATION_STATUS",
+	5: "RECONCILE_OPERATIONS",
 }
 var Event_Type_value = map[string]int32{
-	"UNKNOWN": 0,
+	"UNKNOWN":                      0,
+	"SUBSCRIBED":                   1,
+	"APPLY_OPERATION":              2,
+	"PUBLISH_RESOURCES":            3,
+	"ACKNOWLEDGE_OPERATION_STATUS": 4,
+	"RECONCILE_OPERATIONS":         5,
 }
 
 func (x Event_Type) Enum() *Event_Type {
@@ -72,14 +90,26 @@ const (
 	// ensure that if 'type' is not set, the default value
 	// is UNKNOWN. This enables enum values to be added
 	// in a backwards-compatible way. See: MESOS-4997.
-	Call_UNKNOWN Call_Type = 0
+	Call_UNKNOWN                         Call_Type = 0
+	Call_SUBSCRIBE                       Call_Type = 1
+	Call_UPDATE_OPERATION_STATUS         Call_Type = 2
+	Call_UPDATE_STATE                    Call_Type = 3
+	Call_UPDATE_PUBLISH_RESOURCES_STATUS Call_Type = 4
 )
 
 var Call_Type_name = map[int32]string{
 	0: "UNKNOWN",
+	1: "SUBSCRIBE",
+	2: "UPDATE_OPERATION_STATUS",
+	3: "UPDATE_STATE",
+	4: "UPDATE_PUBLISH_RESOURCES_STATUS",
 }
 var Call_Type_value = map[string]int32{
-	"UNKNOWN": 0,
+	"UNKNOWN":                         0,
+	"SUBSCRIBE":                       1,
+	"UPDATE_OPERATION_STATUS":         2,
+	"UPDATE_STATE":                    3,
+	"UPDATE_PUBLISH_RESOURCES_STATUS": 4,
 }
 
 func (x Call_Type) Enum() *Call_Type {
@@ -100,9 +130,53 @@ func (x *Call_Type) UnmarshalJSON(data []byte) error {
 }
 func (Call_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorResourceProvider, []int{1, 0} }
 
+type Call_UpdatePublishResourcesStatus_Status int32
+
+const (
+	Call_UpdatePublishResourcesStatus_UNKNOWN Call_UpdatePublishResourcesStatus_Status = 0
+	Call_UpdatePublishResourcesStatus_OK      Call_UpdatePublishResourcesStatus_Status = 1
+	Call_UpdatePublishResourcesStatus_FAILED  Call_UpdatePublishResourcesStatus_Status = 2
+)
+
+var Call_UpdatePublishResourcesStatus_Status_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "OK",
+	2: "FAILED",
+}
+var Call_UpdatePublishResourcesStatus_Status_value = map[string]int32{
+	"UNKNOWN": 0,
+	"OK":      1,
+	"FAILED":  2,
+}
+
+func (x Call_UpdatePublishResourcesStatus_Status) Enum() *Call_UpdatePublishResourcesStatus_Status {
+	p := new(Call_UpdatePublishResourcesStatus_Status)
+	*p = x
+	return p
+}
+func (x Call_UpdatePublishResourcesStatus_Status) String() string {
+	return proto.EnumName(Call_UpdatePublishResourcesStatus_Status_name, int32(x))
+}
+func (x *Call_UpdatePublishResourcesStatus_Status) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(Call_UpdatePublishResourcesStatus_Status_value, data, "Call_UpdatePublishResourcesStatus_Status")
+	if err != nil {
+		return err
+	}
+	*x = Call_UpdatePublishResourcesStatus_Status(value)
+	return nil
+}
+func (Call_UpdatePublishResourcesStatus_Status) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{1, 3, 0}
+}
+
 type Event struct {
-	Type             *Event_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.resource_provider.Event_Type" json:"type,omitempty"`
-	XXX_unrecognized []byte      `json:"-"`
+	Type                       *Event_Type                       `protobuf:"varint,1,opt,name=type,enum=mesos.resource_provider.Event_Type" json:"type,omitempty"`
+	Subscribed                 *Event_Subscribed                 `protobuf:"bytes,2,opt,name=subscribed" json:"subscribed,omitempty"`
+	ApplyOperation             *Event_ApplyOperation             `protobuf:"bytes,3,opt,name=apply_operation" json:"apply_operation,omitempty"`
+	PublishResources           *Event_PublishResources           `protobuf:"bytes,4,opt,name=publish_resources" json:"publish_resources,omitempty"`
+	AcknowledgeOperationStatus *Event_AcknowledgeOperationStatus `protobuf:"bytes,5,opt,name=acknowledge_operation_status" json:"acknowledge_operation_status,omitempty"`
+	ReconcileOperations        *Event_ReconcileOperations        `protobuf:"bytes,6,opt,name=reconcile_operations" json:"reconcile_operations,omitempty"`
+	XXX_unrecognized           []byte                            `json:"-"`
 }
 
 func (m *Event) Reset()                    { *m = Event{} }
@@ -117,15 +191,234 @@ func (m *Event) GetType() Event_Type {
 	return Event_UNKNOWN
 }
 
+func (m *Event) GetSubscribed() *Event_Subscribed {
+	if m != nil {
+		return m.Subscribed
+	}
+	return nil
+}
+
+func (m *Event) GetApplyOperation() *Event_ApplyOperation {
+	if m != nil {
+		return m.ApplyOperation
+	}
+	return nil
+}
+
+func (m *Event) GetPublishResources() *Event_PublishResources {
+	if m != nil {
+		return m.PublishResources
+	}
+	return nil
+}
+
+func (m *Event) GetAcknowledgeOperationStatus() *Event_AcknowledgeOperationStatus {
+	if m != nil {
+		return m.AcknowledgeOperationStatus
+	}
+	return nil
+}
+
+func (m *Event) GetReconcileOperations() *Event_ReconcileOperations {
+	if m != nil {
+		return m.ReconcileOperations
+	}
+	return nil
+}
+
+// First event received by the resource provider when it subscribes
+// to the master.
+type Event_Subscribed struct {
+	ProviderId       *mesos.ResourceProviderID `protobuf:"bytes,1,req,name=provider_id" json:"provider_id,omitempty"`
+	XXX_unrecognized []byte                    `json:"-"`
+}
+
+func (m *Event_Subscribed) Reset()         { *m = Event_Subscribed{} }
+func (m *Event_Subscribed) String() string { return proto.CompactTextString(m) }
+func (*Event_Subscribed) ProtoMessage()    {}
+func (*Event_Subscribed) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{0, 0}
+}
+
+func (m *Event_Subscribed) GetProviderId() *mesos.ResourceProviderID {
+	if m != nil {
+		return m.ProviderId
+	}
+	return nil
+}
+
+// Received when the master wants to send an operation to the
+// resource provider.
+type Event_ApplyOperation struct {
+	FrameworkId *mesos.FrameworkID     `protobuf:"bytes,1,opt,name=framework_id" json:"framework_id,omitempty"`
+	Info        *mesos.Offer_Operation `protobuf:"bytes,2,req,name=info" json:"info,omitempty"`
+	// This is the internal UUID for the operation, which is kept
+	// independently from the framework-specified operation ID, which
+	// is optional.
+	OperationUuid *mesos.UUID `protobuf:"bytes,3,req,name=operation_uuid" json:"operation_uuid,omitempty"`
+	// Used to establish the relationship between the operation and
+	// the resources that the operation is operating on. Each resource
+	// provider will keep a resource version UUID, and change it when
+	// it believes that the resources from this resource provider are
+	// out of sync from the master's view. The master will keep track
+	// of the last known resource version UUID for each resource
+	// provider, and attach the resource version UUID in each
+	// operation it sends out. The resource provider should reject
+	// operations that have a different resource version UUID than
+	// that it maintains, because this means the operation is
+	// operating on resources that might have already been
+	// invalidated.
+	ResourceVersionUuid *mesos.UUID `protobuf:"bytes,4,req,name=resource_version_uuid" json:"resource_version_uuid,omitempty"`
+	XXX_unrecognized    []byte      `json:"-"`
+}
+
+func (m *Event_ApplyOperation) Reset()         { *m = Event_ApplyOperation{} }
+func (m *Event_ApplyOperation) String() string { return proto.CompactTextString(m) }
+func (*Event_ApplyOperation) ProtoMessage()    {}
+func (*Event_ApplyOperation) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{0, 1}
+}
+
+func (m *Event_ApplyOperation) GetFrameworkId() *mesos.FrameworkID {
+	if m != nil {
+		return m.FrameworkId
+	}
+	return nil
+}
+
+func (m *Event_ApplyOperation) GetInfo() *mesos.Offer_Operation {
+	if m != nil {
+		return m.Info
+	}
+	return nil
+}
+
+func (m *Event_ApplyOperation) GetOperationUuid() *mesos.UUID {
+	if m != nil {
+		return m.OperationUuid
+	}
+	return nil
+}
+
+func (m *Event_ApplyOperation) GetResourceVersionUuid() *mesos.UUID {
+	if m != nil {
+		return m.ResourceVersionUuid
+	}
+	return nil
+}
+
+// Received when the master wants to launch a task using resources
+// of this resource provider.
+type Event_PublishResources struct {
+	Uuid             *mesos.UUID       `protobuf:"bytes,1,req,name=uuid" json:"uuid,omitempty"`
+	Resources        []*mesos.Resource `protobuf:"bytes,2,rep,name=resources" json:"resources,omitempty"`
+	XXX_unrecognized []byte            `json:"-"`
+}
+
+func (m *Event_PublishResources) Reset()         { *m = Event_PublishResources{} }
+func (m *Event_PublishResources) String() string { return proto.CompactTextString(m) }
+func (*Event_PublishResources) ProtoMessage()    {}
+func (*Event_PublishResources) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{0, 2}
+}
+
+func (m *Event_PublishResources) GetUuid() *mesos.UUID {
+	if m != nil {
+		return m.Uuid
+	}
+	return nil
+}
+
+func (m *Event_PublishResources) GetResources() []*mesos.Resource {
+	if m != nil {
+		return m.Resources
+	}
+	return nil
+}
+
+// Received when an operation status update is being acknowledged.
+// Acknowledgements may be generated either by a framework or by the master.
+type Event_AcknowledgeOperationStatus struct {
+	// The UUID from the `OperationStatus` being acknowledged.
+	StatusUuid *mesos.UUID `protobuf:"bytes,1,req,name=status_uuid" json:"status_uuid,omitempty"`
+	// The UUID from the relevant `Operation`.
+	OperationUuid    *mesos.UUID `protobuf:"bytes,2,req,name=operation_uuid" json:"operation_uuid,omitempty"`
+	XXX_unrecognized []byte      `json:"-"`
+}
+
+func (m *Event_AcknowledgeOperationStatus) Reset()         { *m = Event_AcknowledgeOperationStatus{} }
+func (m *Event_AcknowledgeOperationStatus) String() string { return proto.CompactTextString(m) }
+func (*Event_AcknowledgeOperationStatus) ProtoMessage()    {}
+func (*Event_AcknowledgeOperationStatus) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{0, 3}
+}
+
+func (m *Event_AcknowledgeOperationStatus) GetStatusUuid() *mesos.UUID {
+	if m != nil {
+		return m.StatusUuid
+	}
+	return nil
+}
+
+func (m *Event_AcknowledgeOperationStatus) GetOperationUuid() *mesos.UUID {
+	if m != nil {
+		return m.OperationUuid
+	}
+	return nil
+}
+
+// Received when the resource provider manager wants to reconcile its view of
+// the resource provider's operation state. The resource provider should
+// generate operation status updates for any operation UUIDs in this message
+// which are unknown to the resource provider.
+type Event_ReconcileOperations struct {
+	OperationUuids   []*mesos.UUID `protobuf:"bytes,1,rep,name=operation_uuids" json:"operation_uuids,omitempty"`
+	XXX_unrecognized []byte        `json:"-"`
+}
+
+func (m *Event_ReconcileOperations) Reset()         { *m = Event_ReconcileOperations{} }
+func (m *Event_ReconcileOperations) String() string { return proto.CompactTextString(m) }
+func (*Event_ReconcileOperations) ProtoMessage()    {}
+func (*Event_ReconcileOperations) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{0, 4}
+}
+
+func (m *Event_ReconcileOperations) GetOperationUuids() []*mesos.UUID {
+	if m != nil {
+		return m.OperationUuids
+	}
+	return nil
+}
+
 type Call struct {
-	Type             *Call_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.resource_provider.Call_Type" json:"type,omitempty"`
-	XXX_unrecognized []byte     `json:"-"`
+	// Identifies who generated this call.
+	// The 'ResourceProviderManager' assigns a resource provider ID when
+	// a new resource provider subscribes for the first time. Once
+	// assigned, the resource provider must set the 'resource_provider_id'
+	// here and within its 'ResourceProviderInfo' (in any further
+	// 'SUBSCRIBE' calls). This allows the 'ResourceProviderManager' to
+	// identify a resource provider correctly across disconnections,
+	// failovers, etc.
+	ResourceProviderId           *mesos.ResourceProviderID          `protobuf:"bytes,1,opt,name=resource_provider_id" json:"resource_provider_id,omitempty"`
+	Type                         *Call_Type                         `protobuf:"varint,2,opt,name=type,enum=mesos.resource_provider.Call_Type" json:"type,omitempty"`
+	Subscribe                    *Call_Subscribe                    `protobuf:"bytes,3,opt,name=subscribe" json:"subscribe,omitempty"`
+	UpdateOperationStatus        *Call_UpdateOperationStatus        `protobuf:"bytes,4,opt,name=update_operation_status" json:"update_operation_status,omitempty"`
+	UpdateState                  *Call_UpdateState                  `protobuf:"bytes,5,opt,name=update_state" json:"update_state,omitempty"`
+	UpdatePublishResourcesStatus *Call_UpdatePublishResourcesStatus `protobuf:"bytes,6,opt,name=update_publish_resources_status" json:"update_publish_resources_status,omitempty"`
+	XXX_unrecognized             []byte                             `json:"-"`
 }
 
 func (m *Call) Reset()                    { *m = Call{} }
 func (m *Call) String() string            { return proto.CompactTextString(m) }
 func (*Call) ProtoMessage()               {}
 func (*Call) Descriptor() ([]byte, []int) { return fileDescriptorResourceProvider, []int{1} }
+
+func (m *Call) GetResourceProviderId() *mesos.ResourceProviderID {
+	if m != nil {
+		return m.ResourceProviderId
+	}
+	return nil
+}
 
 func (m *Call) GetType() Call_Type {
 	if m != nil && m.Type != nil {
@@ -134,11 +427,194 @@ func (m *Call) GetType() Call_Type {
 	return Call_UNKNOWN
 }
 
+func (m *Call) GetSubscribe() *Call_Subscribe {
+	if m != nil {
+		return m.Subscribe
+	}
+	return nil
+}
+
+func (m *Call) GetUpdateOperationStatus() *Call_UpdateOperationStatus {
+	if m != nil {
+		return m.UpdateOperationStatus
+	}
+	return nil
+}
+
+func (m *Call) GetUpdateState() *Call_UpdateState {
+	if m != nil {
+		return m.UpdateState
+	}
+	return nil
+}
+
+func (m *Call) GetUpdatePublishResourcesStatus() *Call_UpdatePublishResourcesStatus {
+	if m != nil {
+		return m.UpdatePublishResourcesStatus
+	}
+	return nil
+}
+
+// Request to subscribe with the master.
+type Call_Subscribe struct {
+	ResourceProviderInfo *mesos.ResourceProviderInfo `protobuf:"bytes,1,req,name=resource_provider_info" json:"resource_provider_info,omitempty"`
+	XXX_unrecognized     []byte                      `json:"-"`
+}
+
+func (m *Call_Subscribe) Reset()         { *m = Call_Subscribe{} }
+func (m *Call_Subscribe) String() string { return proto.CompactTextString(m) }
+func (*Call_Subscribe) ProtoMessage()    {}
+func (*Call_Subscribe) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{1, 0}
+}
+
+func (m *Call_Subscribe) GetResourceProviderInfo() *mesos.ResourceProviderInfo {
+	if m != nil {
+		return m.ResourceProviderInfo
+	}
+	return nil
+}
+
+// Notify the master about the status of an operation.
+type Call_UpdateOperationStatus struct {
+	FrameworkId  *mesos.FrameworkID     `protobuf:"bytes,1,opt,name=framework_id" json:"framework_id,omitempty"`
+	Status       *mesos.OperationStatus `protobuf:"bytes,2,req,name=status" json:"status,omitempty"`
+	LatestStatus *mesos.OperationStatus `protobuf:"bytes,3,opt,name=latest_status" json:"latest_status,omitempty"`
+	// This is the internal UUID for the operation, which is kept
+	// independently from the framework-specified operation ID, which
+	// is optional.
+	OperationUuid    *mesos.UUID `protobuf:"bytes,4,req,name=operation_uuid" json:"operation_uuid,omitempty"`
+	XXX_unrecognized []byte      `json:"-"`
+}
+
+func (m *Call_UpdateOperationStatus) Reset()         { *m = Call_UpdateOperationStatus{} }
+func (m *Call_UpdateOperationStatus) String() string { return proto.CompactTextString(m) }
+func (*Call_UpdateOperationStatus) ProtoMessage()    {}
+func (*Call_UpdateOperationStatus) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{1, 1}
+}
+
+func (m *Call_UpdateOperationStatus) GetFrameworkId() *mesos.FrameworkID {
+	if m != nil {
+		return m.FrameworkId
+	}
+	return nil
+}
+
+func (m *Call_UpdateOperationStatus) GetStatus() *mesos.OperationStatus {
+	if m != nil {
+		return m.Status
+	}
+	return nil
+}
+
+func (m *Call_UpdateOperationStatus) GetLatestStatus() *mesos.OperationStatus {
+	if m != nil {
+		return m.LatestStatus
+	}
+	return nil
+}
+
+func (m *Call_UpdateOperationStatus) GetOperationUuid() *mesos.UUID {
+	if m != nil {
+		return m.OperationUuid
+	}
+	return nil
+}
+
+// Notify the master about the total resources and pending operations.
+type Call_UpdateState struct {
+	// This includes pending operations and those that have
+	// unacknowledged statuses.
+	Operations []*mesos.Operation `protobuf:"bytes,1,rep,name=operations" json:"operations,omitempty"`
+	// The total resources provided by this resource provider.
+	Resources []*mesos.Resource `protobuf:"bytes,2,rep,name=resources" json:"resources,omitempty"`
+	// Used to establish the relationship between the operation and
+	// the resources that the operation is operating on. Each resource
+	// provider will keep a resource version UUID, and change it when
+	// it believes that the resources from this resource provider are
+	// out of sync from the master's view. The master will keep track
+	// of the last known resource version UUID for each resource
+	// provider, and attach the resource version UUID in each
+	// operation it sends out. The resource provider should reject
+	// operations that have a different resource version UUID than
+	// that it maintains, because this means the operation is
+	// operating on resources that might have already been
+	// invalidated.
+	ResourceVersionUuid *mesos.UUID `protobuf:"bytes,3,req,name=resource_version_uuid" json:"resource_version_uuid,omitempty"`
+	XXX_unrecognized    []byte      `json:"-"`
+}
+
+func (m *Call_UpdateState) Reset()         { *m = Call_UpdateState{} }
+func (m *Call_UpdateState) String() string { return proto.CompactTextString(m) }
+func (*Call_UpdateState) ProtoMessage()    {}
+func (*Call_UpdateState) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{1, 2}
+}
+
+func (m *Call_UpdateState) GetOperations() []*mesos.Operation {
+	if m != nil {
+		return m.Operations
+	}
+	return nil
+}
+
+func (m *Call_UpdateState) GetResources() []*mesos.Resource {
+	if m != nil {
+		return m.Resources
+	}
+	return nil
+}
+
+func (m *Call_UpdateState) GetResourceVersionUuid() *mesos.UUID {
+	if m != nil {
+		return m.ResourceVersionUuid
+	}
+	return nil
+}
+
+type Call_UpdatePublishResourcesStatus struct {
+	Uuid             *mesos.UUID                               `protobuf:"bytes,1,req,name=uuid" json:"uuid,omitempty"`
+	Status           *Call_UpdatePublishResourcesStatus_Status `protobuf:"varint,2,req,name=status,enum=mesos.resource_provider.Call_UpdatePublishResourcesStatus_Status" json:"status,omitempty"`
+	XXX_unrecognized []byte                                    `json:"-"`
+}
+
+func (m *Call_UpdatePublishResourcesStatus) Reset()         { *m = Call_UpdatePublishResourcesStatus{} }
+func (m *Call_UpdatePublishResourcesStatus) String() string { return proto.CompactTextString(m) }
+func (*Call_UpdatePublishResourcesStatus) ProtoMessage()    {}
+func (*Call_UpdatePublishResourcesStatus) Descriptor() ([]byte, []int) {
+	return fileDescriptorResourceProvider, []int{1, 3}
+}
+
+func (m *Call_UpdatePublishResourcesStatus) GetUuid() *mesos.UUID {
+	if m != nil {
+		return m.Uuid
+	}
+	return nil
+}
+
+func (m *Call_UpdatePublishResourcesStatus) GetStatus() Call_UpdatePublishResourcesStatus_Status {
+	if m != nil && m.Status != nil {
+		return *m.Status
+	}
+	return Call_UpdatePublishResourcesStatus_UNKNOWN
+}
+
 func init() {
-	proto.RegisterType((*Event)(nil), "mesos.v1.resource_provider.Event")
-	proto.RegisterType((*Call)(nil), "mesos.v1.resource_provider.Call")
-	proto.RegisterEnum("mesos.v1.resource_provider.Event_Type", Event_Type_name, Event_Type_value)
-	proto.RegisterEnum("mesos.v1.resource_provider.Call_Type", Call_Type_name, Call_Type_value)
+	proto.RegisterType((*Event)(nil), "mesos.resource_provider.Event")
+	proto.RegisterType((*Event_Subscribed)(nil), "mesos.resource_provider.Event.Subscribed")
+	proto.RegisterType((*Event_ApplyOperation)(nil), "mesos.resource_provider.Event.ApplyOperation")
+	proto.RegisterType((*Event_PublishResources)(nil), "mesos.resource_provider.Event.PublishResources")
+	proto.RegisterType((*Event_AcknowledgeOperationStatus)(nil), "mesos.resource_provider.Event.AcknowledgeOperationStatus")
+	proto.RegisterType((*Event_ReconcileOperations)(nil), "mesos.resource_provider.Event.ReconcileOperations")
+	proto.RegisterType((*Call)(nil), "mesos.resource_provider.Call")
+	proto.RegisterType((*Call_Subscribe)(nil), "mesos.resource_provider.Call.Subscribe")
+	proto.RegisterType((*Call_UpdateOperationStatus)(nil), "mesos.resource_provider.Call.UpdateOperationStatus")
+	proto.RegisterType((*Call_UpdateState)(nil), "mesos.resource_provider.Call.UpdateState")
+	proto.RegisterType((*Call_UpdatePublishResourcesStatus)(nil), "mesos.resource_provider.Call.UpdatePublishResourcesStatus")
+	proto.RegisterEnum("mesos.resource_provider.Event_Type", Event_Type_name, Event_Type_value)
+	proto.RegisterEnum("mesos.resource_provider.Call_Type", Call_Type_name, Call_Type_value)
+	proto.RegisterEnum("mesos.resource_provider.Call_UpdatePublishResourcesStatus_Status", Call_UpdatePublishResourcesStatus_Status_name, Call_UpdatePublishResourcesStatus_Status_value)
 }
 func (m *Event) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -159,6 +635,279 @@ func (m *Event) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x8
 		i++
 		i = encodeVarintResourceProvider(dAtA, i, uint64(*m.Type))
+	}
+	if m.Subscribed != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.Subscribed.Size()))
+		n1, err := m.Subscribed.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n1
+	}
+	if m.ApplyOperation != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.ApplyOperation.Size()))
+		n2, err := m.ApplyOperation.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n2
+	}
+	if m.PublishResources != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.PublishResources.Size()))
+		n3, err := m.PublishResources.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n3
+	}
+	if m.AcknowledgeOperationStatus != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.AcknowledgeOperationStatus.Size()))
+		n4, err := m.AcknowledgeOperationStatus.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n4
+	}
+	if m.ReconcileOperations != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.ReconcileOperations.Size()))
+		n5, err := m.ReconcileOperations.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n5
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Event_Subscribed) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Event_Subscribed) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ProviderId == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.ProviderId.Size()))
+		n6, err := m.ProviderId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n6
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Event_ApplyOperation) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Event_ApplyOperation) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.FrameworkId != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.FrameworkId.Size()))
+		n7, err := m.FrameworkId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n7
+	}
+	if m.Info == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.Info.Size()))
+		n8, err := m.Info.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n8
+	}
+	if m.OperationUuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.OperationUuid.Size()))
+		n9, err := m.OperationUuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n9
+	}
+	if m.ResourceVersionUuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.ResourceVersionUuid.Size()))
+		n10, err := m.ResourceVersionUuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n10
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Event_PublishResources) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Event_PublishResources) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Uuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.Uuid.Size()))
+		n11, err := m.Uuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n11
+	}
+	if len(m.Resources) > 0 {
+		for _, msg := range m.Resources {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintResourceProvider(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Event_AcknowledgeOperationStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Event_AcknowledgeOperationStatus) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.StatusUuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.StatusUuid.Size()))
+		n12, err := m.StatusUuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n12
+	}
+	if m.OperationUuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.OperationUuid.Size()))
+		n13, err := m.OperationUuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n13
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Event_ReconcileOperations) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Event_ReconcileOperations) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.OperationUuids) > 0 {
+		for _, msg := range m.OperationUuids {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintResourceProvider(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -181,10 +930,255 @@ func (m *Call) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.ResourceProviderId != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.ResourceProviderId.Size()))
+		n14, err := m.ResourceProviderId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n14
+	}
 	if m.Type != nil {
-		dAtA[i] = 0x8
+		dAtA[i] = 0x10
 		i++
 		i = encodeVarintResourceProvider(dAtA, i, uint64(*m.Type))
+	}
+	if m.Subscribe != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.Subscribe.Size()))
+		n15, err := m.Subscribe.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n15
+	}
+	if m.UpdateOperationStatus != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.UpdateOperationStatus.Size()))
+		n16, err := m.UpdateOperationStatus.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n16
+	}
+	if m.UpdateState != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.UpdateState.Size()))
+		n17, err := m.UpdateState.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n17
+	}
+	if m.UpdatePublishResourcesStatus != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.UpdatePublishResourcesStatus.Size()))
+		n18, err := m.UpdatePublishResourcesStatus.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n18
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_Subscribe) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_Subscribe) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.ResourceProviderInfo == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.ResourceProviderInfo.Size()))
+		n19, err := m.ResourceProviderInfo.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n19
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_UpdateOperationStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_UpdateOperationStatus) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.FrameworkId != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.FrameworkId.Size()))
+		n20, err := m.FrameworkId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n20
+	}
+	if m.Status == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.Status.Size()))
+		n21, err := m.Status.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n21
+	}
+	if m.LatestStatus != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.LatestStatus.Size()))
+		n22, err := m.LatestStatus.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n22
+	}
+	if m.OperationUuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.OperationUuid.Size()))
+		n23, err := m.OperationUuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n23
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_UpdateState) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_UpdateState) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Operations) > 0 {
+		for _, msg := range m.Operations {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintResourceProvider(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Resources) > 0 {
+		for _, msg := range m.Resources {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintResourceProvider(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.ResourceVersionUuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.ResourceVersionUuid.Size()))
+		n24, err := m.ResourceVersionUuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n24
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Call_UpdatePublishResourcesStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Call_UpdatePublishResourcesStatus) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Uuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(m.Uuid.Size()))
+		n25, err := m.Uuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n25
+	}
+	if m.Status == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintResourceProvider(dAtA, i, uint64(*m.Status))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -225,6 +1219,115 @@ func (m *Event) Size() (n int) {
 	if m.Type != nil {
 		n += 1 + sovResourceProvider(uint64(*m.Type))
 	}
+	if m.Subscribed != nil {
+		l = m.Subscribed.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.ApplyOperation != nil {
+		l = m.ApplyOperation.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.PublishResources != nil {
+		l = m.PublishResources.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.AcknowledgeOperationStatus != nil {
+		l = m.AcknowledgeOperationStatus.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.ReconcileOperations != nil {
+		l = m.ReconcileOperations.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Event_Subscribed) Size() (n int) {
+	var l int
+	_ = l
+	if m.ProviderId != nil {
+		l = m.ProviderId.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Event_ApplyOperation) Size() (n int) {
+	var l int
+	_ = l
+	if m.FrameworkId != nil {
+		l = m.FrameworkId.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.Info != nil {
+		l = m.Info.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.OperationUuid != nil {
+		l = m.OperationUuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.ResourceVersionUuid != nil {
+		l = m.ResourceVersionUuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Event_PublishResources) Size() (n int) {
+	var l int
+	_ = l
+	if m.Uuid != nil {
+		l = m.Uuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if len(m.Resources) > 0 {
+		for _, e := range m.Resources {
+			l = e.Size()
+			n += 1 + l + sovResourceProvider(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Event_AcknowledgeOperationStatus) Size() (n int) {
+	var l int
+	_ = l
+	if m.StatusUuid != nil {
+		l = m.StatusUuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.OperationUuid != nil {
+		l = m.OperationUuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Event_ReconcileOperations) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.OperationUuids) > 0 {
+		for _, e := range m.OperationUuids {
+			l = e.Size()
+			n += 1 + l + sovResourceProvider(uint64(l))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -234,8 +1337,107 @@ func (m *Event) Size() (n int) {
 func (m *Call) Size() (n int) {
 	var l int
 	_ = l
+	if m.ResourceProviderId != nil {
+		l = m.ResourceProviderId.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
 	if m.Type != nil {
 		n += 1 + sovResourceProvider(uint64(*m.Type))
+	}
+	if m.Subscribe != nil {
+		l = m.Subscribe.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.UpdateOperationStatus != nil {
+		l = m.UpdateOperationStatus.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.UpdateState != nil {
+		l = m.UpdateState.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.UpdatePublishResourcesStatus != nil {
+		l = m.UpdatePublishResourcesStatus.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_Subscribe) Size() (n int) {
+	var l int
+	_ = l
+	if m.ResourceProviderInfo != nil {
+		l = m.ResourceProviderInfo.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_UpdateOperationStatus) Size() (n int) {
+	var l int
+	_ = l
+	if m.FrameworkId != nil {
+		l = m.FrameworkId.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.Status != nil {
+		l = m.Status.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.LatestStatus != nil {
+		l = m.LatestStatus.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.OperationUuid != nil {
+		l = m.OperationUuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_UpdateState) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Operations) > 0 {
+		for _, e := range m.Operations {
+			l = e.Size()
+			n += 1 + l + sovResourceProvider(uint64(l))
+		}
+	}
+	if len(m.Resources) > 0 {
+		for _, e := range m.Resources {
+			l = e.Size()
+			n += 1 + l + sovResourceProvider(uint64(l))
+		}
+	}
+	if m.ResourceVersionUuid != nil {
+		l = m.ResourceVersionUuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Call_UpdatePublishResourcesStatus) Size() (n int) {
+	var l int
+	_ = l
+	if m.Uuid != nil {
+		l = m.Uuid.Size()
+		n += 1 + l + sovResourceProvider(uint64(l))
+	}
+	if m.Status != nil {
+		n += 1 + sovResourceProvider(uint64(*m.Status))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -305,6 +1507,784 @@ func (m *Event) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.Type = &v
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Subscribed", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Subscribed == nil {
+				m.Subscribed = &Event_Subscribed{}
+			}
+			if err := m.Subscribed.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ApplyOperation", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ApplyOperation == nil {
+				m.ApplyOperation = &Event_ApplyOperation{}
+			}
+			if err := m.ApplyOperation.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field PublishResources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.PublishResources == nil {
+				m.PublishResources = &Event_PublishResources{}
+			}
+			if err := m.PublishResources.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field AcknowledgeOperationStatus", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.AcknowledgeOperationStatus == nil {
+				m.AcknowledgeOperationStatus = &Event_AcknowledgeOperationStatus{}
+			}
+			if err := m.AcknowledgeOperationStatus.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ReconcileOperations", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ReconcileOperations == nil {
+				m.ReconcileOperations = &Event_ReconcileOperations{}
+			}
+			if err := m.ReconcileOperations.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Event_Subscribed) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Subscribed: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Subscribed: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProviderId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ProviderId == nil {
+				m.ProviderId = &mesos.ResourceProviderID{}
+			}
+			if err := m.ProviderId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Event_ApplyOperation) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ApplyOperation: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ApplyOperation: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FrameworkId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FrameworkId == nil {
+				m.FrameworkId = &mesos.FrameworkID{}
+			}
+			if err := m.FrameworkId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Info == nil {
+				m.Info = &mesos.Offer_Operation{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperationUuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.OperationUuid == nil {
+				m.OperationUuid = &mesos.UUID{}
+			}
+			if err := m.OperationUuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceVersionUuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ResourceVersionUuid == nil {
+				m.ResourceVersionUuid = &mesos.UUID{}
+			}
+			if err := m.ResourceVersionUuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000004)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000004) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Event_PublishResources) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: PublishResources: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: PublishResources: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Uuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Uuid == nil {
+				m.Uuid = &mesos.UUID{}
+			}
+			if err := m.Uuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Resources = append(m.Resources, &mesos.Resource{})
+			if err := m.Resources[len(m.Resources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Event_AcknowledgeOperationStatus) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AcknowledgeOperationStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AcknowledgeOperationStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field StatusUuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.StatusUuid == nil {
+				m.StatusUuid = &mesos.UUID{}
+			}
+			if err := m.StatusUuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperationUuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.OperationUuid == nil {
+				m.OperationUuid = &mesos.UUID{}
+			}
+			if err := m.OperationUuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Event_ReconcileOperations) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ReconcileOperations: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ReconcileOperations: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperationUuids", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.OperationUuids = append(m.OperationUuids, &mesos.UUID{})
+			if err := m.OperationUuids[len(m.OperationUuids)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipResourceProvider(dAtA[iNdEx:])
@@ -357,6 +2337,39 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 		}
 		switch fieldNum {
 		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceProviderId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ResourceProviderId == nil {
+				m.ResourceProviderId = &mesos.ResourceProviderID{}
+			}
+			if err := m.ResourceProviderId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
 			}
@@ -376,6 +2389,138 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.Type = &v
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Subscribe", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Subscribe == nil {
+				m.Subscribe = &Call_Subscribe{}
+			}
+			if err := m.Subscribe.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdateOperationStatus", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.UpdateOperationStatus == nil {
+				m.UpdateOperationStatus = &Call_UpdateOperationStatus{}
+			}
+			if err := m.UpdateOperationStatus.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdateState", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.UpdateState == nil {
+				m.UpdateState = &Call_UpdateState{}
+			}
+			if err := m.UpdateState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field UpdatePublishResourcesStatus", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.UpdatePublishResourcesStatus == nil {
+				m.UpdatePublishResourcesStatus = &Call_UpdatePublishResourcesStatus{}
+			}
+			if err := m.UpdatePublishResourcesStatus.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipResourceProvider(dAtA[iNdEx:])
@@ -391,6 +2536,551 @@ func (m *Call) Unmarshal(dAtA []byte) error {
 			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_Subscribe) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Subscribe: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Subscribe: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceProviderInfo", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ResourceProviderInfo == nil {
+				m.ResourceProviderInfo = &mesos.ResourceProviderInfo{}
+			}
+			if err := m.ResourceProviderInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_UpdateOperationStatus) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UpdateOperationStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UpdateOperationStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FrameworkId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FrameworkId == nil {
+				m.FrameworkId = &mesos.FrameworkID{}
+			}
+			if err := m.FrameworkId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Status == nil {
+				m.Status = &mesos.OperationStatus{}
+			}
+			if err := m.Status.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LatestStatus", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LatestStatus == nil {
+				m.LatestStatus = &mesos.OperationStatus{}
+			}
+			if err := m.LatestStatus.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperationUuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.OperationUuid == nil {
+				m.OperationUuid = &mesos.UUID{}
+			}
+			if err := m.OperationUuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_UpdateState) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UpdateState: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UpdateState: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Operations", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Operations = append(m.Operations, &mesos.Operation{})
+			if err := m.Operations[len(m.Operations)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Resources = append(m.Resources, &mesos.Resource{})
+			if err := m.Resources[len(m.Resources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ResourceVersionUuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ResourceVersionUuid == nil {
+				m.ResourceVersionUuid = &mesos.UUID{}
+			}
+			if err := m.ResourceVersionUuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Call_UpdatePublishResourcesStatus) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowResourceProvider
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UpdatePublishResourcesStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UpdatePublishResourcesStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Uuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Uuid == nil {
+				m.Uuid = &mesos.UUID{}
+			}
+			if err := m.Uuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Status", wireType)
+			}
+			var v Call_UpdatePublishResourcesStatus_Status
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowResourceProvider
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (Call_UpdatePublishResourcesStatus_Status(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Status = &v
+			hasFields[0] |= uint64(0x00000002)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipResourceProvider(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthResourceProvider
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	}
 
 	if iNdEx > l {
@@ -508,18 +3198,62 @@ func init() {
 }
 
 var fileDescriptorResourceProvider = []byte{
-	// 195 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x32, 0xcb, 0xc9, 0x4c, 0xd2,
-	0xcf, 0x2f, 0x48, 0x2d, 0x4a, 0x2c, 0xc9, 0x2f, 0xd2, 0x2f, 0x4a, 0x2d, 0xce, 0x2f, 0x2d, 0x4a,
-	0x4e, 0x8d, 0x2f, 0x28, 0xca, 0x2f, 0xcb, 0x4c, 0x49, 0xc5, 0x22, 0xa2, 0x57, 0x50, 0x94, 0x5f,
-	0x92, 0x2f, 0x24, 0x95, 0x9b, 0x5a, 0x9c, 0x5f, 0xac, 0x57, 0x66, 0xa8, 0x87, 0xa1, 0x42, 0x29,
-	0x88, 0x8b, 0xd5, 0xb5, 0x2c, 0x35, 0xaf, 0x44, 0xc8, 0x84, 0x8b, 0xa5, 0xa4, 0xb2, 0x20, 0x55,
-	0x82, 0x51, 0x81, 0x51, 0x83, 0xcf, 0x48, 0x4d, 0x0f, 0xb7, 0x1e, 0x3d, 0xb0, 0x06, 0xbd, 0x90,
-	0xca, 0x82, 0x54, 0x25, 0x61, 0x2e, 0x16, 0x10, 0x2d, 0xc4, 0xcd, 0xc5, 0x1e, 0xea, 0xe7, 0xed,
-	0xe7, 0x1f, 0xee, 0x27, 0xc0, 0xa0, 0x14, 0xc0, 0xc5, 0xe2, 0x9c, 0x98, 0x93, 0x23, 0x64, 0x8c,
-	0x62, 0xa4, 0x2a, 0x3e, 0x23, 0x41, 0xea, 0x71, 0x9b, 0xe8, 0x14, 0x74, 0xe2, 0x91, 0x1c, 0xe3,
-	0x85, 0x47, 0x72, 0x8c, 0x0f, 0x1e, 0xc9, 0x31, 0xce, 0x78, 0x2c, 0xc7, 0xc0, 0xa5, 0x9a, 0x5f,
-	0x94, 0xae, 0x97, 0x58, 0x90, 0x98, 0x9c, 0x91, 0x8a, 0xc7, 0x5c, 0x27, 0xb6, 0x00, 0x50, 0x08,
-	0x14, 0x47, 0x09, 0x62, 0x48, 0x01, 0x02, 0x00, 0x00, 0xff, 0xff, 0xfa, 0xa1, 0x54, 0x46, 0x4e,
-	0x01, 0x00, 0x00,
+	// 905 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x96, 0xcd, 0x6e, 0xe3, 0x54,
+	0x14, 0xc7, 0xe7, 0x3a, 0x69, 0x98, 0x9e, 0x74, 0x52, 0xf7, 0xce, 0x74, 0xea, 0xf1, 0x54, 0x9d,
+	0x28, 0xad, 0x20, 0x45, 0x8a, 0x03, 0x41, 0x80, 0x98, 0x01, 0xa1, 0x7c, 0xb8, 0x4c, 0x98, 0x28,
+	0xf6, 0xc4, 0xb1, 0x10, 0x6c, 0x2c, 0xc7, 0xb9, 0x69, 0xcd, 0xb8, 0xb9, 0x96, 0xed, 0xb4, 0xea,
+	0x9a, 0x25, 0x2f, 0xc0, 0x6b, 0xb0, 0x40, 0xac, 0xd8, 0xb3, 0xe4, 0x11, 0x50, 0x59, 0xf2, 0x12,
+	0xc8, 0x9f, 0x49, 0xe3, 0x38, 0xa9, 0x58, 0x45, 0xf2, 0x3d, 0xff, 0xdf, 0x3d, 0xf7, 0x7c, 0xfc,
+	0x15, 0xf8, 0xcc, 0x32, 0x47, 0x75, 0x6a, 0x13, 0x47, 0xf7, 0xa8, 0x53, 0x77, 0x88, 0x4b, 0x67,
+	0x8e, 0x41, 0x34, 0xdb, 0xa1, 0x57, 0xe6, 0x98, 0xac, 0xf8, 0x22, 0xd8, 0x0e, 0xf5, 0x28, 0x3e,
+	0xb8, 0x24, 0x2e, 0x75, 0x85, 0xd4, 0x31, 0xff, 0xe9, 0xb9, 0xe9, 0x5d, 0xcc, 0x46, 0x82, 0x41,
+	0x2f, 0xeb, 0x74, 0x3a, 0x76, 0xc8, 0x8f, 0x35, 0xf7, 0x92, 0x5a, 0x7a, 0x3d, 0x10, 0xd4, 0xce,
+	0x69, 0xed, 0xc2, 0xf3, 0xec, 0xba, 0x7f, 0x6d, 0x88, 0x08, 0x78, 0x95, 0xdf, 0x1e, 0xc2, 0x96,
+	0x78, 0x45, 0xa6, 0x1e, 0xfe, 0x18, 0xf2, 0xde, 0x8d, 0x4d, 0x38, 0x54, 0x46, 0xd5, 0x52, 0xe3,
+	0x58, 0xc8, 0xb8, 0x48, 0x08, 0xa2, 0x85, 0xe1, 0x8d, 0x4d, 0xf0, 0x57, 0x00, 0xee, 0x6c, 0xe4,
+	0x1a, 0x8e, 0x39, 0x22, 0x63, 0x8e, 0x29, 0xa3, 0x6a, 0xb1, 0x71, 0xba, 0x41, 0xa8, 0x24, 0x02,
+	0x7c, 0x06, 0xbb, 0xba, 0x6d, 0x5b, 0x37, 0x5a, 0x58, 0x07, 0x93, 0x4e, 0xb9, 0x5c, 0xc0, 0xa8,
+	0x6d, 0x60, 0x34, 0x7d, 0x95, 0x14, 0x8b, 0xf0, 0xb7, 0xb0, 0x67, 0xcf, 0x46, 0x96, 0xe9, 0x5e,
+	0x68, 0xb1, 0xc2, 0xe5, 0xf2, 0x01, 0xa9, 0xbe, 0x81, 0x24, 0x87, 0xba, 0x41, 0x2c, 0xc3, 0x1a,
+	0x1c, 0xea, 0xc6, 0xbb, 0x29, 0xbd, 0xb6, 0xc8, 0xf8, 0x9c, 0xcc, 0x33, 0xd3, 0x5c, 0x4f, 0xf7,
+	0x66, 0x2e, 0xb7, 0x15, 0x60, 0xbf, 0xd8, 0x94, 0xe0, 0x1c, 0x91, 0xa4, 0xa9, 0x04, 0x00, 0x2c,
+	0xc3, 0x13, 0x87, 0x18, 0x74, 0x6a, 0x98, 0xd6, 0x02, 0xde, 0xe5, 0x0a, 0x01, 0xb8, 0xb1, 0x01,
+	0x3c, 0x88, 0xa5, 0x09, 0xd6, 0xe5, 0xbf, 0x04, 0x58, 0x28, 0xaa, 0x00, 0xc5, 0x58, 0xa3, 0x99,
+	0x63, 0x0e, 0x95, 0x99, 0x6a, 0xb1, 0xf1, 0x2c, 0xc2, 0xc6, 0xef, 0x94, 0xa3, 0x88, 0x6e, 0x87,
+	0xff, 0x15, 0x41, 0x69, 0xa9, 0x9e, 0x55, 0xd8, 0x99, 0x38, 0xfa, 0x25, 0xb9, 0xa6, 0xce, 0xbb,
+	0x90, 0xe1, 0xa7, 0x86, 0x23, 0xc6, 0x59, 0x7c, 0xd4, 0xed, 0xe0, 0x13, 0xc8, 0x9b, 0xd3, 0x09,
+	0xe5, 0x98, 0xe0, 0x96, 0xa7, 0x51, 0x84, 0x34, 0x99, 0x10, 0x47, 0x98, 0xf3, 0x8e, 0xa1, 0x34,
+	0xaf, 0xe3, 0x6c, 0x66, 0x8e, 0xb9, 0x5c, 0x10, 0x5f, 0x8c, 0xe2, 0x55, 0xb5, 0xdb, 0xc1, 0x1f,
+	0xc2, 0x7e, 0xf2, 0xe8, 0x2b, 0xe2, 0xb8, 0x49, 0x6c, 0x3e, 0x15, 0xcb, 0xbf, 0x05, 0x36, 0xd5,
+	0xb8, 0x67, 0x90, 0x0f, 0xc2, 0x51, 0x1a, 0x5d, 0x81, 0xed, 0xf9, 0x5c, 0x30, 0xe5, 0x5c, 0xb5,
+	0xd8, 0xd8, 0x5d, 0x2a, 0x08, 0x6f, 0x00, 0xbf, 0xa6, 0x69, 0x65, 0x28, 0x86, 0xfd, 0xd7, 0xb2,
+	0xee, 0x48, 0xbf, 0x91, 0x49, 0xe7, 0xfd, 0x0a, 0x1e, 0xaf, 0x68, 0x20, 0x3e, 0x81, 0xdd, 0xbb,
+	0x5a, 0x97, 0x43, 0x41, 0x96, 0x8b, 0xe2, 0xca, 0xcf, 0x08, 0xf2, 0xc1, 0xd6, 0x15, 0xe1, 0x3d,
+	0xb5, 0xff, 0xa6, 0x2f, 0x7d, 0xd7, 0x67, 0x1f, 0xe0, 0x12, 0x80, 0xa2, 0xb6, 0x94, 0xf6, 0xa0,
+	0xdb, 0x12, 0x3b, 0x2c, 0xc2, 0x8f, 0x61, 0xb7, 0x29, 0xcb, 0xbd, 0xef, 0x35, 0x49, 0x16, 0x07,
+	0xcd, 0x61, 0x57, 0xea, 0xb3, 0x0c, 0xde, 0x87, 0x3d, 0x59, 0x6d, 0xf5, 0xba, 0xca, 0x6b, 0x6d,
+	0x20, 0x2a, 0x92, 0x3a, 0x68, 0x8b, 0x0a, 0x9b, 0xc3, 0x65, 0x38, 0x6c, 0xb6, 0x7d, 0x50, 0x4f,
+	0xec, 0x7c, 0x23, 0xce, 0x15, 0x9a, 0x32, 0x6c, 0x0e, 0x55, 0x85, 0xcd, 0x63, 0x0e, 0x9e, 0x0c,
+	0xc4, 0xb6, 0xd4, 0x6f, 0x77, 0x7b, 0x0b, 0xe7, 0x0a, 0xbb, 0x55, 0xf9, 0xf7, 0x21, 0xe4, 0xdb,
+	0xba, 0x65, 0xe1, 0xcf, 0xfd, 0x79, 0x5e, 0x1a, 0xd6, 0xf9, 0xd0, 0x64, 0x0f, 0x1e, 0xfe, 0x28,
+	0xf2, 0x1b, 0x26, 0xf0, 0x9b, 0x4a, 0xe6, 0xe0, 0xfb, 0xb7, 0x84, 0x76, 0xf3, 0x12, 0xb6, 0x13,
+	0xbb, 0x89, 0x9c, 0xe2, 0x83, 0xf5, 0xb2, 0x64, 0x2f, 0xf0, 0x10, 0x0e, 0x66, 0xf6, 0x58, 0xf7,
+	0x56, 0xac, 0x74, 0xe8, 0x14, 0x9f, 0xac, 0x27, 0xa9, 0x81, 0x78, 0x79, 0x2e, 0xbe, 0x86, 0x9d,
+	0x88, 0xea, 0xb3, 0x48, 0xe4, 0x0e, 0xa7, 0xf7, 0x41, 0xf9, 0x04, 0x82, 0x0d, 0x78, 0x11, 0x01,
+	0x52, 0x0e, 0x16, 0xa7, 0x17, 0x1a, 0xc3, 0xcb, 0xfb, 0x30, 0x97, 0x97, 0x22, 0xcc, 0x92, 0x7f,
+	0x0d, 0xdb, 0xf3, 0x42, 0xbc, 0x82, 0xa7, 0x2b, 0xfa, 0xe5, 0x2f, 0x71, 0x38, 0xd5, 0xcf, 0xb3,
+	0x3a, 0x36, 0x9d, 0x50, 0xfe, 0x0f, 0x04, 0xfb, 0xab, 0x2b, 0x71, 0x7f, 0xcf, 0x78, 0x1f, 0x0a,
+	0xd1, 0xcb, 0x96, 0x5c, 0x63, 0x89, 0x58, 0x83, 0x47, 0x96, 0xee, 0x11, 0xd7, 0x8b, 0x0b, 0x11,
+	0x76, 0x3c, 0x2b, 0x3c, 0xbd, 0x80, 0x2b, 0x8c, 0xe3, 0x27, 0x04, 0xc5, 0xc5, 0xf2, 0x9f, 0x00,
+	0x2c, 0x58, 0x70, 0xb8, 0x74, 0xec, 0xf2, 0x05, 0xf7, 0xf1, 0x8f, 0x6c, 0xfb, 0x4a, 0x5b, 0x1d,
+	0xff, 0x3b, 0x82, 0xc3, 0x75, 0x0d, 0x5b, 0xe7, 0x65, 0x6f, 0xef, 0x54, 0xaf, 0xd4, 0x68, 0xfe,
+	0xff, 0xb9, 0x10, 0xc2, 0x9f, 0xca, 0x29, 0x14, 0xa2, 0x7b, 0xef, 0x38, 0x4b, 0x01, 0x18, 0xe9,
+	0x0d, 0x8b, 0x30, 0x40, 0xe1, 0xac, 0xd9, 0xed, 0x89, 0x1d, 0x96, 0xa9, 0x5c, 0xad, 0xb2, 0xa0,
+	0x47, 0xb0, 0x9d, 0x58, 0x10, 0x8b, 0xf0, 0x73, 0x38, 0x50, 0xe5, 0x4e, 0x73, 0xb8, 0xc2, 0x50,
+	0x18, 0xcc, 0xc2, 0x4e, 0x74, 0xe8, 0x7f, 0x12, 0xd9, 0x1c, 0x3e, 0x86, 0x17, 0xd1, 0x97, 0x94,
+	0x45, 0x25, 0x3e, 0xd4, 0x92, 0xfe, 0xbc, 0x3d, 0x42, 0x7f, 0xdd, 0x1e, 0xa1, 0xbf, 0x6f, 0x8f,
+	0xd0, 0x2f, 0xff, 0x1c, 0x3d, 0x80, 0x0a, 0x75, 0xce, 0x05, 0xdd, 0xd6, 0x8d, 0x0b, 0x92, 0x55,
+	0x81, 0x56, 0x41, 0xf6, 0xff, 0xe2, 0xb8, 0x3f, 0xec, 0xa5, 0x8e, 0xfe, 0x0b, 0x00, 0x00, 0xff,
+	0xff, 0x8c, 0xf1, 0x3b, 0xce, 0x7f, 0x09, 0x00, 0x00,
 }

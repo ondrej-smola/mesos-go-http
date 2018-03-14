@@ -10,11 +10,12 @@
 	It has these top-level messages:
 		FrameworkID
 		OfferID
-		AgentID
+		SlaveID
 		TaskID
 		ExecutorID
 		ContainerID
 		ResourceProviderID
+		OperationID
 		TimeInfo
 		DurationInfo
 		Address
@@ -28,8 +29,12 @@
 		KillPolicy
 		CommandInfo
 		ExecutorInfo
+		DomainInfo
 		MasterInfo
-		AgentInfo
+		SlaveInfo
+		CSIPluginContainerInfo
+		CSIPluginInfo
+		ResourceProviderInfo
 		Value
 		Attribute
 		Resource
@@ -49,6 +54,10 @@
 		TaskInfo
 		TaskGroupInfo
 		Task
+		TaskResourceLimitation
+		UUID
+		Operation
+		OperationStatus
 		CheckStatusInfo
 		TaskStatus
 		Filters
@@ -61,6 +70,7 @@
 		RateLimit
 		RateLimits
 		Image
+		MountPropagation
 		Volume
 		NetworkInfo
 		CapabilityInfo
@@ -163,13 +173,18 @@ const (
 	TaskState_TASK_RUNNING  TaskState = 1
 	// NOTE: This should only be sent when the framework has
 	// the TASK_KILLING_STATE capability.
-	TaskState_TASK_KILLING  TaskState = 8
+	TaskState_TASK_KILLING TaskState = 8
+	// The task finished successfully on its own without external interference.
 	TaskState_TASK_FINISHED TaskState = 2
 	TaskState_TASK_FAILED   TaskState = 3
 	TaskState_TASK_KILLED   TaskState = 4
 	TaskState_TASK_ERROR    TaskState = 7
 	// In Mesos 1.3, this will only be sent when the framework does NOT
 	// opt-in to the PARTITION_AWARE capability.
+	//
+	// NOTE: This state is not always terminal. For example, tasks might
+	// transition from TASK_LOST to TASK_RUNNING or other states when a
+	// partitioned agent re-registers.
 	TaskState_TASK_LOST TaskState = 5
 	// The task failed to launch because of a transient error. The
 	// task's executor never started running. Unlike TASK_ERROR, the
@@ -253,22 +268,76 @@ func (x *TaskState) UnmarshalJSON(data []byte) error {
 }
 func (TaskState) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{1} }
 
+// *
+// Describes possible operation states.
+type OperationState int32
+
+const (
+	// Default value if the enum is not set. See MESOS-4997.
+	OperationState_OPERATION_UNSUPPORTED OperationState = 0
+	// Initial state.
+	OperationState_OPERATION_PENDING OperationState = 1
+	// TERMINAL: The operation was successfully applied.
+	OperationState_OPERATION_FINISHED OperationState = 2
+	// TERMINAL: The operation failed to apply.
+	OperationState_OPERATION_FAILED OperationState = 3
+	// TERMINAL: The operation description contains an error.
+	OperationState_OPERATION_ERROR OperationState = 4
+	// TERMINAL: The operation was dropped due to a transient error.
+	OperationState_OPERATION_DROPPED OperationState = 5
+)
+
+var OperationState_name = map[int32]string{
+	0: "OPERATION_UNSUPPORTED",
+	1: "OPERATION_PENDING",
+	2: "OPERATION_FINISHED",
+	3: "OPERATION_FAILED",
+	4: "OPERATION_ERROR",
+	5: "OPERATION_DROPPED",
+}
+var OperationState_value = map[string]int32{
+	"OPERATION_UNSUPPORTED": 0,
+	"OPERATION_PENDING":     1,
+	"OPERATION_FINISHED":    2,
+	"OPERATION_FAILED":      3,
+	"OPERATION_ERROR":       4,
+	"OPERATION_DROPPED":     5,
+}
+
+func (x OperationState) Enum() *OperationState {
+	p := new(OperationState)
+	*p = x
+	return p
+}
+func (x OperationState) String() string {
+	return proto.EnumName(OperationState_name, int32(x))
+}
+func (x *OperationState) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(OperationState_value, data, "OperationState")
+	if err != nil {
+		return err
+	}
+	*x = OperationState(value)
+	return nil
+}
+func (OperationState) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{2} }
+
 // Describes the several states that a machine can be in.  A `Mode`
-// applies to a machine and to all associated agents on the machine.
+// applies to a machine and to all associated slaves on the machine.
 type MachineInfo_Mode int32
 
 const (
 	// In this mode, a machine is behaving normally;
 	// offering resources, executing tasks, etc.
 	MachineInfo_UP MachineInfo_Mode = 1
-	// In this mode, all agents on the machine are expected to cooperate with
+	// In this mode, all slaves on the machine are expected to cooperate with
 	// frameworks to drain resources.  In general, draining is done ahead of
 	// a pending `unavailability`.  The resources should be drained so as to
 	// maximize utilization prior to the maintenance but without knowingly
 	// violating the frameworks' requirements.
 	MachineInfo_DRAINING MachineInfo_Mode = 2
 	// In this mode, a machine is not running any tasks and will not offer
-	// any of its resources.  Agents on the machine will not be allowed to
+	// any of its resources.  Slaves on the machine will not be allowed to
 	// register with the master.
 	MachineInfo_DOWN MachineInfo_Mode = 3
 )
@@ -300,7 +369,7 @@ func (x *MachineInfo_Mode) UnmarshalJSON(data []byte) error {
 	*x = MachineInfo_Mode(value)
 	return nil
 }
-func (MachineInfo_Mode) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{13, 0} }
+func (MachineInfo_Mode) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{14, 0} }
 
 type FrameworkInfo_Capability_Type int32
 
@@ -341,14 +410,16 @@ const (
 	// Frameworks that enable this capability can define how they
 	// would like to handle partitioned tasks. Frameworks will
 	// receive TASK_UNREACHABLE for tasks on agents that are
-	// partitioned from the master. If/when a partitioned agent
-	// reregisters, tasks on the agent that were started by
-	// PARTITION_AWARE frameworks will not killed.
+	// partitioned from the master.
 	//
 	// Without this capability, frameworks will receive TASK_LOST
-	// for tasks on partitioned agents; such tasks will be killed by
-	// Mesos when the agent reregisters (unless the master has
-	// failed over).
+	// for tasks on partitioned agents.
+	// NOTE: Prior to Mesos 1.5, such tasks will be killed by Mesos
+	// when the agent reregisters (unless the master has failed over).
+	// However due to the lack of benefit in maintaining different
+	// behaviors depending on whether the master has failed over
+	// (see MESOS-7215), as of 1.5, Mesos will not kill these
+	// tasks in either case.
 	FrameworkInfo_Capability_PARTITION_AWARE FrameworkInfo_Capability_Type = 5
 	// This expresses the ability for the framework to be
 	// "multi-tenant" via using the newly introduced `roles`
@@ -357,10 +428,43 @@ const (
 	// expect that "single-tenant" schedulers eventually
 	// provide this and move away from the deprecated
 	// `role` field.
-	//
-	// NOTE: The implementation for supporting multiple
-	// roles is not complete, DO NOT USE THIS.
 	FrameworkInfo_Capability_MULTI_ROLE FrameworkInfo_Capability_Type = 6
+	// This capability has two effects for a framework.
+	//
+	// (1) The framework is offered resources in a new format.
+	//
+	//     The offered resources have the `Resource.reservations` field set
+	//     rather than `Resource.role` and `Resource.reservation`. In short,
+	//     an empty `reservations` field denotes unreserved resources, and
+	//     each `ReservationInfo` in the `reservations` field denotes a
+	//     reservation that refines the previous one.
+	//
+	//     See the 'Resource Format' section for more details.
+	//
+	// (2) The framework can create refined reservations.
+	//
+	//     A framework can refine an existing reservation via the
+	//     `Resource.reservations` field. For example, a reservation for role
+	//     `eng` can be refined to `eng/front_end`.
+	//
+	//     See `ReservationInfo.reservations` for more details.
+	//
+	// NOTE: Without this capability, a framework is not offered resources
+	// that have refined reservations. A resource is said to have refined
+	// reservations if it uses the `Resource.reservations` field, and
+	// `Resource.reservations_size() > 1`.
+	FrameworkInfo_Capability_RESERVATION_REFINEMENT FrameworkInfo_Capability_Type = 7
+	// Indicates that the framework is prepared to receive offers
+	// for agents whose region is different from the master's
+	// region. Network links between hosts in different regions
+	// typically have higher latency and lower bandwidth than
+	// network links within a region, so frameworks should be
+	// careful to only place suitable workloads in remote regions.
+	// Frameworks that are not region-aware will never receive
+	// offers for remote agents; region-aware frameworks are assumed
+	// to implement their own logic to decide which workloads (if
+	// any) are suitable for placement on remote agents.
+	FrameworkInfo_Capability_REGION_AWARE FrameworkInfo_Capability_Type = 8
 )
 
 var FrameworkInfo_Capability_Type_name = map[int32]string{
@@ -371,15 +475,19 @@ var FrameworkInfo_Capability_Type_name = map[int32]string{
 	4: "SHARED_RESOURCES",
 	5: "PARTITION_AWARE",
 	6: "MULTI_ROLE",
+	7: "RESERVATION_REFINEMENT",
+	8: "REGION_AWARE",
 }
 var FrameworkInfo_Capability_Type_value = map[string]int32{
-	"UNKNOWN":             0,
-	"REVOCABLE_RESOURCES": 1,
-	"TASK_KILLING_STATE":  2,
-	"GPU_RESOURCES":       3,
-	"SHARED_RESOURCES":    4,
-	"PARTITION_AWARE":     5,
-	"MULTI_ROLE":          6,
+	"UNKNOWN":                0,
+	"REVOCABLE_RESOURCES":    1,
+	"TASK_KILLING_STATE":     2,
+	"GPU_RESOURCES":          3,
+	"SHARED_RESOURCES":       4,
+	"PARTITION_AWARE":        5,
+	"MULTI_ROLE":             6,
+	"RESERVATION_REFINEMENT": 7,
+	"REGION_AWARE":           8,
 }
 
 func (x FrameworkInfo_Capability_Type) Enum() *FrameworkInfo_Capability_Type {
@@ -399,7 +507,7 @@ func (x *FrameworkInfo_Capability_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (FrameworkInfo_Capability_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{14, 0, 0}
+	return fileDescriptorMesos, []int{15, 0, 0}
 }
 
 type CheckInfo_Type int32
@@ -440,7 +548,7 @@ func (x *CheckInfo_Type) UnmarshalJSON(data []byte) error {
 	*x = CheckInfo_Type(value)
 	return nil
 }
-func (CheckInfo_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{15, 0} }
+func (CheckInfo_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{16, 0} }
 
 type HealthCheck_Type int32
 
@@ -480,7 +588,7 @@ func (x *HealthCheck_Type) UnmarshalJSON(data []byte) error {
 	*x = HealthCheck_Type(value)
 	return nil
 }
-func (HealthCheck_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{16, 0} }
+func (HealthCheck_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{17, 0} }
 
 type ExecutorInfo_Type int32
 
@@ -494,7 +602,7 @@ const (
 	// 1) `command` must not be set when using a default executor.
 	//
 	// 2) Default executor only accepts a *single* `LAUNCH` or `LAUNCH_GROUP`
-	//    offer operation.
+	//    operation.
 	//
 	// 3) If `container` is set, `container.type` must be `MESOS`
 	//    and `container.mesos.image` must not be set.
@@ -532,51 +640,179 @@ func (x *ExecutorInfo_Type) UnmarshalJSON(data []byte) error {
 	*x = ExecutorInfo_Type(value)
 	return nil
 }
-func (ExecutorInfo_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{19, 0} }
+func (ExecutorInfo_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{20, 0} }
 
-type AgentInfo_Capability_Type int32
+type MasterInfo_Capability_Type int32
+
+const (
+	MasterInfo_Capability_UNKNOWN MasterInfo_Capability_Type = 0
+	// The master can handle slaves whose state
+	// changes after re-registering.
+	MasterInfo_Capability_AGENT_UPDATE MasterInfo_Capability_Type = 1
+)
+
+var MasterInfo_Capability_Type_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "AGENT_UPDATE",
+}
+var MasterInfo_Capability_Type_value = map[string]int32{
+	"UNKNOWN":      0,
+	"AGENT_UPDATE": 1,
+}
+
+func (x MasterInfo_Capability_Type) Enum() *MasterInfo_Capability_Type {
+	p := new(MasterInfo_Capability_Type)
+	*p = x
+	return p
+}
+func (x MasterInfo_Capability_Type) String() string {
+	return proto.EnumName(MasterInfo_Capability_Type_name, int32(x))
+}
+func (x *MasterInfo_Capability_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(MasterInfo_Capability_Type_value, data, "MasterInfo_Capability_Type")
+	if err != nil {
+		return err
+	}
+	*x = MasterInfo_Capability_Type(value)
+	return nil
+}
+func (MasterInfo_Capability_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{22, 0, 0}
+}
+
+type SlaveInfo_Capability_Type int32
 
 const (
 	// This must be the first enum value in this list, to
 	// ensure that if 'type' is not set, the default value
 	// is UNKNOWN. This enables enum values to be added
 	// in a backwards-compatible way. See: MESOS-4997.
-	AgentInfo_Capability_UNKNOWN AgentInfo_Capability_Type = 0
+	SlaveInfo_Capability_UNKNOWN SlaveInfo_Capability_Type = 0
 	// This expresses the ability for the agent to be able
 	// to launch tasks of a 'multi-role' framework.
+	SlaveInfo_Capability_MULTI_ROLE SlaveInfo_Capability_Type = 1
+	// This expresses the ability for the agent to be able to launch
+	// tasks, reserve resources, and create volumes using resources
+	// allocated to a 'hierarchical-role'.
+	// NOTE: This capability is required specifically for creating
+	// volumes because a hierchical role includes '/' (slashes) in them.
+	// Agents with this capability know to transform the '/' (slashes)
+	// into ' ' (spaces).
+	SlaveInfo_Capability_HIERARCHICAL_ROLE SlaveInfo_Capability_Type = 2
+	// This capability has three effects for an agent.
 	//
-	// NOTE: The implementation for supporting multiple
-	// roles is not complete, DO NOT USE THIS.
-	AgentInfo_Capability_MULTI_ROLE AgentInfo_Capability_Type = 1
+	// (1) The format of the checkpointed resources, and
+	//     the resources reported to master.
+	//
+	//     These resources are reported in the "pre-reservation-refinement"
+	//     format if none of the resources have refined reservations. If any
+	//     of the resources have refined reservations, they are reported in
+	//     the "post-reservation-refinement" format. The purpose is to allow
+	//     downgrading of an agent as well as communication with a pre-1.4.0
+	//     master until the reservation refinement feature is actually used.
+	//
+	//     See the 'Resource Format' section for more details.
+	//
+	// (2) The format of the resources reported by the HTTP endpoints.
+	//
+	//     For resources reported by agent endpoints, the
+	//     "pre-reservation-refinement" format is "injected" if possible.
+	//     That is, resources without refined reservations will have the
+	//     `Resource.role` and `Resource.reservation` set, whereas
+	//     resources with refined reservations will not.
+	//
+	//     See the 'Resource Format' section for more details.
+	//
+	// (3) The ability for the agent to launch tasks, reserve resources, and
+	//     create volumes using resources that have refined reservations.
+	//
+	//     See `ReservationInfo.reservations` section for more details.
+	//
+	// NOTE: Resources are said to have refined reservations if it uses the
+	// `Resource.reservations` field, and `Resource.reservations_size() > 1`.
+	SlaveInfo_Capability_RESERVATION_REFINEMENT SlaveInfo_Capability_Type = 3
+	// This expresses the ability for the agent to handle resource
+	// provider related operations. This includes the following:
+	//
+	// (1) The ability to report resources that are provided by some
+	//     local resource providers through the resource provider API.
+	//
+	// (2) The ability to provide operation feedback.
+	SlaveInfo_Capability_RESOURCE_PROVIDER SlaveInfo_Capability_Type = 4
 )
 
-var AgentInfo_Capability_Type_name = map[int32]string{
+var SlaveInfo_Capability_Type_name = map[int32]string{
 	0: "UNKNOWN",
 	1: "MULTI_ROLE",
+	2: "HIERARCHICAL_ROLE",
+	3: "RESERVATION_REFINEMENT",
+	4: "RESOURCE_PROVIDER",
 }
-var AgentInfo_Capability_Type_value = map[string]int32{
-	"UNKNOWN":    0,
-	"MULTI_ROLE": 1,
+var SlaveInfo_Capability_Type_value = map[string]int32{
+	"UNKNOWN":                0,
+	"MULTI_ROLE":             1,
+	"HIERARCHICAL_ROLE":      2,
+	"RESERVATION_REFINEMENT": 3,
+	"RESOURCE_PROVIDER":      4,
 }
 
-func (x AgentInfo_Capability_Type) Enum() *AgentInfo_Capability_Type {
-	p := new(AgentInfo_Capability_Type)
+func (x SlaveInfo_Capability_Type) Enum() *SlaveInfo_Capability_Type {
+	p := new(SlaveInfo_Capability_Type)
 	*p = x
 	return p
 }
-func (x AgentInfo_Capability_Type) String() string {
-	return proto.EnumName(AgentInfo_Capability_Type_name, int32(x))
+func (x SlaveInfo_Capability_Type) String() string {
+	return proto.EnumName(SlaveInfo_Capability_Type_name, int32(x))
 }
-func (x *AgentInfo_Capability_Type) UnmarshalJSON(data []byte) error {
-	value, err := proto.UnmarshalJSONEnum(AgentInfo_Capability_Type_value, data, "AgentInfo_Capability_Type")
+func (x *SlaveInfo_Capability_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(SlaveInfo_Capability_Type_value, data, "SlaveInfo_Capability_Type")
 	if err != nil {
 		return err
 	}
-	*x = AgentInfo_Capability_Type(value)
+	*x = SlaveInfo_Capability_Type(value)
 	return nil
 }
-func (AgentInfo_Capability_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{21, 0, 0}
+func (SlaveInfo_Capability_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{23, 0, 0}
+}
+
+type CSIPluginContainerInfo_Service int32
+
+const (
+	CSIPluginContainerInfo_UNKNOWN            CSIPluginContainerInfo_Service = 0
+	CSIPluginContainerInfo_CONTROLLER_SERVICE CSIPluginContainerInfo_Service = 1
+	CSIPluginContainerInfo_NODE_SERVICE       CSIPluginContainerInfo_Service = 2
+)
+
+var CSIPluginContainerInfo_Service_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "CONTROLLER_SERVICE",
+	2: "NODE_SERVICE",
+}
+var CSIPluginContainerInfo_Service_value = map[string]int32{
+	"UNKNOWN":            0,
+	"CONTROLLER_SERVICE": 1,
+	"NODE_SERVICE":       2,
+}
+
+func (x CSIPluginContainerInfo_Service) Enum() *CSIPluginContainerInfo_Service {
+	p := new(CSIPluginContainerInfo_Service)
+	*p = x
+	return p
+}
+func (x CSIPluginContainerInfo_Service) String() string {
+	return proto.EnumName(CSIPluginContainerInfo_Service_name, int32(x))
+}
+func (x *CSIPluginContainerInfo_Service) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(CSIPluginContainerInfo_Service_value, data, "CSIPluginContainerInfo_Service")
+	if err != nil {
+		return err
+	}
+	*x = CSIPluginContainerInfo_Service(value)
+	return nil
+}
+func (CSIPluginContainerInfo_Service) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{24, 0}
 }
 
 type Value_Type int32
@@ -617,7 +853,46 @@ func (x *Value_Type) UnmarshalJSON(data []byte) error {
 	*x = Value_Type(value)
 	return nil
 }
-func (Value_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22, 0} }
+func (Value_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27, 0} }
+
+type Resource_ReservationInfo_Type int32
+
+const (
+	Resource_ReservationInfo_UNKNOWN Resource_ReservationInfo_Type = 0
+	Resource_ReservationInfo_STATIC  Resource_ReservationInfo_Type = 1
+	Resource_ReservationInfo_DYNAMIC Resource_ReservationInfo_Type = 2
+)
+
+var Resource_ReservationInfo_Type_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "STATIC",
+	2: "DYNAMIC",
+}
+var Resource_ReservationInfo_Type_value = map[string]int32{
+	"UNKNOWN": 0,
+	"STATIC":  1,
+	"DYNAMIC": 2,
+}
+
+func (x Resource_ReservationInfo_Type) Enum() *Resource_ReservationInfo_Type {
+	p := new(Resource_ReservationInfo_Type)
+	*p = x
+	return p
+}
+func (x Resource_ReservationInfo_Type) String() string {
+	return proto.EnumName(Resource_ReservationInfo_Type_name, int32(x))
+}
+func (x *Resource_ReservationInfo_Type) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(Resource_ReservationInfo_Type_value, data, "Resource_ReservationInfo_Type")
+	if err != nil {
+		return err
+	}
+	*x = Resource_ReservationInfo_Type(value)
+	return nil
+}
+func (Resource_ReservationInfo_Type) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{29, 1, 0}
+}
 
 type Resource_DiskInfo_Source_Type int32
 
@@ -625,17 +900,23 @@ const (
 	Resource_DiskInfo_Source_UNKNOWN Resource_DiskInfo_Source_Type = 0
 	Resource_DiskInfo_Source_PATH    Resource_DiskInfo_Source_Type = 1
 	Resource_DiskInfo_Source_MOUNT   Resource_DiskInfo_Source_Type = 2
+	Resource_DiskInfo_Source_BLOCK   Resource_DiskInfo_Source_Type = 3
+	Resource_DiskInfo_Source_RAW     Resource_DiskInfo_Source_Type = 4
 )
 
 var Resource_DiskInfo_Source_Type_name = map[int32]string{
 	0: "UNKNOWN",
 	1: "PATH",
 	2: "MOUNT",
+	3: "BLOCK",
+	4: "RAW",
 }
 var Resource_DiskInfo_Source_Type_value = map[string]int32{
 	"UNKNOWN": 0,
 	"PATH":    1,
 	"MOUNT":   2,
+	"BLOCK":   3,
+	"RAW":     4,
 }
 
 func (x Resource_DiskInfo_Source_Type) Enum() *Resource_DiskInfo_Source_Type {
@@ -655,38 +936,50 @@ func (x *Resource_DiskInfo_Source_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Resource_DiskInfo_Source_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{24, 2, 1, 0}
+	return fileDescriptorMesos, []int{29, 2, 1, 0}
 }
 
 type Offer_Operation_Type int32
 
 const (
-	Offer_Operation_UNKNOWN      Offer_Operation_Type = 0
-	Offer_Operation_LAUNCH       Offer_Operation_Type = 1
-	Offer_Operation_LAUNCH_GROUP Offer_Operation_Type = 6
-	Offer_Operation_RESERVE      Offer_Operation_Type = 2
-	Offer_Operation_UNRESERVE    Offer_Operation_Type = 3
-	Offer_Operation_CREATE       Offer_Operation_Type = 4
-	Offer_Operation_DESTROY      Offer_Operation_Type = 5
+	Offer_Operation_UNKNOWN        Offer_Operation_Type = 0
+	Offer_Operation_LAUNCH         Offer_Operation_Type = 1
+	Offer_Operation_LAUNCH_GROUP   Offer_Operation_Type = 6
+	Offer_Operation_RESERVE        Offer_Operation_Type = 2
+	Offer_Operation_UNRESERVE      Offer_Operation_Type = 3
+	Offer_Operation_CREATE         Offer_Operation_Type = 4
+	Offer_Operation_DESTROY        Offer_Operation_Type = 5
+	Offer_Operation_CREATE_VOLUME  Offer_Operation_Type = 7
+	Offer_Operation_DESTROY_VOLUME Offer_Operation_Type = 8
+	Offer_Operation_CREATE_BLOCK   Offer_Operation_Type = 9
+	Offer_Operation_DESTROY_BLOCK  Offer_Operation_Type = 10
 )
 
 var Offer_Operation_Type_name = map[int32]string{
-	0: "UNKNOWN",
-	1: "LAUNCH",
-	6: "LAUNCH_GROUP",
-	2: "RESERVE",
-	3: "UNRESERVE",
-	4: "CREATE",
-	5: "DESTROY",
+	0:  "UNKNOWN",
+	1:  "LAUNCH",
+	6:  "LAUNCH_GROUP",
+	2:  "RESERVE",
+	3:  "UNRESERVE",
+	4:  "CREATE",
+	5:  "DESTROY",
+	7:  "CREATE_VOLUME",
+	8:  "DESTROY_VOLUME",
+	9:  "CREATE_BLOCK",
+	10: "DESTROY_BLOCK",
 }
 var Offer_Operation_Type_value = map[string]int32{
-	"UNKNOWN":      0,
-	"LAUNCH":       1,
-	"LAUNCH_GROUP": 6,
-	"RESERVE":      2,
-	"UNRESERVE":    3,
-	"CREATE":       4,
-	"DESTROY":      5,
+	"UNKNOWN":        0,
+	"LAUNCH":         1,
+	"LAUNCH_GROUP":   6,
+	"RESERVE":        2,
+	"UNRESERVE":      3,
+	"CREATE":         4,
+	"DESTROY":        5,
+	"CREATE_VOLUME":  7,
+	"DESTROY_VOLUME": 8,
+	"CREATE_BLOCK":   9,
+	"DESTROY_BLOCK":  10,
 }
 
 func (x Offer_Operation_Type) Enum() *Offer_Operation_Type {
@@ -706,7 +999,7 @@ func (x *Offer_Operation_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Offer_Operation_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{36, 0, 0}
+	return fileDescriptorMesos, []int{41, 0, 0}
 }
 
 // Describes the source of the task status update.
@@ -714,18 +1007,18 @@ type TaskStatus_Source int32
 
 const (
 	TaskStatus_SOURCE_MASTER   TaskStatus_Source = 0
-	TaskStatus_SOURCE_AGENT    TaskStatus_Source = 1
+	TaskStatus_SOURCE_SLAVE    TaskStatus_Source = 1
 	TaskStatus_SOURCE_EXECUTOR TaskStatus_Source = 2
 )
 
 var TaskStatus_Source_name = map[int32]string{
 	0: "SOURCE_MASTER",
-	1: "SOURCE_AGENT",
+	1: "SOURCE_SLAVE",
 	2: "SOURCE_EXECUTOR",
 }
 var TaskStatus_Source_value = map[string]int32{
 	"SOURCE_MASTER":   0,
-	"SOURCE_AGENT":    1,
+	"SOURCE_SLAVE":    1,
 	"SOURCE_EXECUTOR": 2,
 }
 
@@ -745,47 +1038,49 @@ func (x *TaskStatus_Source) UnmarshalJSON(data []byte) error {
 	*x = TaskStatus_Source(value)
 	return nil
 }
-func (TaskStatus_Source) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{42, 0} }
+func (TaskStatus_Source) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{51, 0} }
 
 // Detailed reason for the task status update.
-//
-// TODO(bmahler): Differentiate between agent removal reasons
-// (e.g. unhealthy vs. unregistered for maintenance).
+// Refer to docs/task-state-reasons.md for additional explanation.
 type TaskStatus_Reason int32
 
 const (
 	// TODO(jieyu): The default value when a caller doesn't check for
 	// presence is 0 and so ideally the 0 reason is not a valid one.
 	// Since this is not used anywhere, consider removing this reason.
-	TaskStatus_REASON_COMMAND_EXECUTOR_FAILED         TaskStatus_Reason = 0
-	TaskStatus_REASON_CONTAINER_LAUNCH_FAILED         TaskStatus_Reason = 21
-	TaskStatus_REASON_CONTAINER_LIMITATION            TaskStatus_Reason = 19
-	TaskStatus_REASON_CONTAINER_LIMITATION_DISK       TaskStatus_Reason = 20
-	TaskStatus_REASON_CONTAINER_LIMITATION_MEMORY     TaskStatus_Reason = 8
-	TaskStatus_REASON_CONTAINER_PREEMPTED             TaskStatus_Reason = 17
-	TaskStatus_REASON_CONTAINER_UPDATE_FAILED         TaskStatus_Reason = 22
-	TaskStatus_REASON_EXECUTOR_REGISTRATION_TIMEOUT   TaskStatus_Reason = 23
-	TaskStatus_REASON_EXECUTOR_REREGISTRATION_TIMEOUT TaskStatus_Reason = 24
-	TaskStatus_REASON_EXECUTOR_TERMINATED             TaskStatus_Reason = 1
-	TaskStatus_REASON_EXECUTOR_UNREGISTERED           TaskStatus_Reason = 2
-	TaskStatus_REASON_FRAMEWORK_REMOVED               TaskStatus_Reason = 3
-	TaskStatus_REASON_GC_ERROR                        TaskStatus_Reason = 4
-	TaskStatus_REASON_INVALID_FRAMEWORKID             TaskStatus_Reason = 5
-	TaskStatus_REASON_INVALID_OFFERS                  TaskStatus_Reason = 6
-	TaskStatus_REASON_IO_SWITCHBOARD_EXITED           TaskStatus_Reason = 27
-	TaskStatus_REASON_MASTER_DISCONNECTED             TaskStatus_Reason = 7
-	TaskStatus_REASON_RECONCILIATION                  TaskStatus_Reason = 9
-	TaskStatus_REASON_RESOURCES_UNKNOWN               TaskStatus_Reason = 18
-	TaskStatus_REASON_AGENT_DISCONNECTED              TaskStatus_Reason = 10
-	TaskStatus_REASON_AGENT_REMOVED                   TaskStatus_Reason = 11
-	TaskStatus_REASON_AGENT_RESTARTED                 TaskStatus_Reason = 12
-	TaskStatus_REASON_AGENT_UNKNOWN                   TaskStatus_Reason = 13
-	TaskStatus_REASON_TASK_CHECK_STATUS_UPDATED       TaskStatus_Reason = 28
-	TaskStatus_REASON_TASK_GROUP_INVALID              TaskStatus_Reason = 25
-	TaskStatus_REASON_TASK_GROUP_UNAUTHORIZED         TaskStatus_Reason = 26
-	TaskStatus_REASON_TASK_INVALID                    TaskStatus_Reason = 14
-	TaskStatus_REASON_TASK_UNAUTHORIZED               TaskStatus_Reason = 15
-	TaskStatus_REASON_TASK_UNKNOWN                    TaskStatus_Reason = 16
+	TaskStatus_REASON_COMMAND_EXECUTOR_FAILED          TaskStatus_Reason = 0
+	TaskStatus_REASON_CONTAINER_LAUNCH_FAILED          TaskStatus_Reason = 21
+	TaskStatus_REASON_CONTAINER_LIMITATION             TaskStatus_Reason = 19
+	TaskStatus_REASON_CONTAINER_LIMITATION_DISK        TaskStatus_Reason = 20
+	TaskStatus_REASON_CONTAINER_LIMITATION_MEMORY      TaskStatus_Reason = 8
+	TaskStatus_REASON_CONTAINER_PREEMPTED              TaskStatus_Reason = 17
+	TaskStatus_REASON_CONTAINER_UPDATE_FAILED          TaskStatus_Reason = 22
+	TaskStatus_REASON_EXECUTOR_REGISTRATION_TIMEOUT    TaskStatus_Reason = 23
+	TaskStatus_REASON_EXECUTOR_REREGISTRATION_TIMEOUT  TaskStatus_Reason = 24
+	TaskStatus_REASON_EXECUTOR_TERMINATED              TaskStatus_Reason = 1
+	TaskStatus_REASON_EXECUTOR_UNREGISTERED            TaskStatus_Reason = 2
+	TaskStatus_REASON_FRAMEWORK_REMOVED                TaskStatus_Reason = 3
+	TaskStatus_REASON_GC_ERROR                         TaskStatus_Reason = 4
+	TaskStatus_REASON_INVALID_FRAMEWORKID              TaskStatus_Reason = 5
+	TaskStatus_REASON_INVALID_OFFERS                   TaskStatus_Reason = 6
+	TaskStatus_REASON_IO_SWITCHBOARD_EXITED            TaskStatus_Reason = 27
+	TaskStatus_REASON_MASTER_DISCONNECTED              TaskStatus_Reason = 7
+	TaskStatus_REASON_RECONCILIATION                   TaskStatus_Reason = 9
+	TaskStatus_REASON_RESOURCES_UNKNOWN                TaskStatus_Reason = 18
+	TaskStatus_REASON_SLAVE_DISCONNECTED               TaskStatus_Reason = 10
+	TaskStatus_REASON_SLAVE_REMOVED                    TaskStatus_Reason = 11
+	TaskStatus_REASON_SLAVE_REMOVED_BY_OPERATOR        TaskStatus_Reason = 31
+	TaskStatus_REASON_SLAVE_REREGISTERED               TaskStatus_Reason = 32
+	TaskStatus_REASON_SLAVE_RESTARTED                  TaskStatus_Reason = 12
+	TaskStatus_REASON_SLAVE_UNKNOWN                    TaskStatus_Reason = 13
+	TaskStatus_REASON_TASK_KILLED_DURING_LAUNCH        TaskStatus_Reason = 30
+	TaskStatus_REASON_TASK_CHECK_STATUS_UPDATED        TaskStatus_Reason = 28
+	TaskStatus_REASON_TASK_HEALTH_CHECK_STATUS_UPDATED TaskStatus_Reason = 29
+	TaskStatus_REASON_TASK_GROUP_INVALID               TaskStatus_Reason = 25
+	TaskStatus_REASON_TASK_GROUP_UNAUTHORIZED          TaskStatus_Reason = 26
+	TaskStatus_REASON_TASK_INVALID                     TaskStatus_Reason = 14
+	TaskStatus_REASON_TASK_UNAUTHORIZED                TaskStatus_Reason = 15
+	TaskStatus_REASON_TASK_UNKNOWN                     TaskStatus_Reason = 16
 )
 
 var TaskStatus_Reason_name = map[int32]string{
@@ -808,11 +1103,15 @@ var TaskStatus_Reason_name = map[int32]string{
 	7:  "REASON_MASTER_DISCONNECTED",
 	9:  "REASON_RECONCILIATION",
 	18: "REASON_RESOURCES_UNKNOWN",
-	10: "REASON_AGENT_DISCONNECTED",
-	11: "REASON_AGENT_REMOVED",
-	12: "REASON_AGENT_RESTARTED",
-	13: "REASON_AGENT_UNKNOWN",
+	10: "REASON_SLAVE_DISCONNECTED",
+	11: "REASON_SLAVE_REMOVED",
+	31: "REASON_SLAVE_REMOVED_BY_OPERATOR",
+	32: "REASON_SLAVE_REREGISTERED",
+	12: "REASON_SLAVE_RESTARTED",
+	13: "REASON_SLAVE_UNKNOWN",
+	30: "REASON_TASK_KILLED_DURING_LAUNCH",
 	28: "REASON_TASK_CHECK_STATUS_UPDATED",
+	29: "REASON_TASK_HEALTH_CHECK_STATUS_UPDATED",
 	25: "REASON_TASK_GROUP_INVALID",
 	26: "REASON_TASK_GROUP_UNAUTHORIZED",
 	14: "REASON_TASK_INVALID",
@@ -820,35 +1119,39 @@ var TaskStatus_Reason_name = map[int32]string{
 	16: "REASON_TASK_UNKNOWN",
 }
 var TaskStatus_Reason_value = map[string]int32{
-	"REASON_COMMAND_EXECUTOR_FAILED":         0,
-	"REASON_CONTAINER_LAUNCH_FAILED":         21,
-	"REASON_CONTAINER_LIMITATION":            19,
-	"REASON_CONTAINER_LIMITATION_DISK":       20,
-	"REASON_CONTAINER_LIMITATION_MEMORY":     8,
-	"REASON_CONTAINER_PREEMPTED":             17,
-	"REASON_CONTAINER_UPDATE_FAILED":         22,
-	"REASON_EXECUTOR_REGISTRATION_TIMEOUT":   23,
-	"REASON_EXECUTOR_REREGISTRATION_TIMEOUT": 24,
-	"REASON_EXECUTOR_TERMINATED":             1,
-	"REASON_EXECUTOR_UNREGISTERED":           2,
-	"REASON_FRAMEWORK_REMOVED":               3,
-	"REASON_GC_ERROR":                        4,
-	"REASON_INVALID_FRAMEWORKID":             5,
-	"REASON_INVALID_OFFERS":                  6,
-	"REASON_IO_SWITCHBOARD_EXITED":           27,
-	"REASON_MASTER_DISCONNECTED":             7,
-	"REASON_RECONCILIATION":                  9,
-	"REASON_RESOURCES_UNKNOWN":               18,
-	"REASON_AGENT_DISCONNECTED":              10,
-	"REASON_AGENT_REMOVED":                   11,
-	"REASON_AGENT_RESTARTED":                 12,
-	"REASON_AGENT_UNKNOWN":                   13,
-	"REASON_TASK_CHECK_STATUS_UPDATED":       28,
-	"REASON_TASK_GROUP_INVALID":              25,
-	"REASON_TASK_GROUP_UNAUTHORIZED":         26,
-	"REASON_TASK_INVALID":                    14,
-	"REASON_TASK_UNAUTHORIZED":               15,
-	"REASON_TASK_UNKNOWN":                    16,
+	"REASON_COMMAND_EXECUTOR_FAILED":          0,
+	"REASON_CONTAINER_LAUNCH_FAILED":          21,
+	"REASON_CONTAINER_LIMITATION":             19,
+	"REASON_CONTAINER_LIMITATION_DISK":        20,
+	"REASON_CONTAINER_LIMITATION_MEMORY":      8,
+	"REASON_CONTAINER_PREEMPTED":              17,
+	"REASON_CONTAINER_UPDATE_FAILED":          22,
+	"REASON_EXECUTOR_REGISTRATION_TIMEOUT":    23,
+	"REASON_EXECUTOR_REREGISTRATION_TIMEOUT":  24,
+	"REASON_EXECUTOR_TERMINATED":              1,
+	"REASON_EXECUTOR_UNREGISTERED":            2,
+	"REASON_FRAMEWORK_REMOVED":                3,
+	"REASON_GC_ERROR":                         4,
+	"REASON_INVALID_FRAMEWORKID":              5,
+	"REASON_INVALID_OFFERS":                   6,
+	"REASON_IO_SWITCHBOARD_EXITED":            27,
+	"REASON_MASTER_DISCONNECTED":              7,
+	"REASON_RECONCILIATION":                   9,
+	"REASON_RESOURCES_UNKNOWN":                18,
+	"REASON_SLAVE_DISCONNECTED":               10,
+	"REASON_SLAVE_REMOVED":                    11,
+	"REASON_SLAVE_REMOVED_BY_OPERATOR":        31,
+	"REASON_SLAVE_REREGISTERED":               32,
+	"REASON_SLAVE_RESTARTED":                  12,
+	"REASON_SLAVE_UNKNOWN":                    13,
+	"REASON_TASK_KILLED_DURING_LAUNCH":        30,
+	"REASON_TASK_CHECK_STATUS_UPDATED":        28,
+	"REASON_TASK_HEALTH_CHECK_STATUS_UPDATED": 29,
+	"REASON_TASK_GROUP_INVALID":               25,
+	"REASON_TASK_GROUP_UNAUTHORIZED":          26,
+	"REASON_TASK_INVALID":                     14,
+	"REASON_TASK_UNAUTHORIZED":                15,
+	"REASON_TASK_UNKNOWN":                     16,
 }
 
 func (x TaskStatus_Reason) Enum() *TaskStatus_Reason {
@@ -867,7 +1170,7 @@ func (x *TaskStatus_Reason) UnmarshalJSON(data []byte) error {
 	*x = TaskStatus_Reason(value)
 	return nil
 }
-func (TaskStatus_Reason) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{42, 1} }
+func (TaskStatus_Reason) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{51, 1} }
 
 type Environment_Variable_Type int32
 
@@ -905,7 +1208,7 @@ func (x *Environment_Variable_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Environment_Variable_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{44, 0, 0}
+	return fileDescriptorMesos, []int{53, 0, 0}
 }
 
 type Secret_Type int32
@@ -943,7 +1246,7 @@ func (x *Secret_Type) UnmarshalJSON(data []byte) error {
 	*x = Secret_Type(value)
 	return nil
 }
-func (Secret_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{49, 0} }
+func (Secret_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{58, 0} }
 
 type Image_Type int32
 
@@ -977,7 +1280,53 @@ func (x *Image_Type) UnmarshalJSON(data []byte) error {
 	*x = Image_Type(value)
 	return nil
 }
-func (Image_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{52, 0} }
+func (Image_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{61, 0} }
+
+type MountPropagation_Mode int32
+
+const (
+	MountPropagation_UNKNOWN MountPropagation_Mode = 0
+	// The volume in a container will receive new mounts from the host
+	// or other containers, but filesystems mounted inside the
+	// container won't be propagated to the host or other containers.
+	// This is currently the default behavior for all volumes.
+	MountPropagation_HOST_TO_CONTAINER MountPropagation_Mode = 1
+	// The volume in a container will receive new mounts from the host
+	// or other containers, and its own mounts will be propagated from
+	// the container to the host or other containers.
+	MountPropagation_BIDIRECTIONAL MountPropagation_Mode = 2
+)
+
+var MountPropagation_Mode_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "HOST_TO_CONTAINER",
+	2: "BIDIRECTIONAL",
+}
+var MountPropagation_Mode_value = map[string]int32{
+	"UNKNOWN":           0,
+	"HOST_TO_CONTAINER": 1,
+	"BIDIRECTIONAL":     2,
+}
+
+func (x MountPropagation_Mode) Enum() *MountPropagation_Mode {
+	p := new(MountPropagation_Mode)
+	*p = x
+	return p
+}
+func (x MountPropagation_Mode) String() string {
+	return proto.EnumName(MountPropagation_Mode_name, int32(x))
+}
+func (x *MountPropagation_Mode) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(MountPropagation_Mode_value, data, "MountPropagation_Mode")
+	if err != nil {
+		return err
+	}
+	*x = MountPropagation_Mode(value)
+	return nil
+}
+func (MountPropagation_Mode) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{62, 0}
+}
 
 type Volume_Mode int32
 
@@ -1011,7 +1360,7 @@ func (x *Volume_Mode) UnmarshalJSON(data []byte) error {
 	*x = Volume_Mode(value)
 	return nil
 }
-func (Volume_Mode) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{53, 0} }
+func (Volume_Mode) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{63, 0} }
 
 type Volume_Source_Type int32
 
@@ -1021,8 +1370,9 @@ const (
 	// is UNKNOWN. This enables enum values to be added
 	// in a backwards-compatible way. See: MESOS-4997.
 	Volume_Source_UNKNOWN Volume_Source_Type = 0
-	// TODO(gyliu513): Add HOST_PATH and IMAGE as volume source type.
+	// TODO(gyliu513): Add IMAGE as volume source type.
 	Volume_Source_DOCKER_VOLUME Volume_Source_Type = 1
+	Volume_Source_HOST_PATH     Volume_Source_Type = 4
 	Volume_Source_SANDBOX_PATH  Volume_Source_Type = 2
 	Volume_Source_SECRET        Volume_Source_Type = 3
 )
@@ -1030,12 +1380,14 @@ const (
 var Volume_Source_Type_name = map[int32]string{
 	0: "UNKNOWN",
 	1: "DOCKER_VOLUME",
+	4: "HOST_PATH",
 	2: "SANDBOX_PATH",
 	3: "SECRET",
 }
 var Volume_Source_Type_value = map[string]int32{
 	"UNKNOWN":       0,
 	"DOCKER_VOLUME": 1,
+	"HOST_PATH":     4,
 	"SANDBOX_PATH":  2,
 	"SECRET":        3,
 }
@@ -1057,7 +1409,7 @@ func (x *Volume_Source_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Volume_Source_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{53, 0, 0}
+	return fileDescriptorMesos, []int{63, 0, 0}
 }
 
 type Volume_Source_SandboxPath_Type int32
@@ -1096,7 +1448,7 @@ func (x *Volume_Source_SandboxPath_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (Volume_Source_SandboxPath_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{53, 0, 1, 0}
+	return fileDescriptorMesos, []int{63, 0, 2, 0}
 }
 
 type NetworkInfo_Protocol int32
@@ -1131,7 +1483,7 @@ func (x *NetworkInfo_Protocol) UnmarshalJSON(data []byte) error {
 	*x = NetworkInfo_Protocol(value)
 	return nil
 }
-func (NetworkInfo_Protocol) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{54, 0} }
+func (NetworkInfo_Protocol) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{64, 0} }
 
 // We start the actual values at an offset(1000) because Protobuf 2
 // uses the first value as the default one. Separating the default
@@ -1282,7 +1634,7 @@ func (x *CapabilityInfo_Capability) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (CapabilityInfo_Capability) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{55, 0}
+	return fileDescriptorMesos, []int{65, 0}
 }
 
 type RLimitInfo_RLimit_Type int32
@@ -1363,7 +1715,7 @@ func (x *RLimitInfo_RLimit_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (RLimitInfo_RLimit_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{57, 0, 0}
+	return fileDescriptorMesos, []int{67, 0, 0}
 }
 
 // All container implementation types.
@@ -1399,7 +1751,7 @@ func (x *ContainerInfo_Type) UnmarshalJSON(data []byte) error {
 	*x = ContainerInfo_Type(value)
 	return nil
 }
-func (ContainerInfo_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{59, 0} }
+func (ContainerInfo_Type) EnumDescriptor() ([]byte, []int) { return fileDescriptorMesos, []int{69, 0} }
 
 // Network options.
 type ContainerInfo_DockerInfo_Network int32
@@ -1441,7 +1793,55 @@ func (x *ContainerInfo_DockerInfo_Network) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ContainerInfo_DockerInfo_Network) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{59, 0, 0}
+	return fileDescriptorMesos, []int{69, 0, 0}
+}
+
+type CgroupInfo_Blkio_Operation int32
+
+const (
+	CgroupInfo_Blkio_UNKNOWN CgroupInfo_Blkio_Operation = 0
+	CgroupInfo_Blkio_TOTAL   CgroupInfo_Blkio_Operation = 1
+	CgroupInfo_Blkio_READ    CgroupInfo_Blkio_Operation = 2
+	CgroupInfo_Blkio_WRITE   CgroupInfo_Blkio_Operation = 3
+	CgroupInfo_Blkio_SYNC    CgroupInfo_Blkio_Operation = 4
+	CgroupInfo_Blkio_ASYNC   CgroupInfo_Blkio_Operation = 5
+)
+
+var CgroupInfo_Blkio_Operation_name = map[int32]string{
+	0: "UNKNOWN",
+	1: "TOTAL",
+	2: "READ",
+	3: "WRITE",
+	4: "SYNC",
+	5: "ASYNC",
+}
+var CgroupInfo_Blkio_Operation_value = map[string]int32{
+	"UNKNOWN": 0,
+	"TOTAL":   1,
+	"READ":    2,
+	"WRITE":   3,
+	"SYNC":    4,
+	"ASYNC":   5,
+}
+
+func (x CgroupInfo_Blkio_Operation) Enum() *CgroupInfo_Blkio_Operation {
+	p := new(CgroupInfo_Blkio_Operation)
+	*p = x
+	return p
+}
+func (x CgroupInfo_Blkio_Operation) String() string {
+	return proto.EnumName(CgroupInfo_Blkio_Operation_name, int32(x))
+}
+func (x *CgroupInfo_Blkio_Operation) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(CgroupInfo_Blkio_Operation_value, data, "CgroupInfo_Blkio_Operation")
+	if err != nil {
+		return err
+	}
+	*x = CgroupInfo_Blkio_Operation(value)
+	return nil
+}
+func (CgroupInfo_Blkio_Operation) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{71, 0, 0}
 }
 
 type DiscoveryInfo_Visibility int32
@@ -1480,7 +1880,7 @@ func (x *DiscoveryInfo_Visibility) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (DiscoveryInfo_Visibility) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{66, 0}
+	return fileDescriptorMesos, []int{76, 0}
 }
 
 // *
@@ -1523,20 +1923,20 @@ func (m *OfferID) GetValue() string {
 }
 
 // *
-// A unique ID assigned to an agent. Currently, an agent gets a new ID
+// A unique ID assigned to a slave. Currently, a slave gets a new ID
 // whenever it (re)registers with Mesos. Framework writers shouldn't
-// assume any binding between an agent ID and and a hostname.
-type AgentID struct {
+// assume any binding between a slave ID and and a hostname.
+type SlaveID struct {
 	Value            *string `protobuf:"bytes,1,req,name=value" json:"value,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
-func (m *AgentID) Reset()                    { *m = AgentID{} }
-func (m *AgentID) String() string            { return proto.CompactTextString(m) }
-func (*AgentID) ProtoMessage()               {}
-func (*AgentID) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{2} }
+func (m *SlaveID) Reset()                    { *m = SlaveID{} }
+func (m *SlaveID) String() string            { return proto.CompactTextString(m) }
+func (*SlaveID) ProtoMessage()               {}
+func (*SlaveID) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{2} }
 
-func (m *AgentID) GetValue() string {
+func (m *SlaveID) GetValue() string {
 	if m != nil && m.Value != nil {
 		return *m.Value
 	}
@@ -1547,8 +1947,8 @@ func (m *AgentID) GetValue() string {
 // A framework-generated ID to distinguish a task. The ID must remain
 // unique while the task is active. A framework can reuse an ID _only_
 // if the previous task with the same ID has reached a terminal state
-// (e.g., TASK_FINISHED, TASK_LOST, TASK_KILLED, etc.). However,
-// reusing task IDs is strongly discouraged (MESOS-2198).
+// (e.g., TASK_FINISHED, TASK_KILLED, etc.). However, reusing task IDs
+// is strongly discouraged (MESOS-2198).
 type TaskID struct {
 	Value            *string `protobuf:"bytes,1,req,name=value" json:"value,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
@@ -1568,7 +1968,7 @@ func (m *TaskID) GetValue() string {
 
 // *
 // A framework-generated ID to distinguish an executor. Only one
-// executor with the same ID can be active on the same agent at a
+// executor with the same ID can be active on the same slave at a
 // time. However, reusing executor IDs is discouraged.
 type ExecutorID struct {
 	Value            *string `protobuf:"bytes,1,req,name=value" json:"value,omitempty"`
@@ -1638,6 +2038,26 @@ func (m *ResourceProviderID) GetValue() string {
 }
 
 // *
+// A framework-generated ID to distinguish an operation. The ID
+// must be unique within the framework.
+type OperationID struct {
+	Value            *string `protobuf:"bytes,1,req,name=value" json:"value,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *OperationID) Reset()                    { *m = OperationID{} }
+func (m *OperationID) String() string            { return proto.CompactTextString(m) }
+func (*OperationID) ProtoMessage()               {}
+func (*OperationID) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{7} }
+
+func (m *OperationID) GetValue() string {
+	if m != nil && m.Value != nil {
+		return *m.Value
+	}
+	return ""
+}
+
+// *
 // Represents time since the epoch, in nanoseconds.
 type TimeInfo struct {
 	Nanoseconds      *int64 `protobuf:"varint,1,req,name=nanoseconds" json:"nanoseconds,omitempty"`
@@ -1647,7 +2067,7 @@ type TimeInfo struct {
 func (m *TimeInfo) Reset()                    { *m = TimeInfo{} }
 func (m *TimeInfo) String() string            { return proto.CompactTextString(m) }
 func (*TimeInfo) ProtoMessage()               {}
-func (*TimeInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{7} }
+func (*TimeInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{8} }
 
 func (m *TimeInfo) GetNanoseconds() int64 {
 	if m != nil && m.Nanoseconds != nil {
@@ -1666,7 +2086,7 @@ type DurationInfo struct {
 func (m *DurationInfo) Reset()                    { *m = DurationInfo{} }
 func (m *DurationInfo) String() string            { return proto.CompactTextString(m) }
 func (*DurationInfo) ProtoMessage()               {}
-func (*DurationInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{8} }
+func (*DurationInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{9} }
 
 func (m *DurationInfo) GetNanoseconds() int64 {
 	if m != nil && m.Nanoseconds != nil {
@@ -1690,7 +2110,7 @@ type Address struct {
 func (m *Address) Reset()                    { *m = Address{} }
 func (m *Address) String() string            { return proto.CompactTextString(m) }
 func (*Address) ProtoMessage()               {}
-func (*Address) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{9} }
+func (*Address) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{10} }
 
 func (m *Address) GetHostname() string {
 	if m != nil && m.Hostname != nil {
@@ -1727,7 +2147,7 @@ type URL struct {
 func (m *URL) Reset()                    { *m = URL{} }
 func (m *URL) String() string            { return proto.CompactTextString(m) }
 func (*URL) ProtoMessage()               {}
-func (*URL) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{10} }
+func (*URL) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{11} }
 
 func (m *URL) GetScheme() string {
 	if m != nil && m.Scheme != nil {
@@ -1779,7 +2199,7 @@ type Unavailability struct {
 func (m *Unavailability) Reset()                    { *m = Unavailability{} }
 func (m *Unavailability) String() string            { return proto.CompactTextString(m) }
 func (*Unavailability) ProtoMessage()               {}
-func (*Unavailability) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{11} }
+func (*Unavailability) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{12} }
 
 func (m *Unavailability) GetStart() *TimeInfo {
 	if m != nil {
@@ -1796,10 +2216,10 @@ func (m *Unavailability) GetDuration() *DurationInfo {
 }
 
 // *
-// Represents a single machine, which may hold one or more agents.
+// Represents a single machine, which may hold one or more slaves.
 //
-// NOTE: In order to match an agent to a machine, both the `hostname` and
-// `ip` must match the values advertised by the agent to the master.
+// NOTE: In order to match a slave to a machine, both the `hostname` and
+// `ip` must match the values advertised by the slave to the master.
 // Hostname is not case-sensitive.
 type MachineID struct {
 	Hostname         *string `protobuf:"bytes,1,opt,name=hostname" json:"hostname,omitempty"`
@@ -1810,7 +2230,7 @@ type MachineID struct {
 func (m *MachineID) Reset()                    { *m = MachineID{} }
 func (m *MachineID) String() string            { return proto.CompactTextString(m) }
 func (*MachineID) ProtoMessage()               {}
-func (*MachineID) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{12} }
+func (*MachineID) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{13} }
 
 func (m *MachineID) GetHostname() string {
 	if m != nil && m.Hostname != nil {
@@ -1831,7 +2251,7 @@ func (m *MachineID) GetIp() string {
 // relevant information which may affect the behavior of the machine.
 type MachineInfo struct {
 	Id   *MachineID        `protobuf:"bytes,1,req,name=id" json:"id,omitempty"`
-	Mode *MachineInfo_Mode `protobuf:"varint,2,opt,name=mode,enum=mesos.v1.MachineInfo_Mode" json:"mode,omitempty"`
+	Mode *MachineInfo_Mode `protobuf:"varint,2,opt,name=mode,enum=mesos.MachineInfo_Mode" json:"mode,omitempty"`
 	// Signifies that the machine may be unavailable during the given interval.
 	// See comments in `Unavailability` and for the `unavailability` fields
 	// in `Offer` and `InverseOffer` for more information.
@@ -1842,7 +2262,7 @@ type MachineInfo struct {
 func (m *MachineInfo) Reset()                    { *m = MachineInfo{} }
 func (m *MachineInfo) String() string            { return proto.CompactTextString(m) }
 func (*MachineInfo) ProtoMessage()               {}
-func (*MachineInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{13} }
+func (*MachineInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{14} }
 
 func (m *MachineInfo) GetId() *MachineID {
 	if m != nil {
@@ -1941,7 +2361,7 @@ type FrameworkInfo struct {
 func (m *FrameworkInfo) Reset()                    { *m = FrameworkInfo{} }
 func (m *FrameworkInfo) String() string            { return proto.CompactTextString(m) }
 func (*FrameworkInfo) ProtoMessage()               {}
-func (*FrameworkInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{14} }
+func (*FrameworkInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{15} }
 
 const Default_FrameworkInfo_FailoverTimeout float64 = 0
 const Default_FrameworkInfo_Checkpoint bool = false
@@ -2033,7 +2453,7 @@ func (m *FrameworkInfo) GetLabels() *Labels {
 
 type FrameworkInfo_Capability struct {
 	// Enum fields should be optional, see: MESOS-4997.
-	Type             *FrameworkInfo_Capability_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.FrameworkInfo_Capability_Type" json:"type,omitempty"`
+	Type             *FrameworkInfo_Capability_Type `protobuf:"varint,1,opt,name=type,enum=mesos.FrameworkInfo_Capability_Type" json:"type,omitempty"`
 	XXX_unrecognized []byte                         `json:"-"`
 }
 
@@ -2041,7 +2461,7 @@ func (m *FrameworkInfo_Capability) Reset()         { *m = FrameworkInfo_Capabili
 func (m *FrameworkInfo_Capability) String() string { return proto.CompactTextString(m) }
 func (*FrameworkInfo_Capability) ProtoMessage()    {}
 func (*FrameworkInfo_Capability) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{14, 0}
+	return fileDescriptorMesos, []int{15, 0}
 }
 
 func (m *FrameworkInfo_Capability) GetType() FrameworkInfo_Capability_Type {
@@ -2060,7 +2480,7 @@ func (m *FrameworkInfo_Capability) GetType() FrameworkInfo_Capability_Type {
 // NOTE: This API is unstable and the related feature is experimental.
 type CheckInfo struct {
 	// The type of the check.
-	Type *CheckInfo_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.CheckInfo_Type" json:"type,omitempty"`
+	Type *CheckInfo_Type `protobuf:"varint,1,opt,name=type,enum=mesos.CheckInfo_Type" json:"type,omitempty"`
 	// Command check.
 	Command *CheckInfo_Command `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
 	// HTTP check.
@@ -2088,7 +2508,7 @@ type CheckInfo struct {
 func (m *CheckInfo) Reset()                    { *m = CheckInfo{} }
 func (m *CheckInfo) String() string            { return proto.CompactTextString(m) }
 func (*CheckInfo) ProtoMessage()               {}
-func (*CheckInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{15} }
+func (*CheckInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{16} }
 
 const Default_CheckInfo_DelaySeconds float64 = 15
 const Default_CheckInfo_IntervalSeconds float64 = 10
@@ -2153,7 +2573,7 @@ type CheckInfo_Command struct {
 func (m *CheckInfo_Command) Reset()                    { *m = CheckInfo_Command{} }
 func (m *CheckInfo_Command) String() string            { return proto.CompactTextString(m) }
 func (*CheckInfo_Command) ProtoMessage()               {}
-func (*CheckInfo_Command) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{15, 0} }
+func (*CheckInfo_Command) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{16, 0} }
 
 func (m *CheckInfo_Command) GetCommand() *CommandInfo {
 	if m != nil {
@@ -2176,7 +2596,7 @@ type CheckInfo_Http struct {
 func (m *CheckInfo_Http) Reset()                    { *m = CheckInfo_Http{} }
 func (m *CheckInfo_Http) String() string            { return proto.CompactTextString(m) }
 func (*CheckInfo_Http) ProtoMessage()               {}
-func (*CheckInfo_Http) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{15, 1} }
+func (*CheckInfo_Http) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{16, 1} }
 
 func (m *CheckInfo_Http) GetPort() uint32 {
 	if m != nil && m.Port != nil {
@@ -2203,7 +2623,7 @@ type CheckInfo_Tcp struct {
 func (m *CheckInfo_Tcp) Reset()                    { *m = CheckInfo_Tcp{} }
 func (m *CheckInfo_Tcp) String() string            { return proto.CompactTextString(m) }
 func (*CheckInfo_Tcp) ProtoMessage()               {}
-func (*CheckInfo_Tcp) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{15, 2} }
+func (*CheckInfo_Tcp) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{16, 2} }
 
 func (m *CheckInfo_Tcp) GetPort() uint32 {
 	if m != nil && m.Port != nil {
@@ -2232,13 +2652,13 @@ type HealthCheck struct {
 	// Number of consecutive failures until the task is killed by the executor.
 	ConsecutiveFailures *uint32 `protobuf:"varint,5,opt,name=consecutive_failures,def=3" json:"consecutive_failures,omitempty"`
 	// Amount of time after the task is launched during which health check
-	// failures are ignored. Once the a check succeeds for the first time,
+	// failures are ignored. Once a check succeeds for the first time,
 	// the grace period does not apply anymore. Note that it includes
 	// `delay_seconds`, i.e., setting `grace_period_seconds` < `delay_seconds`
 	// has no effect.
 	GracePeriodSeconds *float64 `protobuf:"fixed64,6,opt,name=grace_period_seconds,def=10" json:"grace_period_seconds,omitempty"`
 	// The type of health check.
-	Type *HealthCheck_Type `protobuf:"varint,8,opt,name=type,enum=mesos.v1.HealthCheck_Type" json:"type,omitempty"`
+	Type *HealthCheck_Type `protobuf:"varint,8,opt,name=type,enum=mesos.HealthCheck_Type" json:"type,omitempty"`
 	// Command health check.
 	Command *CommandInfo `protobuf:"bytes,7,opt,name=command" json:"command,omitempty"`
 	// HTTP health check.
@@ -2251,7 +2671,7 @@ type HealthCheck struct {
 func (m *HealthCheck) Reset()                    { *m = HealthCheck{} }
 func (m *HealthCheck) String() string            { return proto.CompactTextString(m) }
 func (*HealthCheck) ProtoMessage()               {}
-func (*HealthCheck) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{16} }
+func (*HealthCheck) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{17} }
 
 const Default_HealthCheck_DelaySeconds float64 = 15
 const Default_HealthCheck_IntervalSeconds float64 = 10
@@ -2328,6 +2748,7 @@ func (m *HealthCheck) GetTcp() *HealthCheck_TCPCheckInfo {
 // treat return codes between 200 and 399 as success; custom executors
 // may employ a different strategy, e.g. leveraging the `statuses` field.
 type HealthCheck_HTTPCheckInfo struct {
+	Protocol *NetworkInfo_Protocol `protobuf:"varint,5,opt,name=protocol,enum=mesos.NetworkInfo_Protocol,def=1" json:"protocol,omitempty"`
 	// Currently "http" and "https" are supported.
 	Scheme *string `protobuf:"bytes,3,opt,name=scheme" json:"scheme,omitempty"`
 	// Port to send the HTTP request.
@@ -2348,7 +2769,16 @@ func (m *HealthCheck_HTTPCheckInfo) Reset()         { *m = HealthCheck_HTTPCheck
 func (m *HealthCheck_HTTPCheckInfo) String() string { return proto.CompactTextString(m) }
 func (*HealthCheck_HTTPCheckInfo) ProtoMessage()    {}
 func (*HealthCheck_HTTPCheckInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{16, 0}
+	return fileDescriptorMesos, []int{17, 0}
+}
+
+const Default_HealthCheck_HTTPCheckInfo_Protocol NetworkInfo_Protocol = NetworkInfo_IPv4
+
+func (m *HealthCheck_HTTPCheckInfo) GetProtocol() NetworkInfo_Protocol {
+	if m != nil && m.Protocol != nil {
+		return *m.Protocol
+	}
+	return Default_HealthCheck_HTTPCheckInfo_Protocol
 }
 
 func (m *HealthCheck_HTTPCheckInfo) GetScheme() string {
@@ -2382,6 +2812,7 @@ func (m *HealthCheck_HTTPCheckInfo) GetStatuses() []uint32 {
 // Describes a TCP health check, i.e. based on establishing
 // a TCP connection to the specified port.
 type HealthCheck_TCPCheckInfo struct {
+	Protocol *NetworkInfo_Protocol `protobuf:"varint,2,opt,name=protocol,enum=mesos.NetworkInfo_Protocol,def=1" json:"protocol,omitempty"`
 	// Port expected to be open.
 	Port             *uint32 `protobuf:"varint,1,req,name=port" json:"port,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
@@ -2391,7 +2822,16 @@ func (m *HealthCheck_TCPCheckInfo) Reset()         { *m = HealthCheck_TCPCheckIn
 func (m *HealthCheck_TCPCheckInfo) String() string { return proto.CompactTextString(m) }
 func (*HealthCheck_TCPCheckInfo) ProtoMessage()    {}
 func (*HealthCheck_TCPCheckInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{16, 1}
+	return fileDescriptorMesos, []int{17, 1}
+}
+
+const Default_HealthCheck_TCPCheckInfo_Protocol NetworkInfo_Protocol = NetworkInfo_IPv4
+
+func (m *HealthCheck_TCPCheckInfo) GetProtocol() NetworkInfo_Protocol {
+	if m != nil && m.Protocol != nil {
+		return *m.Protocol
+	}
+	return Default_HealthCheck_TCPCheckInfo_Protocol
 }
 
 func (m *HealthCheck_TCPCheckInfo) GetPort() uint32 {
@@ -2433,7 +2873,7 @@ type KillPolicy struct {
 func (m *KillPolicy) Reset()                    { *m = KillPolicy{} }
 func (m *KillPolicy) String() string            { return proto.CompactTextString(m) }
 func (*KillPolicy) ProtoMessage()               {}
-func (*KillPolicy) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{17} }
+func (*KillPolicy) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{18} }
 
 func (m *KillPolicy) GetGracePeriod() *DurationInfo {
 	if m != nil {
@@ -2480,7 +2920,7 @@ type CommandInfo struct {
 func (m *CommandInfo) Reset()                    { *m = CommandInfo{} }
 func (m *CommandInfo) String() string            { return proto.CompactTextString(m) }
 func (*CommandInfo) ProtoMessage()               {}
-func (*CommandInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{18} }
+func (*CommandInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{19} }
 
 const Default_CommandInfo_Shell bool = true
 
@@ -2557,7 +2997,7 @@ type CommandInfo_URI struct {
 func (m *CommandInfo_URI) Reset()                    { *m = CommandInfo_URI{} }
 func (m *CommandInfo_URI) String() string            { return proto.CompactTextString(m) }
 func (*CommandInfo_URI) ProtoMessage()               {}
-func (*CommandInfo_URI) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{18, 0} }
+func (*CommandInfo_URI) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{19, 0} }
 
 const Default_CommandInfo_URI_Extract bool = true
 
@@ -2600,13 +3040,13 @@ func (m *CommandInfo_URI) GetOutputFile() string {
 // Describes information about an executor.
 type ExecutorInfo struct {
 	// For backwards compatibility, if this field is not set when using `LAUNCH`
-	// offer operation, Mesos will infer the type by checking if `command` is
-	// set (`CUSTOM`) or unset (`DEFAULT`). `type` must be set when using
-	// `LAUNCH_GROUP` offer operation.
+	// operation, Mesos will infer the type by checking if `command` is set
+	// (`CUSTOM`) or unset (`DEFAULT`). `type` must be set when using
+	// `LAUNCH_GROUP` operation.
 	//
-	// TODO(vinod): Add support for explicitly setting `type` to `DEFAULT `
-	// in `LAUNCH` offer operation.
-	Type        *ExecutorInfo_Type `protobuf:"varint,15,opt,name=type,enum=mesos.v1.ExecutorInfo_Type" json:"type,omitempty"`
+	// TODO(vinod): Add support for explicitly setting `type` to `DEFAULT` in
+	// `LAUNCH` operation.
+	Type        *ExecutorInfo_Type `protobuf:"varint,15,opt,name=type,enum=mesos.ExecutorInfo_Type" json:"type,omitempty"`
 	ExecutorId  *ExecutorID        `protobuf:"bytes,1,req,name=executor_id" json:"executor_id,omitempty"`
 	FrameworkId *FrameworkID       `protobuf:"bytes,8,opt,name=framework_id" json:"framework_id,omitempty"`
 	Command     *CommandInfo       `protobuf:"bytes,7,opt,name=command" json:"command,omitempty"`
@@ -2621,7 +3061,7 @@ type ExecutorInfo struct {
 	// possible for different executor ids to be related semantically.
 	//
 	// NOTE: 'source' is exposed alongside the resource usage of the
-	// executor via JSON on the agent. This allows users to import usage
+	// executor via JSON on the slave. This allows users to import usage
 	// information into a time series database for monitoring.
 	//
 	// This field is deprecated since 1.0. Please use labels for
@@ -2642,9 +3082,9 @@ type ExecutorInfo struct {
 	// period and failures / forcible terminations may occur.
 	ShutdownGracePeriod *DurationInfo `protobuf:"bytes,13,opt,name=shutdown_grace_period" json:"shutdown_grace_period,omitempty"`
 	// Labels are free-form key value pairs which are exposed through
-	// master and agent endpoints. Labels will not be interpreted or
+	// master and slave endpoints. Labels will not be interpreted or
 	// acted upon by Mesos itself. As opposed to the data field, labels
-	// will be kept in memory on master and agent processes. Therefore,
+	// will be kept in memory on master and slave processes. Therefore,
 	// labels should be used to tag executors with lightweight metadata.
 	// Labels should not contain duplicate key-value pairs.
 	Labels           *Labels `protobuf:"bytes,14,opt,name=labels" json:"labels,omitempty"`
@@ -2654,7 +3094,7 @@ type ExecutorInfo struct {
 func (m *ExecutorInfo) Reset()                    { *m = ExecutorInfo{} }
 func (m *ExecutorInfo) String() string            { return proto.CompactTextString(m) }
 func (*ExecutorInfo) ProtoMessage()               {}
-func (*ExecutorInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{19} }
+func (*ExecutorInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{20} }
 
 func (m *ExecutorInfo) GetType() ExecutorInfo_Type {
 	if m != nil && m.Type != nil {
@@ -2741,6 +3181,121 @@ func (m *ExecutorInfo) GetLabels() *Labels {
 }
 
 // *
+// Describes a domain. A domain is a collection of hosts that have
+// similar characteristics. Mesos currently only supports "fault
+// domains", which identify groups of hosts with similar failure
+// characteristics.
+//
+// Frameworks can generally assume that network links between hosts in
+// the same fault domain have lower latency, higher bandwidth, and better
+// availability than network links between hosts in different domains.
+// Schedulers may prefer to place network-intensive workloads in the
+// same domain, as this may improve performance. Conversely, a single
+// failure that affects a host in a domain may be more likely to
+// affect other hosts in the same domain; hence, schedulers may prefer
+// to place workloads that require high availability in multiple
+// domains. (For example, all the hosts in a single rack might lose
+// power or network connectivity simultaneously.)
+//
+// There are two kinds of fault domains: regions and zones. Regions
+// offer the highest degree of fault isolation, but network latency
+// between regions is typically high (typically >50 ms). Zones offer a
+// modest degree of fault isolation along with reasonably low network
+// latency (typically <10 ms).
+//
+// The mapping from fault domains to physical infrastructure is up to
+// the operator to configure. In cloud environments, regions and zones
+// can be mapped to the "region" and "availability zone" concepts
+// exposed by most cloud providers, respectively. In on-premise
+// deployments, regions and zones can be mapped to data centers and
+// racks, respectively.
+//
+// Both masters and agents can be configured with domains. Frameworks
+// can compare the domains of two hosts to determine if the hosts are
+// in the same zone, in different zones in the same region, or in
+// different regions. Note that all masters in a given Mesos cluster
+// must be in the same region.
+type DomainInfo struct {
+	FaultDomain      *DomainInfo_FaultDomain `protobuf:"bytes,1,opt,name=fault_domain" json:"fault_domain,omitempty"`
+	XXX_unrecognized []byte                  `json:"-"`
+}
+
+func (m *DomainInfo) Reset()                    { *m = DomainInfo{} }
+func (m *DomainInfo) String() string            { return proto.CompactTextString(m) }
+func (*DomainInfo) ProtoMessage()               {}
+func (*DomainInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{21} }
+
+func (m *DomainInfo) GetFaultDomain() *DomainInfo_FaultDomain {
+	if m != nil {
+		return m.FaultDomain
+	}
+	return nil
+}
+
+type DomainInfo_FaultDomain struct {
+	Region           *DomainInfo_FaultDomain_RegionInfo `protobuf:"bytes,1,req,name=region" json:"region,omitempty"`
+	Zone             *DomainInfo_FaultDomain_ZoneInfo   `protobuf:"bytes,2,req,name=zone" json:"zone,omitempty"`
+	XXX_unrecognized []byte                             `json:"-"`
+}
+
+func (m *DomainInfo_FaultDomain) Reset()                    { *m = DomainInfo_FaultDomain{} }
+func (m *DomainInfo_FaultDomain) String() string            { return proto.CompactTextString(m) }
+func (*DomainInfo_FaultDomain) ProtoMessage()               {}
+func (*DomainInfo_FaultDomain) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{21, 0} }
+
+func (m *DomainInfo_FaultDomain) GetRegion() *DomainInfo_FaultDomain_RegionInfo {
+	if m != nil {
+		return m.Region
+	}
+	return nil
+}
+
+func (m *DomainInfo_FaultDomain) GetZone() *DomainInfo_FaultDomain_ZoneInfo {
+	if m != nil {
+		return m.Zone
+	}
+	return nil
+}
+
+type DomainInfo_FaultDomain_RegionInfo struct {
+	Name             *string `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *DomainInfo_FaultDomain_RegionInfo) Reset()         { *m = DomainInfo_FaultDomain_RegionInfo{} }
+func (m *DomainInfo_FaultDomain_RegionInfo) String() string { return proto.CompactTextString(m) }
+func (*DomainInfo_FaultDomain_RegionInfo) ProtoMessage()    {}
+func (*DomainInfo_FaultDomain_RegionInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{21, 0, 0}
+}
+
+func (m *DomainInfo_FaultDomain_RegionInfo) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
+	}
+	return ""
+}
+
+type DomainInfo_FaultDomain_ZoneInfo struct {
+	Name             *string `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *DomainInfo_FaultDomain_ZoneInfo) Reset()         { *m = DomainInfo_FaultDomain_ZoneInfo{} }
+func (m *DomainInfo_FaultDomain_ZoneInfo) String() string { return proto.CompactTextString(m) }
+func (*DomainInfo_FaultDomain_ZoneInfo) ProtoMessage()    {}
+func (*DomainInfo_FaultDomain_ZoneInfo) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{21, 0, 1}
+}
+
+func (m *DomainInfo_FaultDomain_ZoneInfo) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
+	}
+	return ""
+}
+
+// *
 // Describes a master. This will probably have more fields in the
 // future which might be used, for example, to link a framework webui
 // to a master webui.
@@ -2768,14 +3323,18 @@ type MasterInfo struct {
 	// The full IP address (supports both IPv4 and IPv6 formats)
 	// and supersedes the use of `ip`, `port` and `hostname`.
 	// Since Mesos 0.24.
-	Address          *Address `protobuf:"bytes,7,opt,name=address" json:"address,omitempty"`
-	XXX_unrecognized []byte   `json:"-"`
+	Address *Address `protobuf:"bytes,7,opt,name=address" json:"address,omitempty"`
+	// The domain that this master belongs to. All masters in a Mesos
+	// cluster should belong to the same region.
+	Domain           *DomainInfo              `protobuf:"bytes,8,opt,name=domain" json:"domain,omitempty"`
+	Capabilities     []*MasterInfo_Capability `protobuf:"bytes,9,rep,name=capabilities" json:"capabilities,omitempty"`
+	XXX_unrecognized []byte                   `json:"-"`
 }
 
 func (m *MasterInfo) Reset()                    { *m = MasterInfo{} }
 func (m *MasterInfo) String() string            { return proto.CompactTextString(m) }
 func (*MasterInfo) ProtoMessage()               {}
-func (*MasterInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{20} }
+func (*MasterInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22} }
 
 const Default_MasterInfo_Port uint32 = 5050
 
@@ -2828,84 +3387,339 @@ func (m *MasterInfo) GetAddress() *Address {
 	return nil
 }
 
-// *
-// Describes an agent. Note that the 'id' field is only available
-// after an agent is registered with the master, and is made available
-// here to facilitate re-registration.
-type AgentInfo struct {
-	Hostname         *string      `protobuf:"bytes,1,req,name=hostname" json:"hostname,omitempty"`
-	Port             *int32       `protobuf:"varint,8,opt,name=port,def=5051" json:"port,omitempty"`
-	Resources        []*Resource  `protobuf:"bytes,3,rep,name=resources" json:"resources,omitempty"`
-	Attributes       []*Attribute `protobuf:"bytes,5,rep,name=attributes" json:"attributes,omitempty"`
-	Id               *AgentID     `protobuf:"bytes,6,opt,name=id" json:"id,omitempty"`
-	XXX_unrecognized []byte       `json:"-"`
+func (m *MasterInfo) GetDomain() *DomainInfo {
+	if m != nil {
+		return m.Domain
+	}
+	return nil
 }
 
-func (m *AgentInfo) Reset()                    { *m = AgentInfo{} }
-func (m *AgentInfo) String() string            { return proto.CompactTextString(m) }
-func (*AgentInfo) ProtoMessage()               {}
-func (*AgentInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{21} }
+func (m *MasterInfo) GetCapabilities() []*MasterInfo_Capability {
+	if m != nil {
+		return m.Capabilities
+	}
+	return nil
+}
 
-const Default_AgentInfo_Port int32 = 5051
+type MasterInfo_Capability struct {
+	Type             *MasterInfo_Capability_Type `protobuf:"varint,1,opt,name=type,enum=mesos.MasterInfo_Capability_Type" json:"type,omitempty"`
+	XXX_unrecognized []byte                      `json:"-"`
+}
 
-func (m *AgentInfo) GetHostname() string {
+func (m *MasterInfo_Capability) Reset()                    { *m = MasterInfo_Capability{} }
+func (m *MasterInfo_Capability) String() string            { return proto.CompactTextString(m) }
+func (*MasterInfo_Capability) ProtoMessage()               {}
+func (*MasterInfo_Capability) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22, 0} }
+
+func (m *MasterInfo_Capability) GetType() MasterInfo_Capability_Type {
+	if m != nil && m.Type != nil {
+		return *m.Type
+	}
+	return MasterInfo_Capability_UNKNOWN
+}
+
+// *
+// Describes a slave. Note that the 'id' field is only available after
+// a slave is registered with the master, and is made available here
+// to facilitate re-registration.
+type SlaveInfo struct {
+	Hostname *string `protobuf:"bytes,1,req,name=hostname" json:"hostname,omitempty"`
+	Port     *int32  `protobuf:"varint,8,opt,name=port,def=5051" json:"port,omitempty"`
+	// The configured resources at the agent. This does not include any
+	// dynamic reservations or persistent volumes that may currently
+	// exist at the agent.
+	Resources  []*Resource  `protobuf:"bytes,3,rep,name=resources" json:"resources,omitempty"`
+	Attributes []*Attribute `protobuf:"bytes,5,rep,name=attributes" json:"attributes,omitempty"`
+	Id         *SlaveID     `protobuf:"bytes,6,opt,name=id" json:"id,omitempty"`
+	// The domain that this slave belongs to. If the slave's region
+	// differs from the master's region, it will not appear in resource
+	// offers to frameworks that have not enabled the REGION_AWARE
+	// capability.
+	Domain *DomainInfo `protobuf:"bytes,10,opt,name=domain" json:"domain,omitempty"`
+	// Slave checkpointing is always enabled in recent Mesos versions;
+	// the value of this field is ignored.
+	// TODO(joerg84): Remove checkpoint field after deprecation cycle starting
+	// with 0.27 (MESOS-2317).
+	Checkpoint       *bool  `protobuf:"varint,7,opt,name=checkpoint,def=0" json:"checkpoint,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *SlaveInfo) Reset()                    { *m = SlaveInfo{} }
+func (m *SlaveInfo) String() string            { return proto.CompactTextString(m) }
+func (*SlaveInfo) ProtoMessage()               {}
+func (*SlaveInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{23} }
+
+const Default_SlaveInfo_Port int32 = 5051
+const Default_SlaveInfo_Checkpoint bool = false
+
+func (m *SlaveInfo) GetHostname() string {
 	if m != nil && m.Hostname != nil {
 		return *m.Hostname
 	}
 	return ""
 }
 
-func (m *AgentInfo) GetPort() int32 {
+func (m *SlaveInfo) GetPort() int32 {
 	if m != nil && m.Port != nil {
 		return *m.Port
 	}
-	return Default_AgentInfo_Port
+	return Default_SlaveInfo_Port
 }
 
-func (m *AgentInfo) GetResources() []*Resource {
+func (m *SlaveInfo) GetResources() []*Resource {
 	if m != nil {
 		return m.Resources
 	}
 	return nil
 }
 
-func (m *AgentInfo) GetAttributes() []*Attribute {
+func (m *SlaveInfo) GetAttributes() []*Attribute {
 	if m != nil {
 		return m.Attributes
 	}
 	return nil
 }
 
-func (m *AgentInfo) GetId() *AgentID {
+func (m *SlaveInfo) GetId() *SlaveID {
 	if m != nil {
 		return m.Id
 	}
 	return nil
 }
 
-type AgentInfo_Capability struct {
+func (m *SlaveInfo) GetDomain() *DomainInfo {
+	if m != nil {
+		return m.Domain
+	}
+	return nil
+}
+
+func (m *SlaveInfo) GetCheckpoint() bool {
+	if m != nil && m.Checkpoint != nil {
+		return *m.Checkpoint
+	}
+	return Default_SlaveInfo_Checkpoint
+}
+
+type SlaveInfo_Capability struct {
 	// Enum fields should be optional, see: MESOS-4997.
-	Type             *AgentInfo_Capability_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.AgentInfo_Capability_Type" json:"type,omitempty"`
+	Type             *SlaveInfo_Capability_Type `protobuf:"varint,1,opt,name=type,enum=mesos.SlaveInfo_Capability_Type" json:"type,omitempty"`
 	XXX_unrecognized []byte                     `json:"-"`
 }
 
-func (m *AgentInfo_Capability) Reset()                    { *m = AgentInfo_Capability{} }
-func (m *AgentInfo_Capability) String() string            { return proto.CompactTextString(m) }
-func (*AgentInfo_Capability) ProtoMessage()               {}
-func (*AgentInfo_Capability) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{21, 0} }
+func (m *SlaveInfo_Capability) Reset()                    { *m = SlaveInfo_Capability{} }
+func (m *SlaveInfo_Capability) String() string            { return proto.CompactTextString(m) }
+func (*SlaveInfo_Capability) ProtoMessage()               {}
+func (*SlaveInfo_Capability) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{23, 0} }
 
-func (m *AgentInfo_Capability) GetType() AgentInfo_Capability_Type {
+func (m *SlaveInfo_Capability) GetType() SlaveInfo_Capability_Type {
 	if m != nil && m.Type != nil {
 		return *m.Type
 	}
-	return AgentInfo_Capability_UNKNOWN
+	return SlaveInfo_Capability_UNKNOWN
+}
+
+// *
+// Describes the container configuration to run a CSI plugin component.
+type CSIPluginContainerInfo struct {
+	Services         []CSIPluginContainerInfo_Service `protobuf:"varint,1,rep,name=services,enum=mesos.CSIPluginContainerInfo_Service" json:"services,omitempty"`
+	Command          *CommandInfo                     `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
+	Resources        []*Resource                      `protobuf:"bytes,3,rep,name=resources" json:"resources,omitempty"`
+	Container        *ContainerInfo                   `protobuf:"bytes,4,opt,name=container" json:"container,omitempty"`
+	XXX_unrecognized []byte                           `json:"-"`
+}
+
+func (m *CSIPluginContainerInfo) Reset()                    { *m = CSIPluginContainerInfo{} }
+func (m *CSIPluginContainerInfo) String() string            { return proto.CompactTextString(m) }
+func (*CSIPluginContainerInfo) ProtoMessage()               {}
+func (*CSIPluginContainerInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{24} }
+
+func (m *CSIPluginContainerInfo) GetServices() []CSIPluginContainerInfo_Service {
+	if m != nil {
+		return m.Services
+	}
+	return nil
+}
+
+func (m *CSIPluginContainerInfo) GetCommand() *CommandInfo {
+	if m != nil {
+		return m.Command
+	}
+	return nil
+}
+
+func (m *CSIPluginContainerInfo) GetResources() []*Resource {
+	if m != nil {
+		return m.Resources
+	}
+	return nil
+}
+
+func (m *CSIPluginContainerInfo) GetContainer() *ContainerInfo {
+	if m != nil {
+		return m.Container
+	}
+	return nil
+}
+
+// *
+// Describes a CSI plugin.
+type CSIPluginInfo struct {
+	// The type of the CSI service. This uniquely identifies a CSI
+	// implementation. For instance:
+	//     org.apache.mesos.csi.test
+	//
+	// Please follow to Java package naming convention
+	// (https://en.wikipedia.org/wiki/Java_package#Package_naming_conventions)
+	// to avoid conflicts on type names.
+	Type *string `protobuf:"bytes,1,req,name=type" json:"type,omitempty"`
+	// The name of the CSI service. There could be mutliple instances of a
+	// type of CSI service. The name field is used to distinguish these
+	// instances. It should be a legal Java identifier
+	// (https://docs.oracle.com/javase/tutorial/java/nutsandbolts/variables.html)
+	// to avoid conflicts on concatenation of type and name.
+	Name *string `protobuf:"bytes,2,req,name=name" json:"name,omitempty"`
+	// A list of container configurations to run CSI plugin components.
+	// The controller service will be served by the first configuration
+	// that contains `CONTROLLER_SERVICE`, and the node service will be
+	// served by the first configuration that contains `NODE_SERVICE`.
+	Containers       []*CSIPluginContainerInfo `protobuf:"bytes,3,rep,name=containers" json:"containers,omitempty"`
+	XXX_unrecognized []byte                    `json:"-"`
+}
+
+func (m *CSIPluginInfo) Reset()                    { *m = CSIPluginInfo{} }
+func (m *CSIPluginInfo) String() string            { return proto.CompactTextString(m) }
+func (*CSIPluginInfo) ProtoMessage()               {}
+func (*CSIPluginInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{25} }
+
+func (m *CSIPluginInfo) GetType() string {
+	if m != nil && m.Type != nil {
+		return *m.Type
+	}
+	return ""
+}
+
+func (m *CSIPluginInfo) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
+	}
+	return ""
+}
+
+func (m *CSIPluginInfo) GetContainers() []*CSIPluginContainerInfo {
+	if m != nil {
+		return m.Containers
+	}
+	return nil
+}
+
+// *
+// Describes a resource provider. Note that the 'id' field is only available
+// after a resource provider is registered with the master, and is made
+// available here to facilitate re-registration.
+type ResourceProviderInfo struct {
+	Id         *ResourceProviderID `protobuf:"bytes,1,opt,name=id" json:"id,omitempty"`
+	Attributes []*Attribute        `protobuf:"bytes,2,rep,name=attributes" json:"attributes,omitempty"`
+	// The type of the resource provider. This uniquely identifies a
+	// resource provider implementation. For instance:
+	//     org.apache.mesos.rp.local.storage
+	//
+	// Please follow to Java package naming convention
+	// (https://en.wikipedia.org/wiki/Java_package#Package_naming_conventions)
+	// to avoid conflicts on type names.
+	Type *string `protobuf:"bytes,3,req,name=type" json:"type,omitempty"`
+	// The name of the resource provider. There could be multiple
+	// instances of a type of resource provider. The name field is used
+	// to distinguish these instances. It should be a legal Java identifier
+	// (https://docs.oracle.com/javase/tutorial/java/nutsandbolts/variables.html)
+	// to avoid conflicts on concatenation of type and name.
+	Name *string `protobuf:"bytes,4,req,name=name" json:"name,omitempty"`
+	// The stack of default reservations. If this field is not empty, it
+	// indicates that resources from this resource provider are reserved
+	// by default, except for the resources that have been reserved or
+	// unreserved through operations. The first `ReservationInfo`
+	// may have type `STATIC` or `DYNAMIC`, but the rest must have
+	// `DYNAMIC`. One can create a new reservation on top of an existing
+	// one by pushing a new `ReservationInfo` to the back. The last
+	// `ReservationInfo` in this stack is the "current" reservation. The
+	// new reservation's role must be a child of the current one.
+	DefaultReservations []*Resource_ReservationInfo   `protobuf:"bytes,5,rep,name=default_reservations" json:"default_reservations,omitempty"`
+	Storage             *ResourceProviderInfo_Storage `protobuf:"bytes,6,opt,name=storage" json:"storage,omitempty"`
+	XXX_unrecognized    []byte                        `json:"-"`
+}
+
+func (m *ResourceProviderInfo) Reset()                    { *m = ResourceProviderInfo{} }
+func (m *ResourceProviderInfo) String() string            { return proto.CompactTextString(m) }
+func (*ResourceProviderInfo) ProtoMessage()               {}
+func (*ResourceProviderInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{26} }
+
+func (m *ResourceProviderInfo) GetId() *ResourceProviderID {
+	if m != nil {
+		return m.Id
+	}
+	return nil
+}
+
+func (m *ResourceProviderInfo) GetAttributes() []*Attribute {
+	if m != nil {
+		return m.Attributes
+	}
+	return nil
+}
+
+func (m *ResourceProviderInfo) GetType() string {
+	if m != nil && m.Type != nil {
+		return *m.Type
+	}
+	return ""
+}
+
+func (m *ResourceProviderInfo) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
+	}
+	return ""
+}
+
+func (m *ResourceProviderInfo) GetDefaultReservations() []*Resource_ReservationInfo {
+	if m != nil {
+		return m.DefaultReservations
+	}
+	return nil
+}
+
+func (m *ResourceProviderInfo) GetStorage() *ResourceProviderInfo_Storage {
+	if m != nil {
+		return m.Storage
+	}
+	return nil
+}
+
+// Storage resource provider related information.
+type ResourceProviderInfo_Storage struct {
+	Plugin           *CSIPluginInfo `protobuf:"bytes,1,req,name=plugin" json:"plugin,omitempty"`
+	XXX_unrecognized []byte         `json:"-"`
+}
+
+func (m *ResourceProviderInfo_Storage) Reset()         { *m = ResourceProviderInfo_Storage{} }
+func (m *ResourceProviderInfo_Storage) String() string { return proto.CompactTextString(m) }
+func (*ResourceProviderInfo_Storage) ProtoMessage()    {}
+func (*ResourceProviderInfo_Storage) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{26, 0}
+}
+
+func (m *ResourceProviderInfo_Storage) GetPlugin() *CSIPluginInfo {
+	if m != nil {
+		return m.Plugin
+	}
+	return nil
 }
 
 // *
 // Describes an Attribute or Resource "value". A value is described
 // using the standard protocol buffer "union" trick.
 type Value struct {
-	Type             *Value_Type   `protobuf:"varint,1,req,name=type,enum=mesos.v1.Value_Type" json:"type,omitempty"`
+	Type             *Value_Type   `protobuf:"varint,1,req,name=type,enum=mesos.Value_Type" json:"type,omitempty"`
 	Scalar           *Value_Scalar `protobuf:"bytes,2,opt,name=scalar" json:"scalar,omitempty"`
 	Ranges           *Value_Ranges `protobuf:"bytes,3,opt,name=ranges" json:"ranges,omitempty"`
 	Set              *Value_Set    `protobuf:"bytes,4,opt,name=set" json:"set,omitempty"`
@@ -2916,7 +3730,7 @@ type Value struct {
 func (m *Value) Reset()                    { *m = Value{} }
 func (m *Value) String() string            { return proto.CompactTextString(m) }
 func (*Value) ProtoMessage()               {}
-func (*Value) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22} }
+func (*Value) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27} }
 
 func (m *Value) GetType() Value_Type {
 	if m != nil && m.Type != nil {
@@ -2969,7 +3783,7 @@ type Value_Scalar struct {
 func (m *Value_Scalar) Reset()                    { *m = Value_Scalar{} }
 func (m *Value_Scalar) String() string            { return proto.CompactTextString(m) }
 func (*Value_Scalar) ProtoMessage()               {}
-func (*Value_Scalar) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22, 0} }
+func (*Value_Scalar) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27, 0} }
 
 func (m *Value_Scalar) GetValue() float64 {
 	if m != nil && m.Value != nil {
@@ -2987,7 +3801,7 @@ type Value_Range struct {
 func (m *Value_Range) Reset()                    { *m = Value_Range{} }
 func (m *Value_Range) String() string            { return proto.CompactTextString(m) }
 func (*Value_Range) ProtoMessage()               {}
-func (*Value_Range) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22, 1} }
+func (*Value_Range) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27, 1} }
 
 func (m *Value_Range) GetBegin() uint64 {
 	if m != nil && m.Begin != nil {
@@ -3011,7 +3825,7 @@ type Value_Ranges struct {
 func (m *Value_Ranges) Reset()                    { *m = Value_Ranges{} }
 func (m *Value_Ranges) String() string            { return proto.CompactTextString(m) }
 func (*Value_Ranges) ProtoMessage()               {}
-func (*Value_Ranges) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22, 2} }
+func (*Value_Ranges) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27, 2} }
 
 func (m *Value_Ranges) GetRange() []*Value_Range {
 	if m != nil {
@@ -3028,7 +3842,7 @@ type Value_Set struct {
 func (m *Value_Set) Reset()                    { *m = Value_Set{} }
 func (m *Value_Set) String() string            { return proto.CompactTextString(m) }
 func (*Value_Set) ProtoMessage()               {}
-func (*Value_Set) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22, 3} }
+func (*Value_Set) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27, 3} }
 
 func (m *Value_Set) GetItem() []string {
 	if m != nil {
@@ -3045,7 +3859,7 @@ type Value_Text struct {
 func (m *Value_Text) Reset()                    { *m = Value_Text{} }
 func (m *Value_Text) String() string            { return proto.CompactTextString(m) }
 func (*Value_Text) ProtoMessage()               {}
-func (*Value_Text) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{22, 4} }
+func (*Value_Text) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27, 4} }
 
 func (m *Value_Text) GetValue() string {
 	if m != nil && m.Value != nil {
@@ -3060,7 +3874,7 @@ func (m *Value_Text) GetValue() string {
 // change in the future and attributes may only be string based.
 type Attribute struct {
 	Name             *string       `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
-	Type             *Value_Type   `protobuf:"varint,2,req,name=type,enum=mesos.v1.Value_Type" json:"type,omitempty"`
+	Type             *Value_Type   `protobuf:"varint,2,req,name=type,enum=mesos.Value_Type" json:"type,omitempty"`
 	Scalar           *Value_Scalar `protobuf:"bytes,3,opt,name=scalar" json:"scalar,omitempty"`
 	Ranges           *Value_Ranges `protobuf:"bytes,4,opt,name=ranges" json:"ranges,omitempty"`
 	Set              *Value_Set    `protobuf:"bytes,6,opt,name=set" json:"set,omitempty"`
@@ -3071,7 +3885,7 @@ type Attribute struct {
 func (m *Attribute) Reset()                    { *m = Attribute{} }
 func (m *Attribute) String() string            { return proto.CompactTextString(m) }
 func (*Attribute) ProtoMessage()               {}
-func (*Attribute) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{23} }
+func (*Attribute) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{28} }
 
 func (m *Attribute) GetName() string {
 	if m != nil && m.Name != nil {
@@ -3130,20 +3944,43 @@ func (m *Attribute) GetText() *Value_Text {
 type Resource struct {
 	ProviderId *ResourceProviderID `protobuf:"bytes,12,opt,name=provider_id" json:"provider_id,omitempty"`
 	Name       *string             `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
-	Type       *Value_Type         `protobuf:"varint,2,req,name=type,enum=mesos.v1.Value_Type" json:"type,omitempty"`
+	Type       *Value_Type         `protobuf:"varint,2,req,name=type,enum=mesos.Value_Type" json:"type,omitempty"`
 	Scalar     *Value_Scalar       `protobuf:"bytes,3,opt,name=scalar" json:"scalar,omitempty"`
 	Ranges     *Value_Ranges       `protobuf:"bytes,4,opt,name=ranges" json:"ranges,omitempty"`
 	Set        *Value_Set          `protobuf:"bytes,5,opt,name=set" json:"set,omitempty"`
 	// The role that this resource is reserved for. If "*", this indicates
 	// that the resource is unreserved. Otherwise, the resource will only
 	// be offered to frameworks that belong to this role.
+	//
+	// NOTE: Frameworks must not set this field if `reservations` is set.
+	//       See the 'Resource Format' section for more details.
+	//
+	// TODO(mpark): Deprecate once `reservations` is no longer experimental.
 	Role           *string                  `protobuf:"bytes,6,opt,name=role,def=*" json:"role,omitempty"`
 	AllocationInfo *Resource_AllocationInfo `protobuf:"bytes,11,opt,name=allocation_info" json:"allocation_info,omitempty"`
 	// If this is set, this resource was dynamically reserved by an
 	// operator or a framework. Otherwise, this resource is either unreserved
 	// or statically reserved by an operator via the --resources flag.
+	//
+	// NOTE: Frameworks must not set this field if `reservations` is set.
+	//       See the 'Resource Format' section for more details.
+	//
+	// TODO(mpark): Deprecate once `reservations` is no longer experimental.
 	Reservation *Resource_ReservationInfo `protobuf:"bytes,8,opt,name=reservation" json:"reservation,omitempty"`
-	Disk        *Resource_DiskInfo        `protobuf:"bytes,7,opt,name=disk" json:"disk,omitempty"`
+	// The stack of reservations. If this field is empty, it indicates that this
+	// resource is unreserved. Otherwise, the resource is reserved. The first
+	// `ReservationInfo` may have type `STATIC` or `DYNAMIC`, but the rest must
+	// have `DYNAMIC`. One can create a new reservation on top of an existing
+	// one by pushing a new `ReservationInfo` to the back. The last
+	// `ReservationInfo` in this stack is the "current" reservation. The new
+	// reservation's role must be a child of the current reservation's role.
+	//
+	// NOTE: Frameworks must not set this field if `reservation` is set.
+	//       See the 'Resource Format' section for more details.
+	//
+	// TODO(mpark): Deprecate `role` and `reservation` once this is stable.
+	Reservations []*Resource_ReservationInfo `protobuf:"bytes,13,rep,name=reservations" json:"reservations,omitempty"`
+	Disk         *Resource_DiskInfo          `protobuf:"bytes,7,opt,name=disk" json:"disk,omitempty"`
 	// If this is set, the resources are revocable, i.e., any tasks or
 	// executors launched using these resources could get preempted or
 	// throttled at any time. This could be used by frameworks to run
@@ -3162,7 +3999,7 @@ type Resource struct {
 func (m *Resource) Reset()                    { *m = Resource{} }
 func (m *Resource) String() string            { return proto.CompactTextString(m) }
 func (*Resource) ProtoMessage()               {}
-func (*Resource) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{24} }
+func (*Resource) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{29} }
 
 const Default_Resource_Role string = "*"
 
@@ -3229,6 +4066,13 @@ func (m *Resource) GetReservation() *Resource_ReservationInfo {
 	return nil
 }
 
+func (m *Resource) GetReservations() []*Resource_ReservationInfo {
+	if m != nil {
+		return m.Reservations
+	}
+	return nil
+}
+
 func (m *Resource) GetDisk() *Resource_DiskInfo {
 	if m != nil {
 		return m.Disk
@@ -3254,8 +4098,6 @@ func (m *Resource) GetShared() *Resource_SharedInfo {
 // frameworks. Frameworks that are not MULTI_ROLE capable can
 // continue to assume that the offered resources are allocated
 // to their role.
-//
-// NOTE: Implementation of this is in-progress, DO NOT USE!
 type Resource_AllocationInfo struct {
 	// If set, this resource is allocated to a role. Note that in the
 	// future, this may be unset and the scheduler may be responsible
@@ -3267,7 +4109,7 @@ type Resource_AllocationInfo struct {
 func (m *Resource_AllocationInfo) Reset()                    { *m = Resource_AllocationInfo{} }
 func (m *Resource_AllocationInfo) String() string            { return proto.CompactTextString(m) }
 func (*Resource_AllocationInfo) ProtoMessage()               {}
-func (*Resource_AllocationInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{24, 0} }
+func (*Resource_AllocationInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{29, 0} }
 
 func (m *Resource_AllocationInfo) GetRole() string {
 	if m != nil && m.Role != nil {
@@ -3277,6 +4119,16 @@ func (m *Resource_AllocationInfo) GetRole() string {
 }
 
 type Resource_ReservationInfo struct {
+	// The type of this reservation.
+	//
+	// NOTE: This field must not be set for `Resource.reservation`.
+	//       See the 'Resource Format' section for more details.
+	Type *Resource_ReservationInfo_Type `protobuf:"varint,4,opt,name=type,enum=mesos.Resource_ReservationInfo_Type" json:"type,omitempty"`
+	// The role to which this reservation is made for.
+	//
+	// NOTE: This field must not be set for `Resource.reservation`.
+	//       See the 'Resource Format' section for more details.
+	Role *string `protobuf:"bytes,3,opt,name=role" json:"role,omitempty"`
 	// Indicates the principal, if any, of the framework or operator
 	// that reserved this resource. If reserved by a framework, the
 	// field should match the `FrameworkInfo.principal`. It is used in
@@ -3288,7 +4140,7 @@ type Resource_ReservationInfo struct {
 	// associate arbitrary metadata with a reserved resource.  For
 	// example, frameworks can use labels to identify the intended
 	// purpose for a portion of the resources the framework has
-	// reserved at a given agent. Labels should not contain duplicate
+	// reserved at a given slave. Labels should not contain duplicate
 	// key-value pairs.
 	Labels           *Labels `protobuf:"bytes,2,opt,name=labels" json:"labels,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
@@ -3298,7 +4150,21 @@ func (m *Resource_ReservationInfo) Reset()         { *m = Resource_ReservationIn
 func (m *Resource_ReservationInfo) String() string { return proto.CompactTextString(m) }
 func (*Resource_ReservationInfo) ProtoMessage()    {}
 func (*Resource_ReservationInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{24, 1}
+	return fileDescriptorMesos, []int{29, 1}
+}
+
+func (m *Resource_ReservationInfo) GetType() Resource_ReservationInfo_Type {
+	if m != nil && m.Type != nil {
+		return *m.Type
+	}
+	return Resource_ReservationInfo_UNKNOWN
+}
+
+func (m *Resource_ReservationInfo) GetRole() string {
+	if m != nil && m.Role != nil {
+		return *m.Role
+	}
+	return ""
 }
 
 func (m *Resource_ReservationInfo) GetPrincipal() string {
@@ -3334,7 +4200,7 @@ type Resource_DiskInfo struct {
 func (m *Resource_DiskInfo) Reset()                    { *m = Resource_DiskInfo{} }
 func (m *Resource_DiskInfo) String() string            { return proto.CompactTextString(m) }
 func (*Resource_DiskInfo) ProtoMessage()               {}
-func (*Resource_DiskInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{24, 2} }
+func (*Resource_DiskInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{29, 2} }
 
 func (m *Resource_DiskInfo) GetPersistence() *Resource_DiskInfo_Persistence {
 	if m != nil {
@@ -3360,15 +4226,15 @@ func (m *Resource_DiskInfo) GetSource() *Resource_DiskInfo_Source {
 // Describes a persistent disk volume.
 //
 // A persistent disk volume will not be automatically garbage
-// collected if the task/executor/agent terminates, but will be
+// collected if the task/executor/slave terminates, but will be
 // re-offered to the framework(s) belonging to the 'role'.
 //
 // NOTE: Currently, we do not allow persistent disk volumes
 // without a reservation (i.e., 'role' cannot be '*').
 type Resource_DiskInfo_Persistence struct {
 	// A unique ID for the persistent disk volume. This ID must be
-	// unique per role on each agent. Although it is possible to use
-	// the same ID on different agents in the cluster and to reuse
+	// unique per role on each slave. Although it is possible to use
+	// the same ID on different slaves in the cluster and to reuse
 	// IDs after a volume with that ID has been destroyed, both
 	// practices are discouraged.
 	Id *string `protobuf:"bytes,1,req,name=id" json:"id,omitempty"`
@@ -3387,7 +4253,7 @@ func (m *Resource_DiskInfo_Persistence) Reset()         { *m = Resource_DiskInfo
 func (m *Resource_DiskInfo_Persistence) String() string { return proto.CompactTextString(m) }
 func (*Resource_DiskInfo_Persistence) ProtoMessage()    {}
 func (*Resource_DiskInfo_Persistence) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{24, 2, 0}
+	return fileDescriptorMesos, []int{29, 2, 0}
 }
 
 func (m *Resource_DiskInfo_Persistence) GetId() string {
@@ -3405,19 +4271,33 @@ func (m *Resource_DiskInfo_Persistence) GetPrincipal() string {
 }
 
 // Describes where a disk originates from.
-// TODO(jmlvanre): Add support for BLOCK devices.
 type Resource_DiskInfo_Source struct {
-	Type             *Resource_DiskInfo_Source_Type  `protobuf:"varint,1,req,name=type,enum=mesos.v1.Resource_DiskInfo_Source_Type" json:"type,omitempty"`
-	Path             *Resource_DiskInfo_Source_Path  `protobuf:"bytes,2,opt,name=path" json:"path,omitempty"`
-	Mount            *Resource_DiskInfo_Source_Mount `protobuf:"bytes,3,opt,name=mount" json:"mount,omitempty"`
-	XXX_unrecognized []byte                          `json:"-"`
+	Type  *Resource_DiskInfo_Source_Type  `protobuf:"varint,1,req,name=type,enum=mesos.Resource_DiskInfo_Source_Type" json:"type,omitempty"`
+	Path  *Resource_DiskInfo_Source_Path  `protobuf:"bytes,2,opt,name=path" json:"path,omitempty"`
+	Mount *Resource_DiskInfo_Source_Mount `protobuf:"bytes,3,opt,name=mount" json:"mount,omitempty"`
+	// An identifier for this source. This field maps onto CSI
+	// volume IDs and is not expected to be set by frameworks.
+	Id *string `protobuf:"bytes,4,opt,name=id" json:"id,omitempty"`
+	// Additional metadata for this source. This field maps onto CSI
+	// volume metadata and is not expected to be set by frameworks.
+	Metadata *Labels `protobuf:"bytes,5,opt,name=metadata" json:"metadata,omitempty"`
+	// This field serves as an indirection to a set of storage
+	// vendor specific disk parameters which describe the properties
+	// of the disk. The operator will setup mappings between a
+	// profile name to a set of vendor specific disk parameters. And
+	// the framework will do disk selection based on profile names,
+	// instead of vendor specific disk parameters.
+	//
+	// Also see the DiskProfile module.
+	Profile          *string `protobuf:"bytes,6,opt,name=profile" json:"profile,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
 }
 
 func (m *Resource_DiskInfo_Source) Reset()         { *m = Resource_DiskInfo_Source{} }
 func (m *Resource_DiskInfo_Source) String() string { return proto.CompactTextString(m) }
 func (*Resource_DiskInfo_Source) ProtoMessage()    {}
 func (*Resource_DiskInfo_Source) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{24, 2, 1}
+	return fileDescriptorMesos, []int{29, 2, 1}
 }
 
 func (m *Resource_DiskInfo_Source) GetType() Resource_DiskInfo_Source_Type {
@@ -3441,10 +4321,32 @@ func (m *Resource_DiskInfo_Source) GetMount() *Resource_DiskInfo_Source_Mount {
 	return nil
 }
 
+func (m *Resource_DiskInfo_Source) GetId() string {
+	if m != nil && m.Id != nil {
+		return *m.Id
+	}
+	return ""
+}
+
+func (m *Resource_DiskInfo_Source) GetMetadata() *Labels {
+	if m != nil {
+		return m.Metadata
+	}
+	return nil
+}
+
+func (m *Resource_DiskInfo_Source) GetProfile() string {
+	if m != nil && m.Profile != nil {
+		return *m.Profile
+	}
+	return ""
+}
+
 // A folder that can be located on a separate disk device. This
 // can be shared and carved up as necessary between frameworks.
 type Resource_DiskInfo_Source_Path struct {
-	// Path to the folder (e.g., /mnt/raid/disk0).
+	// Path to the folder (e.g., /mnt/raid/disk0). If the path is a
+	// relative path, it is relative to the agent work directory.
 	Root             *string `protobuf:"bytes,1,opt,name=root" json:"root,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
@@ -3453,7 +4355,7 @@ func (m *Resource_DiskInfo_Source_Path) Reset()         { *m = Resource_DiskInfo
 func (m *Resource_DiskInfo_Source_Path) String() string { return proto.CompactTextString(m) }
 func (*Resource_DiskInfo_Source_Path) ProtoMessage()    {}
 func (*Resource_DiskInfo_Source_Path) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{24, 2, 1, 0}
+	return fileDescriptorMesos, []int{29, 2, 1, 0}
 }
 
 func (m *Resource_DiskInfo_Source_Path) GetRoot() string {
@@ -3467,7 +4369,8 @@ func (m *Resource_DiskInfo_Source_Path) GetRoot() string {
 // can only be used exclusively: a framework cannot accept a
 // partial amount of this disk.
 type Resource_DiskInfo_Source_Mount struct {
-	// Path to mount point (e.g., /mnt/raid/disk0).
+	// Path to mount point (e.g., /mnt/raid/disk0). If the path is a
+	// relative path, it is relative to the agent work directory.
 	Root             *string `protobuf:"bytes,1,opt,name=root" json:"root,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
@@ -3476,7 +4379,7 @@ func (m *Resource_DiskInfo_Source_Mount) Reset()         { *m = Resource_DiskInf
 func (m *Resource_DiskInfo_Source_Mount) String() string { return proto.CompactTextString(m) }
 func (*Resource_DiskInfo_Source_Mount) ProtoMessage()    {}
 func (*Resource_DiskInfo_Source_Mount) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{24, 2, 1, 1}
+	return fileDescriptorMesos, []int{29, 2, 1, 1}
 }
 
 func (m *Resource_DiskInfo_Source_Mount) GetRoot() string {
@@ -3493,7 +4396,7 @@ type Resource_RevocableInfo struct {
 func (m *Resource_RevocableInfo) Reset()                    { *m = Resource_RevocableInfo{} }
 func (m *Resource_RevocableInfo) String() string            { return proto.CompactTextString(m) }
 func (*Resource_RevocableInfo) ProtoMessage()               {}
-func (*Resource_RevocableInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{24, 3} }
+func (*Resource_RevocableInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{29, 3} }
 
 // Allow the resource to be shared across tasks.
 type Resource_SharedInfo struct {
@@ -3503,7 +4406,7 @@ type Resource_SharedInfo struct {
 func (m *Resource_SharedInfo) Reset()                    { *m = Resource_SharedInfo{} }
 func (m *Resource_SharedInfo) String() string            { return proto.CompactTextString(m) }
 func (*Resource_SharedInfo) ProtoMessage()               {}
-func (*Resource_SharedInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{24, 4} }
+func (*Resource_SharedInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{29, 4} }
 
 // *
 // When the network bandwidth caps are enabled and the container
@@ -3546,7 +4449,7 @@ type TrafficControlStatistics struct {
 func (m *TrafficControlStatistics) Reset()                    { *m = TrafficControlStatistics{} }
 func (m *TrafficControlStatistics) String() string            { return proto.CompactTextString(m) }
 func (*TrafficControlStatistics) ProtoMessage()               {}
-func (*TrafficControlStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{25} }
+func (*TrafficControlStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{30} }
 
 func (m *TrafficControlStatistics) GetId() string {
 	if m != nil && m.Id != nil {
@@ -3644,7 +4547,7 @@ type IpStatistics struct {
 func (m *IpStatistics) Reset()                    { *m = IpStatistics{} }
 func (m *IpStatistics) String() string            { return proto.CompactTextString(m) }
 func (*IpStatistics) ProtoMessage()               {}
-func (*IpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{26} }
+func (*IpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{31} }
 
 func (m *IpStatistics) GetForwarding() int64 {
 	if m != nil && m.Forwarding != nil {
@@ -3813,7 +4716,7 @@ type IcmpStatistics struct {
 func (m *IcmpStatistics) Reset()                    { *m = IcmpStatistics{} }
 func (m *IcmpStatistics) String() string            { return proto.CompactTextString(m) }
 func (*IcmpStatistics) ProtoMessage()               {}
-func (*IcmpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{27} }
+func (*IcmpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{32} }
 
 func (m *IcmpStatistics) GetInMsgs() int64 {
 	if m != nil && m.InMsgs != nil {
@@ -4026,7 +4929,7 @@ type TcpStatistics struct {
 func (m *TcpStatistics) Reset()                    { *m = TcpStatistics{} }
 func (m *TcpStatistics) String() string            { return proto.CompactTextString(m) }
 func (*TcpStatistics) ProtoMessage()               {}
-func (*TcpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{28} }
+func (*TcpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{33} }
 
 func (m *TcpStatistics) GetRtoAlgorithm() int64 {
 	if m != nil && m.RtoAlgorithm != nil {
@@ -4148,7 +5051,7 @@ type UdpStatistics struct {
 func (m *UdpStatistics) Reset()                    { *m = UdpStatistics{} }
 func (m *UdpStatistics) String() string            { return proto.CompactTextString(m) }
 func (*UdpStatistics) ProtoMessage()               {}
-func (*UdpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{29} }
+func (*UdpStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{34} }
 
 func (m *UdpStatistics) GetInDatagrams() int64 {
 	if m != nil && m.InDatagrams != nil {
@@ -4217,7 +5120,7 @@ type SNMPStatistics struct {
 func (m *SNMPStatistics) Reset()                    { *m = SNMPStatistics{} }
 func (m *SNMPStatistics) String() string            { return proto.CompactTextString(m) }
 func (*SNMPStatistics) ProtoMessage()               {}
-func (*SNMPStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{30} }
+func (*SNMPStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{35} }
 
 func (m *SNMPStatistics) GetIpStats() *IpStatistics {
 	if m != nil {
@@ -4258,7 +5161,7 @@ type DiskStatistics struct {
 func (m *DiskStatistics) Reset()                    { *m = DiskStatistics{} }
 func (m *DiskStatistics) String() string            { return proto.CompactTextString(m) }
 func (*DiskStatistics) ProtoMessage()               {}
-func (*DiskStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{31} }
+func (*DiskStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{36} }
 
 func (m *DiskStatistics) GetSource() *Resource_DiskInfo_Source {
 	if m != nil {
@@ -4332,7 +5235,7 @@ type ResourceStatistics struct {
 	MemUnevictableBytes *uint64 `protobuf:"varint,41,opt,name=mem_unevictable_bytes" json:"mem_unevictable_bytes,omitempty"`
 	// Number of occurrences of different levels of memory pressure
 	// events reported by memory cgroup. Pressure listening (re)starts
-	// with these values set to 0 when agent (re)starts. See
+	// with these values set to 0 when slave (re)starts. See
 	// https://www.kernel.org/doc/Documentation/cgroups/memory.txt for
 	// more details.
 	MemLowPressureCounter      *uint64 `protobuf:"varint,32,opt,name=mem_low_pressure_counter" json:"mem_low_pressure_counter,omitempty"`
@@ -4343,6 +5246,8 @@ type ResourceStatistics struct {
 	DiskUsedBytes  *uint64 `protobuf:"varint,27,opt,name=disk_used_bytes" json:"disk_used_bytes,omitempty"`
 	// Per disk (resource) statistics.
 	DiskStatistics []*DiskStatistics `protobuf:"bytes,43,rep,name=disk_statistics" json:"disk_statistics,omitempty"`
+	// Cgroups blkio statistics.
+	BlkioStatistics *CgroupInfo_Blkio_Statistics `protobuf:"bytes,44,opt,name=blkio_statistics" json:"blkio_statistics,omitempty"`
 	// Perf statistics.
 	Perf *PerfStatistics `protobuf:"bytes,13,opt,name=perf" json:"perf,omitempty"`
 	// Network Usage Information:
@@ -4374,7 +5279,7 @@ type ResourceStatistics struct {
 func (m *ResourceStatistics) Reset()                    { *m = ResourceStatistics{} }
 func (m *ResourceStatistics) String() string            { return proto.CompactTextString(m) }
 func (*ResourceStatistics) ProtoMessage()               {}
-func (*ResourceStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{32} }
+func (*ResourceStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{37} }
 
 func (m *ResourceStatistics) GetTimestamp() float64 {
 	if m != nil && m.Timestamp != nil {
@@ -4558,6 +5463,13 @@ func (m *ResourceStatistics) GetDiskStatistics() []*DiskStatistics {
 	return nil
 }
 
+func (m *ResourceStatistics) GetBlkioStatistics() *CgroupInfo_Blkio_Statistics {
+	if m != nil {
+		return m.BlkioStatistics
+	}
+	return nil
+}
+
 func (m *ResourceStatistics) GetPerf() *PerfStatistics {
 	if m != nil {
 		return m.Perf
@@ -4681,7 +5593,7 @@ func (m *ResourceStatistics) GetNetSnmpStatistics() *SNMPStatistics {
 // Describes a snapshot of the resource usage for executors.
 type ResourceUsage struct {
 	Executors []*ResourceUsage_Executor `protobuf:"bytes,1,rep,name=executors" json:"executors,omitempty"`
-	// Agent's total resources including checkpointed dynamic
+	// Slave's total resources including checkpointed dynamic
 	// reservations and persistent volumes.
 	Total            []*Resource `protobuf:"bytes,2,rep,name=total" json:"total,omitempty"`
 	XXX_unrecognized []byte      `json:"-"`
@@ -4690,7 +5602,7 @@ type ResourceUsage struct {
 func (m *ResourceUsage) Reset()                    { *m = ResourceUsage{} }
 func (m *ResourceUsage) String() string            { return proto.CompactTextString(m) }
 func (*ResourceUsage) ProtoMessage()               {}
-func (*ResourceUsage) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{33} }
+func (*ResourceUsage) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{38} }
 
 func (m *ResourceUsage) GetExecutors() []*ResourceUsage_Executor {
 	if m != nil {
@@ -4724,7 +5636,7 @@ type ResourceUsage_Executor struct {
 func (m *ResourceUsage_Executor) Reset()                    { *m = ResourceUsage_Executor{} }
 func (m *ResourceUsage_Executor) String() string            { return proto.CompactTextString(m) }
 func (*ResourceUsage_Executor) ProtoMessage()               {}
-func (*ResourceUsage_Executor) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{33, 0} }
+func (*ResourceUsage_Executor) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{38, 0} }
 
 func (m *ResourceUsage_Executor) GetExecutorInfo() *ExecutorInfo {
 	if m != nil {
@@ -4773,7 +5685,7 @@ func (m *ResourceUsage_Executor_Task) Reset()         { *m = ResourceUsage_Execu
 func (m *ResourceUsage_Executor_Task) String() string { return proto.CompactTextString(m) }
 func (*ResourceUsage_Executor_Task) ProtoMessage()    {}
 func (*ResourceUsage_Executor_Task) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{33, 0, 0}
+	return fileDescriptorMesos, []int{38, 0, 0}
 }
 
 func (m *ResourceUsage_Executor_Task) GetName() string {
@@ -4878,7 +5790,7 @@ type PerfStatistics struct {
 func (m *PerfStatistics) Reset()                    { *m = PerfStatistics{} }
 func (m *PerfStatistics) String() string            { return proto.CompactTextString(m) }
 func (*PerfStatistics) ProtoMessage()               {}
-func (*PerfStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{34} }
+func (*PerfStatistics) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{39} }
 
 func (m *PerfStatistics) GetTimestamp() float64 {
 	if m != nil && m.Timestamp != nil {
@@ -5253,11 +6165,11 @@ func (m *PerfStatistics) GetNodePrefetchMisses() uint64 {
 
 // *
 // Describes a request for resources that can be used by a framework
-// to proactively influence the allocator.  If 'agent_id' is provided
+// to proactively influence the allocator.  If 'slave_id' is provided
 // then this request is assumed to only apply to resources on that
-// agent.
+// slave.
 type Request struct {
-	AgentId          *AgentID    `protobuf:"bytes,1,opt,name=agent_id" json:"agent_id,omitempty"`
+	SlaveId          *SlaveID    `protobuf:"bytes,1,opt,name=slave_id" json:"slave_id,omitempty"`
 	Resources        []*Resource `protobuf:"bytes,2,rep,name=resources" json:"resources,omitempty"`
 	XXX_unrecognized []byte      `json:"-"`
 }
@@ -5265,11 +6177,11 @@ type Request struct {
 func (m *Request) Reset()                    { *m = Request{} }
 func (m *Request) String() string            { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()               {}
-func (*Request) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{35} }
+func (*Request) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{40} }
 
-func (m *Request) GetAgentId() *AgentID {
+func (m *Request) GetSlaveId() *SlaveID {
 	if m != nil {
-		return m.AgentId
+		return m.SlaveId
 	}
 	return nil
 }
@@ -5282,15 +6194,17 @@ func (m *Request) GetResources() []*Resource {
 }
 
 // *
-// Describes some resources available on an agent. An offer only
-// contains resources from a single agent.
+// Describes some resources available on a slave. An offer only
+// contains resources from a single slave.
 type Offer struct {
 	Id          *OfferID     `protobuf:"bytes,1,req,name=id" json:"id,omitempty"`
 	FrameworkId *FrameworkID `protobuf:"bytes,2,req,name=framework_id" json:"framework_id,omitempty"`
-	AgentId     *AgentID     `protobuf:"bytes,3,req,name=agent_id" json:"agent_id,omitempty"`
+	SlaveId     *SlaveID     `protobuf:"bytes,3,req,name=slave_id" json:"slave_id,omitempty"`
 	Hostname    *string      `protobuf:"bytes,4,req,name=hostname" json:"hostname,omitempty"`
-	// URL for reaching the agent running on the host.
-	Url         *URL          `protobuf:"bytes,8,opt,name=url" json:"url,omitempty"`
+	// URL for reaching the slave running on the host.
+	Url *URL `protobuf:"bytes,8,opt,name=url" json:"url,omitempty"`
+	// The domain of the slave.
+	Domain      *DomainInfo   `protobuf:"bytes,11,opt,name=domain" json:"domain,omitempty"`
 	Resources   []*Resource   `protobuf:"bytes,5,rep,name=resources" json:"resources,omitempty"`
 	Attributes  []*Attribute  `protobuf:"bytes,7,rep,name=attributes" json:"attributes,omitempty"`
 	ExecutorIds []*ExecutorID `protobuf:"bytes,6,rep,name=executor_ids" json:"executor_ids,omitempty"`
@@ -5309,8 +6223,6 @@ type Offer struct {
 	// roles managed by the scheduler. (Therefore, each
 	// `Offer.resources[i].allocation_info` will match the
 	// top level `Offer.allocation_info`).
-	//
-	// NOTE: Implementation of this is in-progress, DO NOT USE!
 	AllocationInfo   *Resource_AllocationInfo `protobuf:"bytes,10,opt,name=allocation_info" json:"allocation_info,omitempty"`
 	XXX_unrecognized []byte                   `json:"-"`
 }
@@ -5318,7 +6230,7 @@ type Offer struct {
 func (m *Offer) Reset()                    { *m = Offer{} }
 func (m *Offer) String() string            { return proto.CompactTextString(m) }
 func (*Offer) ProtoMessage()               {}
-func (*Offer) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{36} }
+func (*Offer) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{41} }
 
 func (m *Offer) GetId() *OfferID {
 	if m != nil {
@@ -5334,9 +6246,9 @@ func (m *Offer) GetFrameworkId() *FrameworkID {
 	return nil
 }
 
-func (m *Offer) GetAgentId() *AgentID {
+func (m *Offer) GetSlaveId() *SlaveID {
 	if m != nil {
-		return m.AgentId
+		return m.SlaveId
 	}
 	return nil
 }
@@ -5351,6 +6263,13 @@ func (m *Offer) GetHostname() string {
 func (m *Offer) GetUrl() *URL {
 	if m != nil {
 		return m.Url
+	}
+	return nil
+}
+
+func (m *Offer) GetDomain() *DomainInfo {
+	if m != nil {
+		return m.Domain
 	}
 	return nil
 }
@@ -5392,26 +6311,41 @@ func (m *Offer) GetAllocationInfo() *Resource_AllocationInfo {
 
 // Defines an operation that can be performed against offers.
 type Offer_Operation struct {
-	Type             *Offer_Operation_Type        `protobuf:"varint,1,opt,name=type,enum=mesos.v1.Offer_Operation_Type" json:"type,omitempty"`
-	Launch           *Offer_Operation_Launch      `protobuf:"bytes,2,opt,name=launch" json:"launch,omitempty"`
-	LaunchGroup      *Offer_Operation_LaunchGroup `protobuf:"bytes,7,opt,name=launch_group" json:"launch_group,omitempty"`
-	Reserve          *Offer_Operation_Reserve     `protobuf:"bytes,3,opt,name=reserve" json:"reserve,omitempty"`
-	Unreserve        *Offer_Operation_Unreserve   `protobuf:"bytes,4,opt,name=unreserve" json:"unreserve,omitempty"`
-	Create           *Offer_Operation_Create      `protobuf:"bytes,5,opt,name=create" json:"create,omitempty"`
-	Destroy          *Offer_Operation_Destroy     `protobuf:"bytes,6,opt,name=destroy" json:"destroy,omitempty"`
-	XXX_unrecognized []byte                       `json:"-"`
+	Type *Offer_Operation_Type `protobuf:"varint,1,opt,name=type,enum=mesos.Offer_Operation_Type" json:"type,omitempty"`
+	// NOTE: The `id` field will allow frameworks to indicate that they wish to
+	// receive feedback about an operation. Since this feature is not yet
+	// implemented, the `id` field should NOT be set at present. See MESOS-8054.
+	Id               *OperationID                   `protobuf:"bytes,12,opt,name=id" json:"id,omitempty"`
+	Launch           *Offer_Operation_Launch        `protobuf:"bytes,2,opt,name=launch" json:"launch,omitempty"`
+	LaunchGroup      *Offer_Operation_LaunchGroup   `protobuf:"bytes,7,opt,name=launch_group" json:"launch_group,omitempty"`
+	Reserve          *Offer_Operation_Reserve       `protobuf:"bytes,3,opt,name=reserve" json:"reserve,omitempty"`
+	Unreserve        *Offer_Operation_Unreserve     `protobuf:"bytes,4,opt,name=unreserve" json:"unreserve,omitempty"`
+	Create           *Offer_Operation_Create        `protobuf:"bytes,5,opt,name=create" json:"create,omitempty"`
+	Destroy          *Offer_Operation_Destroy       `protobuf:"bytes,6,opt,name=destroy" json:"destroy,omitempty"`
+	CreateVolume     *Offer_Operation_CreateVolume  `protobuf:"bytes,8,opt,name=create_volume" json:"create_volume,omitempty"`
+	DestroyVolume    *Offer_Operation_DestroyVolume `protobuf:"bytes,9,opt,name=destroy_volume" json:"destroy_volume,omitempty"`
+	CreateBlock      *Offer_Operation_CreateBlock   `protobuf:"bytes,10,opt,name=create_block" json:"create_block,omitempty"`
+	DestroyBlock     *Offer_Operation_DestroyBlock  `protobuf:"bytes,11,opt,name=destroy_block" json:"destroy_block,omitempty"`
+	XXX_unrecognized []byte                         `json:"-"`
 }
 
 func (m *Offer_Operation) Reset()                    { *m = Offer_Operation{} }
 func (m *Offer_Operation) String() string            { return proto.CompactTextString(m) }
 func (*Offer_Operation) ProtoMessage()               {}
-func (*Offer_Operation) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{36, 0} }
+func (*Offer_Operation) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{41, 0} }
 
 func (m *Offer_Operation) GetType() Offer_Operation_Type {
 	if m != nil && m.Type != nil {
 		return *m.Type
 	}
 	return Offer_Operation_UNKNOWN
+}
+
+func (m *Offer_Operation) GetId() *OperationID {
+	if m != nil {
+		return m.Id
+	}
+	return nil
 }
 
 func (m *Offer_Operation) GetLaunch() *Offer_Operation_Launch {
@@ -5456,6 +6390,34 @@ func (m *Offer_Operation) GetDestroy() *Offer_Operation_Destroy {
 	return nil
 }
 
+func (m *Offer_Operation) GetCreateVolume() *Offer_Operation_CreateVolume {
+	if m != nil {
+		return m.CreateVolume
+	}
+	return nil
+}
+
+func (m *Offer_Operation) GetDestroyVolume() *Offer_Operation_DestroyVolume {
+	if m != nil {
+		return m.DestroyVolume
+	}
+	return nil
+}
+
+func (m *Offer_Operation) GetCreateBlock() *Offer_Operation_CreateBlock {
+	if m != nil {
+		return m.CreateBlock
+	}
+	return nil
+}
+
+func (m *Offer_Operation) GetDestroyBlock() *Offer_Operation_DestroyBlock {
+	if m != nil {
+		return m.DestroyBlock
+	}
+	return nil
+}
+
 // TODO(vinod): Deprecate this in favor of `LaunchGroup` below.
 type Offer_Operation_Launch struct {
 	TaskInfos        []*TaskInfo `protobuf:"bytes,1,rep,name=task_infos" json:"task_infos,omitempty"`
@@ -5466,7 +6428,7 @@ func (m *Offer_Operation_Launch) Reset()         { *m = Offer_Operation_Launch{}
 func (m *Offer_Operation_Launch) String() string { return proto.CompactTextString(m) }
 func (*Offer_Operation_Launch) ProtoMessage()    {}
 func (*Offer_Operation_Launch) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{36, 0, 0}
+	return fileDescriptorMesos, []int{41, 0, 0}
 }
 
 func (m *Offer_Operation_Launch) GetTaskInfos() []*TaskInfo {
@@ -5494,7 +6456,7 @@ func (m *Offer_Operation_LaunchGroup) Reset()         { *m = Offer_Operation_Lau
 func (m *Offer_Operation_LaunchGroup) String() string { return proto.CompactTextString(m) }
 func (*Offer_Operation_LaunchGroup) ProtoMessage()    {}
 func (*Offer_Operation_LaunchGroup) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{36, 0, 1}
+	return fileDescriptorMesos, []int{41, 0, 1}
 }
 
 func (m *Offer_Operation_LaunchGroup) GetExecutor() *ExecutorInfo {
@@ -5520,7 +6482,7 @@ func (m *Offer_Operation_Reserve) Reset()         { *m = Offer_Operation_Reserve
 func (m *Offer_Operation_Reserve) String() string { return proto.CompactTextString(m) }
 func (*Offer_Operation_Reserve) ProtoMessage()    {}
 func (*Offer_Operation_Reserve) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{36, 0, 2}
+	return fileDescriptorMesos, []int{41, 0, 2}
 }
 
 func (m *Offer_Operation_Reserve) GetResources() []*Resource {
@@ -5539,7 +6501,7 @@ func (m *Offer_Operation_Unreserve) Reset()         { *m = Offer_Operation_Unres
 func (m *Offer_Operation_Unreserve) String() string { return proto.CompactTextString(m) }
 func (*Offer_Operation_Unreserve) ProtoMessage()    {}
 func (*Offer_Operation_Unreserve) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{36, 0, 3}
+	return fileDescriptorMesos, []int{41, 0, 3}
 }
 
 func (m *Offer_Operation_Unreserve) GetResources() []*Resource {
@@ -5558,7 +6520,7 @@ func (m *Offer_Operation_Create) Reset()         { *m = Offer_Operation_Create{}
 func (m *Offer_Operation_Create) String() string { return proto.CompactTextString(m) }
 func (*Offer_Operation_Create) ProtoMessage()    {}
 func (*Offer_Operation_Create) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{36, 0, 4}
+	return fileDescriptorMesos, []int{41, 0, 4}
 }
 
 func (m *Offer_Operation_Create) GetVolumes() []*Resource {
@@ -5577,12 +6539,96 @@ func (m *Offer_Operation_Destroy) Reset()         { *m = Offer_Operation_Destroy
 func (m *Offer_Operation_Destroy) String() string { return proto.CompactTextString(m) }
 func (*Offer_Operation_Destroy) ProtoMessage()    {}
 func (*Offer_Operation_Destroy) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{36, 0, 5}
+	return fileDescriptorMesos, []int{41, 0, 5}
 }
 
 func (m *Offer_Operation_Destroy) GetVolumes() []*Resource {
 	if m != nil {
 		return m.Volumes
+	}
+	return nil
+}
+
+type Offer_Operation_CreateVolume struct {
+	Source           *Resource                      `protobuf:"bytes,1,req,name=source" json:"source,omitempty"`
+	TargetType       *Resource_DiskInfo_Source_Type `protobuf:"varint,2,req,name=target_type,enum=mesos.Resource_DiskInfo_Source_Type" json:"target_type,omitempty"`
+	XXX_unrecognized []byte                         `json:"-"`
+}
+
+func (m *Offer_Operation_CreateVolume) Reset()         { *m = Offer_Operation_CreateVolume{} }
+func (m *Offer_Operation_CreateVolume) String() string { return proto.CompactTextString(m) }
+func (*Offer_Operation_CreateVolume) ProtoMessage()    {}
+func (*Offer_Operation_CreateVolume) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{41, 0, 6}
+}
+
+func (m *Offer_Operation_CreateVolume) GetSource() *Resource {
+	if m != nil {
+		return m.Source
+	}
+	return nil
+}
+
+func (m *Offer_Operation_CreateVolume) GetTargetType() Resource_DiskInfo_Source_Type {
+	if m != nil && m.TargetType != nil {
+		return *m.TargetType
+	}
+	return Resource_DiskInfo_Source_UNKNOWN
+}
+
+type Offer_Operation_DestroyVolume struct {
+	Volume           *Resource `protobuf:"bytes,1,req,name=volume" json:"volume,omitempty"`
+	XXX_unrecognized []byte    `json:"-"`
+}
+
+func (m *Offer_Operation_DestroyVolume) Reset()         { *m = Offer_Operation_DestroyVolume{} }
+func (m *Offer_Operation_DestroyVolume) String() string { return proto.CompactTextString(m) }
+func (*Offer_Operation_DestroyVolume) ProtoMessage()    {}
+func (*Offer_Operation_DestroyVolume) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{41, 0, 7}
+}
+
+func (m *Offer_Operation_DestroyVolume) GetVolume() *Resource {
+	if m != nil {
+		return m.Volume
+	}
+	return nil
+}
+
+type Offer_Operation_CreateBlock struct {
+	Source           *Resource `protobuf:"bytes,1,req,name=source" json:"source,omitempty"`
+	XXX_unrecognized []byte    `json:"-"`
+}
+
+func (m *Offer_Operation_CreateBlock) Reset()         { *m = Offer_Operation_CreateBlock{} }
+func (m *Offer_Operation_CreateBlock) String() string { return proto.CompactTextString(m) }
+func (*Offer_Operation_CreateBlock) ProtoMessage()    {}
+func (*Offer_Operation_CreateBlock) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{41, 0, 8}
+}
+
+func (m *Offer_Operation_CreateBlock) GetSource() *Resource {
+	if m != nil {
+		return m.Source
+	}
+	return nil
+}
+
+type Offer_Operation_DestroyBlock struct {
+	Block            *Resource `protobuf:"bytes,1,req,name=block" json:"block,omitempty"`
+	XXX_unrecognized []byte    `json:"-"`
+}
+
+func (m *Offer_Operation_DestroyBlock) Reset()         { *m = Offer_Operation_DestroyBlock{} }
+func (m *Offer_Operation_DestroyBlock) String() string { return proto.CompactTextString(m) }
+func (*Offer_Operation_DestroyBlock) ProtoMessage()    {}
+func (*Offer_Operation_DestroyBlock) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{41, 0, 9}
+}
+
+func (m *Offer_Operation_DestroyBlock) GetBlock() *Resource {
+	if m != nil {
+		return m.Block
 	}
 	return nil
 }
@@ -5593,20 +6639,20 @@ type InverseOffer struct {
 	// This is the same OfferID as found in normal offers, which allows
 	// re-use of some of the OfferID-only messages.
 	Id *OfferID `protobuf:"bytes,1,req,name=id" json:"id,omitempty"`
-	// URL for reaching the agent running on the host.  This enables some
+	// URL for reaching the slave running on the host.  This enables some
 	// optimizations as described in MESOS-3012, such as allowing the
-	// scheduler driver to bypass the master and talk directly with an agent.
+	// scheduler driver to bypass the master and talk directly with a slave.
 	Url *URL `protobuf:"bytes,2,opt,name=url" json:"url,omitempty"`
 	// The framework that should release its resources.
-	// If no specifics are provided (i.e. which agent), all the framework's
+	// If no specifics are provided (i.e. which slave), all the framework's
 	// resources are requested back.
 	FrameworkId *FrameworkID `protobuf:"bytes,3,req,name=framework_id" json:"framework_id,omitempty"`
-	// Specified if the resources need to be released from a particular agent.
-	// All the framework's resources on this agent are requested back,
+	// Specified if the resources need to be released from a particular slave.
+	// All the framework's resources on this slave are requested back,
 	// unless further qualified by the `resources` field.
-	AgentId *AgentID `protobuf:"bytes,4,opt,name=agent_id" json:"agent_id,omitempty"`
+	SlaveId *SlaveID `protobuf:"bytes,4,opt,name=slave_id" json:"slave_id,omitempty"`
 	// This InverseOffer represents a planned unavailability event in the
-	// specified interval.  Any tasks running on the given framework or agent
+	// specified interval.  Any tasks running on the given framework or slave
 	// may be killed when the interval arrives.  Therefore, frameworks should
 	// aim to gracefully terminate tasks prior to the arrival of the interval.
 	//
@@ -5621,7 +6667,7 @@ type InverseOffer struct {
 	// the unavailability.
 	Unavailability *Unavailability `protobuf:"bytes,5,req,name=unavailability" json:"unavailability,omitempty"`
 	// A list of resources being requested back from the framework,
-	// on the agent identified by `agent_id`.  If no resources are specified
+	// on the slave identified by `slave_id`.  If no resources are specified
 	// then all resources are being requested back.  For the purpose of
 	// maintenance, this field is always empty (maintenance always requests
 	// all resources back).
@@ -5632,7 +6678,7 @@ type InverseOffer struct {
 func (m *InverseOffer) Reset()                    { *m = InverseOffer{} }
 func (m *InverseOffer) String() string            { return proto.CompactTextString(m) }
 func (*InverseOffer) ProtoMessage()               {}
-func (*InverseOffer) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{37} }
+func (*InverseOffer) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{42} }
 
 func (m *InverseOffer) GetId() *OfferID {
 	if m != nil {
@@ -5655,9 +6701,9 @@ func (m *InverseOffer) GetFrameworkId() *FrameworkID {
 	return nil
 }
 
-func (m *InverseOffer) GetAgentId() *AgentID {
+func (m *InverseOffer) GetSlaveId() *SlaveID {
 	if m != nil {
-		return m.AgentId
+		return m.SlaveId
 	}
 	return nil
 }
@@ -5685,7 +6731,7 @@ func (m *InverseOffer) GetResources() []*Resource {
 type TaskInfo struct {
 	Name      *string       `protobuf:"bytes,1,req,name=name" json:"name,omitempty"`
 	TaskId    *TaskID       `protobuf:"bytes,2,req,name=task_id" json:"task_id,omitempty"`
-	AgentId   *AgentID      `protobuf:"bytes,3,req,name=agent_id" json:"agent_id,omitempty"`
+	SlaveId   *SlaveID      `protobuf:"bytes,3,req,name=slave_id" json:"slave_id,omitempty"`
 	Resources []*Resource   `protobuf:"bytes,4,rep,name=resources" json:"resources,omitempty"`
 	Executor  *ExecutorInfo `protobuf:"bytes,5,opt,name=executor" json:"executor,omitempty"`
 	Command   *CommandInfo  `protobuf:"bytes,7,opt,name=command" json:"command,omitempty"`
@@ -5712,9 +6758,9 @@ type TaskInfo struct {
 	KillPolicy *KillPolicy `protobuf:"bytes,12,opt,name=kill_policy" json:"kill_policy,omitempty"`
 	Data       []byte      `protobuf:"bytes,6,opt,name=data" json:"data,omitempty"`
 	// Labels are free-form key value pairs which are exposed through
-	// master and agent endpoints. Labels will not be interpreted or
+	// master and slave endpoints. Labels will not be interpreted or
 	// acted upon by Mesos itself. As opposed to the data field, labels
-	// will be kept in memory on master and agent processes. Therefore,
+	// will be kept in memory on master and slave processes. Therefore,
 	// labels should be used to tag tasks with light-weight meta-data.
 	// Labels should not contain duplicate key-value pairs.
 	Labels *Labels `protobuf:"bytes,10,opt,name=labels" json:"labels,omitempty"`
@@ -5729,7 +6775,7 @@ type TaskInfo struct {
 func (m *TaskInfo) Reset()                    { *m = TaskInfo{} }
 func (m *TaskInfo) String() string            { return proto.CompactTextString(m) }
 func (*TaskInfo) ProtoMessage()               {}
-func (*TaskInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{38} }
+func (*TaskInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{43} }
 
 func (m *TaskInfo) GetName() string {
 	if m != nil && m.Name != nil {
@@ -5745,9 +6791,9 @@ func (m *TaskInfo) GetTaskId() *TaskID {
 	return nil
 }
 
-func (m *TaskInfo) GetAgentId() *AgentID {
+func (m *TaskInfo) GetSlaveId() *SlaveID {
 	if m != nil {
-		return m.AgentId
+		return m.SlaveId
 	}
 	return nil
 }
@@ -5839,7 +6885,7 @@ type TaskGroupInfo struct {
 func (m *TaskGroupInfo) Reset()                    { *m = TaskGroupInfo{} }
 func (m *TaskGroupInfo) String() string            { return proto.CompactTextString(m) }
 func (*TaskGroupInfo) ProtoMessage()               {}
-func (*TaskGroupInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{39} }
+func (*TaskGroupInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{44} }
 
 func (m *TaskGroupInfo) GetTasks() []*TaskInfo {
 	if m != nil {
@@ -5865,14 +6911,14 @@ type Task struct {
 	TaskId      *TaskID       `protobuf:"bytes,2,req,name=task_id" json:"task_id,omitempty"`
 	FrameworkId *FrameworkID  `protobuf:"bytes,3,req,name=framework_id" json:"framework_id,omitempty"`
 	ExecutorId  *ExecutorID   `protobuf:"bytes,4,opt,name=executor_id" json:"executor_id,omitempty"`
-	AgentId     *AgentID      `protobuf:"bytes,5,req,name=agent_id" json:"agent_id,omitempty"`
-	State       *TaskState    `protobuf:"varint,6,req,name=state,enum=mesos.v1.TaskState" json:"state,omitempty"`
+	SlaveId     *SlaveID      `protobuf:"bytes,5,req,name=slave_id" json:"slave_id,omitempty"`
+	State       *TaskState    `protobuf:"varint,6,req,name=state,enum=mesos.TaskState" json:"state,omitempty"`
 	Resources   []*Resource   `protobuf:"bytes,7,rep,name=resources" json:"resources,omitempty"`
 	Statuses    []*TaskStatus `protobuf:"bytes,8,rep,name=statuses" json:"statuses,omitempty"`
 	// These fields correspond to the state and uuid of the latest
 	// status update forwarded to the master.
 	// NOTE: Either both the fields must be set or both must be unset.
-	StatusUpdateState *TaskState `protobuf:"varint,9,opt,name=status_update_state,enum=mesos.v1.TaskState" json:"status_update_state,omitempty"`
+	StatusUpdateState *TaskState `protobuf:"varint,9,opt,name=status_update_state,enum=mesos.TaskState" json:"status_update_state,omitempty"`
 	StatusUpdateUuid  []byte     `protobuf:"bytes,10,opt,name=status_update_uuid" json:"status_update_uuid,omitempty"`
 	Labels            *Labels    `protobuf:"bytes,11,opt,name=labels" json:"labels,omitempty"`
 	// Service discovery information for the task. It is not interpreted
@@ -5890,7 +6936,7 @@ type Task struct {
 func (m *Task) Reset()                    { *m = Task{} }
 func (m *Task) String() string            { return proto.CompactTextString(m) }
 func (*Task) ProtoMessage()               {}
-func (*Task) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{40} }
+func (*Task) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{45} }
 
 func (m *Task) GetName() string {
 	if m != nil && m.Name != nil {
@@ -5920,9 +6966,9 @@ func (m *Task) GetExecutorId() *ExecutorID {
 	return nil
 }
 
-func (m *Task) GetAgentId() *AgentID {
+func (m *Task) GetSlaveId() *SlaveID {
 	if m != nil {
-		return m.AgentId
+		return m.SlaveId
 	}
 	return nil
 }
@@ -5991,6 +7037,168 @@ func (m *Task) GetUser() string {
 }
 
 // *
+// Describes a resource limitation that caused a task failure.
+type TaskResourceLimitation struct {
+	// This field contains the resource whose limits were violated.
+	//
+	// NOTE: 'Resources' is used here because the resource may span
+	// multiple roles (e.g. `"mem(*):1;mem(role):2"`).
+	Resources        []*Resource `protobuf:"bytes,1,rep,name=resources" json:"resources,omitempty"`
+	XXX_unrecognized []byte      `json:"-"`
+}
+
+func (m *TaskResourceLimitation) Reset()                    { *m = TaskResourceLimitation{} }
+func (m *TaskResourceLimitation) String() string            { return proto.CompactTextString(m) }
+func (*TaskResourceLimitation) ProtoMessage()               {}
+func (*TaskResourceLimitation) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{46} }
+
+func (m *TaskResourceLimitation) GetResources() []*Resource {
+	if m != nil {
+		return m.Resources
+	}
+	return nil
+}
+
+// *
+// Describes a UUID.
+type UUID struct {
+	Value            []byte `protobuf:"bytes,1,req,name=value" json:"value,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *UUID) Reset()                    { *m = UUID{} }
+func (m *UUID) String() string            { return proto.CompactTextString(m) }
+func (*UUID) ProtoMessage()               {}
+func (*UUID) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{47} }
+
+func (m *UUID) GetValue() []byte {
+	if m != nil {
+		return m.Value
+	}
+	return nil
+}
+
+// *
+// Describes an operation, similar to `Offer.Operation`, with
+// some additional information.
+type Operation struct {
+	FrameworkId  *FrameworkID     `protobuf:"bytes,1,opt,name=framework_id" json:"framework_id,omitempty"`
+	SlaveId      *SlaveID         `protobuf:"bytes,2,opt,name=slave_id" json:"slave_id,omitempty"`
+	Info         *Offer_Operation `protobuf:"bytes,3,req,name=info" json:"info,omitempty"`
+	LatestStatus *OperationStatus `protobuf:"bytes,4,req,name=latest_status" json:"latest_status,omitempty"`
+	// All the statuses known to this operation. Some of the statuses in this
+	// list might not have been acknowledged yet. The statuses are ordered.
+	Statuses []*OperationStatus `protobuf:"bytes,5,rep,name=statuses" json:"statuses,omitempty"`
+	// This is the internal UUID for the operation, which is kept independently
+	// from the framework-specified operation ID, which is optional.
+	Uuid             *UUID  `protobuf:"bytes,6,req,name=uuid" json:"uuid,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *Operation) Reset()                    { *m = Operation{} }
+func (m *Operation) String() string            { return proto.CompactTextString(m) }
+func (*Operation) ProtoMessage()               {}
+func (*Operation) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{48} }
+
+func (m *Operation) GetFrameworkId() *FrameworkID {
+	if m != nil {
+		return m.FrameworkId
+	}
+	return nil
+}
+
+func (m *Operation) GetSlaveId() *SlaveID {
+	if m != nil {
+		return m.SlaveId
+	}
+	return nil
+}
+
+func (m *Operation) GetInfo() *Offer_Operation {
+	if m != nil {
+		return m.Info
+	}
+	return nil
+}
+
+func (m *Operation) GetLatestStatus() *OperationStatus {
+	if m != nil {
+		return m.LatestStatus
+	}
+	return nil
+}
+
+func (m *Operation) GetStatuses() []*OperationStatus {
+	if m != nil {
+		return m.Statuses
+	}
+	return nil
+}
+
+func (m *Operation) GetUuid() *UUID {
+	if m != nil {
+		return m.Uuid
+	}
+	return nil
+}
+
+// *
+// Describes the current status of an operation.
+type OperationStatus struct {
+	OperationId *OperationID    `protobuf:"bytes,1,opt,name=operation_id" json:"operation_id,omitempty"`
+	State       *OperationState `protobuf:"varint,2,req,name=state,enum=mesos.OperationState" json:"state,omitempty"`
+	Message     *string         `protobuf:"bytes,3,opt,name=message" json:"message,omitempty"`
+	// Converted resources after applying the operation. This only
+	// applies if the `state` is `OPERATION_FINISHED`.
+	ConvertedResources []*Resource `protobuf:"bytes,4,rep,name=converted_resources" json:"converted_resources,omitempty"`
+	// Statuses that are delivered reliably to the scheduler will
+	// include a `uuid`. The status is considered delivered once
+	// it is acknowledged by the scheduler.
+	Uuid             *UUID  `protobuf:"bytes,5,opt,name=uuid" json:"uuid,omitempty"`
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *OperationStatus) Reset()                    { *m = OperationStatus{} }
+func (m *OperationStatus) String() string            { return proto.CompactTextString(m) }
+func (*OperationStatus) ProtoMessage()               {}
+func (*OperationStatus) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{49} }
+
+func (m *OperationStatus) GetOperationId() *OperationID {
+	if m != nil {
+		return m.OperationId
+	}
+	return nil
+}
+
+func (m *OperationStatus) GetState() OperationState {
+	if m != nil && m.State != nil {
+		return *m.State
+	}
+	return OperationState_OPERATION_UNSUPPORTED
+}
+
+func (m *OperationStatus) GetMessage() string {
+	if m != nil && m.Message != nil {
+		return *m.Message
+	}
+	return ""
+}
+
+func (m *OperationStatus) GetConvertedResources() []*Resource {
+	if m != nil {
+		return m.ConvertedResources
+	}
+	return nil
+}
+
+func (m *OperationStatus) GetUuid() *UUID {
+	if m != nil {
+		return m.Uuid
+	}
+	return nil
+}
+
+// *
 // Describes the status of a check. Type and the corresponding field, i.e.,
 // `command` or `http` must be set. If the result of the check is not available
 // (e.g., the check timed out), these fields must contain empty messages, i.e.,
@@ -5999,7 +7207,7 @@ func (m *Task) GetUser() string {
 // NOTE: This API is unstable and the related feature is experimental.
 type CheckStatusInfo struct {
 	// The type of the check this status corresponds to.
-	Type *CheckInfo_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.CheckInfo_Type" json:"type,omitempty"`
+	Type *CheckInfo_Type `protobuf:"varint,1,opt,name=type,enum=mesos.CheckInfo_Type" json:"type,omitempty"`
 	// Status of a command check.
 	Command *CheckStatusInfo_Command `protobuf:"bytes,2,opt,name=command" json:"command,omitempty"`
 	// Status of an HTTP check.
@@ -6012,7 +7220,7 @@ type CheckStatusInfo struct {
 func (m *CheckStatusInfo) Reset()                    { *m = CheckStatusInfo{} }
 func (m *CheckStatusInfo) String() string            { return proto.CompactTextString(m) }
 func (*CheckStatusInfo) ProtoMessage()               {}
-func (*CheckStatusInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{41} }
+func (*CheckStatusInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{50} }
 
 func (m *CheckStatusInfo) GetType() CheckInfo_Type {
 	if m != nil && m.Type != nil {
@@ -6053,7 +7261,7 @@ type CheckStatusInfo_Command struct {
 func (m *CheckStatusInfo_Command) Reset()                    { *m = CheckStatusInfo_Command{} }
 func (m *CheckStatusInfo_Command) String() string            { return proto.CompactTextString(m) }
 func (*CheckStatusInfo_Command) ProtoMessage()               {}
-func (*CheckStatusInfo_Command) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{41, 0} }
+func (*CheckStatusInfo_Command) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{50, 0} }
 
 func (m *CheckStatusInfo_Command) GetExitCode() int32 {
 	if m != nil && m.ExitCode != nil {
@@ -6071,7 +7279,7 @@ type CheckStatusInfo_Http struct {
 func (m *CheckStatusInfo_Http) Reset()                    { *m = CheckStatusInfo_Http{} }
 func (m *CheckStatusInfo_Http) String() string            { return proto.CompactTextString(m) }
 func (*CheckStatusInfo_Http) ProtoMessage()               {}
-func (*CheckStatusInfo_Http) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{41, 1} }
+func (*CheckStatusInfo_Http) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{50, 1} }
 
 func (m *CheckStatusInfo_Http) GetStatusCode() uint32 {
 	if m != nil && m.StatusCode != nil {
@@ -6089,7 +7297,7 @@ type CheckStatusInfo_Tcp struct {
 func (m *CheckStatusInfo_Tcp) Reset()                    { *m = CheckStatusInfo_Tcp{} }
 func (m *CheckStatusInfo_Tcp) String() string            { return proto.CompactTextString(m) }
 func (*CheckStatusInfo_Tcp) ProtoMessage()               {}
-func (*CheckStatusInfo_Tcp) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{41, 2} }
+func (*CheckStatusInfo_Tcp) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{50, 2} }
 
 func (m *CheckStatusInfo_Tcp) GetSucceeded() bool {
 	if m != nil && m.Succeeded != nil {
@@ -6102,12 +7310,12 @@ func (m *CheckStatusInfo_Tcp) GetSucceeded() bool {
 // Describes the current status of a task.
 type TaskStatus struct {
 	TaskId     *TaskID            `protobuf:"bytes,1,req,name=task_id" json:"task_id,omitempty"`
-	State      *TaskState         `protobuf:"varint,2,req,name=state,enum=mesos.v1.TaskState" json:"state,omitempty"`
+	State      *TaskState         `protobuf:"varint,2,req,name=state,enum=mesos.TaskState" json:"state,omitempty"`
 	Message    *string            `protobuf:"bytes,4,opt,name=message" json:"message,omitempty"`
-	Source     *TaskStatus_Source `protobuf:"varint,9,opt,name=source,enum=mesos.v1.TaskStatus_Source" json:"source,omitempty"`
-	Reason     *TaskStatus_Reason `protobuf:"varint,10,opt,name=reason,enum=mesos.v1.TaskStatus_Reason" json:"reason,omitempty"`
+	Source     *TaskStatus_Source `protobuf:"varint,9,opt,name=source,enum=mesos.TaskStatus_Source" json:"source,omitempty"`
+	Reason     *TaskStatus_Reason `protobuf:"varint,10,opt,name=reason,enum=mesos.TaskStatus_Reason" json:"reason,omitempty"`
 	Data       []byte             `protobuf:"bytes,3,opt,name=data" json:"data,omitempty"`
-	AgentId    *AgentID           `protobuf:"bytes,5,opt,name=agent_id" json:"agent_id,omitempty"`
+	SlaveId    *SlaveID           `protobuf:"bytes,5,opt,name=slave_id" json:"slave_id,omitempty"`
 	ExecutorId *ExecutorID        `protobuf:"bytes,7,opt,name=executor_id" json:"executor_id,omitempty"`
 	Timestamp  *float64           `protobuf:"fixed64,6,opt,name=timestamp" json:"timestamp,omitempty"`
 	// Statuses that are delivered reliably to the scheduler will
@@ -6136,11 +7344,11 @@ type TaskStatus struct {
 	// NOTE: Check support in built-in executors is experimental.
 	CheckStatus *CheckStatusInfo `protobuf:"bytes,15,opt,name=check_status" json:"check_status,omitempty"`
 	// Labels are free-form key value pairs which are exposed through
-	// master and agent endpoints. Labels will not be interpreted or
+	// master and slave endpoints. Labels will not be interpreted or
 	// acted upon by Mesos itself. As opposed to the data field, labels
-	// will be kept in memory on master and agent processes. Therefore,
+	// will be kept in memory on master and slave processes. Therefore,
 	// labels should be used to tag TaskStatus message with light-weight
-	// meta-data.  Labels should not contain duplicate key-value pairs.
+	// meta-data. Labels should not contain duplicate key-value pairs.
 	Labels *Labels `protobuf:"bytes,12,opt,name=labels" json:"labels,omitempty"`
 	// Container related information that is resolved dynamically such as
 	// network address.
@@ -6149,14 +7357,17 @@ type TaskStatus struct {
 	// this task was running became unreachable. This is only set on
 	// status updates for tasks running on agents that are unreachable
 	// (e.g., partitioned away from the master).
-	UnreachableTime  *TimeInfo `protobuf:"bytes,14,opt,name=unreachable_time" json:"unreachable_time,omitempty"`
-	XXX_unrecognized []byte    `json:"-"`
+	UnreachableTime *TimeInfo `protobuf:"bytes,14,opt,name=unreachable_time" json:"unreachable_time,omitempty"`
+	// If the reason field indicates a container resource limitation,
+	// this field optionally contains additional information.
+	Limitation       *TaskResourceLimitation `protobuf:"bytes,16,opt,name=limitation" json:"limitation,omitempty"`
+	XXX_unrecognized []byte                  `json:"-"`
 }
 
 func (m *TaskStatus) Reset()                    { *m = TaskStatus{} }
 func (m *TaskStatus) String() string            { return proto.CompactTextString(m) }
 func (*TaskStatus) ProtoMessage()               {}
-func (*TaskStatus) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{42} }
+func (*TaskStatus) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{51} }
 
 func (m *TaskStatus) GetTaskId() *TaskID {
 	if m != nil {
@@ -6200,9 +7411,9 @@ func (m *TaskStatus) GetData() []byte {
 	return nil
 }
 
-func (m *TaskStatus) GetAgentId() *AgentID {
+func (m *TaskStatus) GetSlaveId() *SlaveID {
 	if m != nil {
-		return m.AgentId
+		return m.SlaveId
 	}
 	return nil
 }
@@ -6263,6 +7474,13 @@ func (m *TaskStatus) GetUnreachableTime() *TimeInfo {
 	return nil
 }
 
+func (m *TaskStatus) GetLimitation() *TaskResourceLimitation {
+	if m != nil {
+		return m.Limitation
+	}
+	return nil
+}
+
 // *
 // Describes possible filters that can be applied to unused resources
 // (see SchedulerDriver::launchTasks) to influence the allocator.
@@ -6273,6 +7491,11 @@ type Filters struct {
 	// SchedulerDriver::launchTasks. You MUST pass Filters with this
 	// field set to change this behavior (i.e., get another offer which
 	// includes unused resources sooner or later than the default).
+	//
+	// If this field is set to a number of seconds greater than 31536000
+	// (365 days), then the resources will be considered refused for 365
+	// days. If it is set to a negative number, then the default value
+	// will be used.
 	RefuseSeconds    *float64 `protobuf:"fixed64,1,opt,name=refuse_seconds,def=5" json:"refuse_seconds,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
@@ -6280,7 +7503,7 @@ type Filters struct {
 func (m *Filters) Reset()                    { *m = Filters{} }
 func (m *Filters) String() string            { return proto.CompactTextString(m) }
 func (*Filters) ProtoMessage()               {}
-func (*Filters) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{43} }
+func (*Filters) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{52} }
 
 const Default_Filters_RefuseSeconds float64 = 5
 
@@ -6304,7 +7527,7 @@ type Environment struct {
 func (m *Environment) Reset()                    { *m = Environment{} }
 func (m *Environment) String() string            { return proto.CompactTextString(m) }
 func (*Environment) ProtoMessage()               {}
-func (*Environment) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{44} }
+func (*Environment) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{53} }
 
 func (m *Environment) GetVariables() []*Environment_Variable {
 	if m != nil {
@@ -6320,7 +7543,7 @@ type Environment_Variable struct {
 	// which requires `value` to be set, maintaining backward compatibility.
 	//
 	// TODO(greggomann): The default can be removed in Mesos 2.1 (MESOS-7134).
-	Type *Environment_Variable_Type `protobuf:"varint,3,opt,name=type,enum=mesos.v1.Environment_Variable_Type,def=1" json:"type,omitempty"`
+	Type *Environment_Variable_Type `protobuf:"varint,3,opt,name=type,enum=mesos.Environment_Variable_Type,def=1" json:"type,omitempty"`
 	// Only one of `value` and `secret` must be set.
 	Value            *string `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`
 	Secret           *Secret `protobuf:"bytes,4,opt,name=secret" json:"secret,omitempty"`
@@ -6330,7 +7553,7 @@ type Environment_Variable struct {
 func (m *Environment_Variable) Reset()                    { *m = Environment_Variable{} }
 func (m *Environment_Variable) String() string            { return proto.CompactTextString(m) }
 func (*Environment_Variable) ProtoMessage()               {}
-func (*Environment_Variable) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{44, 0} }
+func (*Environment_Variable) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{53, 0} }
 
 const Default_Environment_Variable_Type Environment_Variable_Type = Environment_Variable_VALUE
 
@@ -6373,7 +7596,7 @@ type Parameter struct {
 func (m *Parameter) Reset()                    { *m = Parameter{} }
 func (m *Parameter) String() string            { return proto.CompactTextString(m) }
 func (*Parameter) ProtoMessage()               {}
-func (*Parameter) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{45} }
+func (*Parameter) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{54} }
 
 func (m *Parameter) GetKey() string {
 	if m != nil && m.Key != nil {
@@ -6399,7 +7622,7 @@ type Parameters struct {
 func (m *Parameters) Reset()                    { *m = Parameters{} }
 func (m *Parameters) String() string            { return proto.CompactTextString(m) }
 func (*Parameters) ProtoMessage()               {}
-func (*Parameters) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{46} }
+func (*Parameters) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{55} }
 
 func (m *Parameters) GetParameter() []*Parameter {
 	if m != nil {
@@ -6425,7 +7648,7 @@ type Credential struct {
 func (m *Credential) Reset()                    { *m = Credential{} }
 func (m *Credential) String() string            { return proto.CompactTextString(m) }
 func (*Credential) ProtoMessage()               {}
-func (*Credential) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{47} }
+func (*Credential) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{56} }
 
 func (m *Credential) GetPrincipal() string {
 	if m != nil && m.Principal != nil {
@@ -6453,7 +7676,7 @@ type Credentials struct {
 func (m *Credentials) Reset()                    { *m = Credentials{} }
 func (m *Credentials) String() string            { return proto.CompactTextString(m) }
 func (*Credentials) ProtoMessage()               {}
-func (*Credentials) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{48} }
+func (*Credentials) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{57} }
 
 func (m *Credentials) GetCredentials() []*Credential {
 	if m != nil {
@@ -6467,7 +7690,7 @@ func (m *Credentials) GetCredentials() []*Credential {
 // pass-by-value or pass-by-reference semantics, where the REFERENCE type can be
 // used by custom modules which interact with a secure back-end.
 type Secret struct {
-	Type *Secret_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.Secret_Type" json:"type,omitempty"`
+	Type *Secret_Type `protobuf:"varint,1,opt,name=type,enum=mesos.Secret_Type" json:"type,omitempty"`
 	// Only one of `reference` and `value` must be set.
 	Reference        *Secret_Reference `protobuf:"bytes,2,opt,name=reference" json:"reference,omitempty"`
 	Value            *Secret_Value     `protobuf:"bytes,3,opt,name=value" json:"value,omitempty"`
@@ -6477,7 +7700,7 @@ type Secret struct {
 func (m *Secret) Reset()                    { *m = Secret{} }
 func (m *Secret) String() string            { return proto.CompactTextString(m) }
 func (*Secret) ProtoMessage()               {}
-func (*Secret) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{49} }
+func (*Secret) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{58} }
 
 func (m *Secret) GetType() Secret_Type {
 	if m != nil && m.Type != nil {
@@ -6523,7 +7746,7 @@ type Secret_Reference struct {
 func (m *Secret_Reference) Reset()                    { *m = Secret_Reference{} }
 func (m *Secret_Reference) String() string            { return proto.CompactTextString(m) }
 func (*Secret_Reference) ProtoMessage()               {}
-func (*Secret_Reference) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{49, 0} }
+func (*Secret_Reference) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{58, 0} }
 
 func (m *Secret_Reference) GetName() string {
 	if m != nil && m.Name != nil {
@@ -6548,7 +7771,7 @@ type Secret_Value struct {
 func (m *Secret_Value) Reset()                    { *m = Secret_Value{} }
 func (m *Secret_Value) String() string            { return proto.CompactTextString(m) }
 func (*Secret_Value) ProtoMessage()               {}
-func (*Secret_Value) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{49, 1} }
+func (*Secret_Value) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{58, 1} }
 
 func (m *Secret_Value) GetData() []byte {
 	if m != nil {
@@ -6581,7 +7804,7 @@ type RateLimit struct {
 func (m *RateLimit) Reset()                    { *m = RateLimit{} }
 func (m *RateLimit) String() string            { return proto.CompactTextString(m) }
 func (*RateLimit) ProtoMessage()               {}
-func (*RateLimit) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{50} }
+func (*RateLimit) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{59} }
 
 func (m *RateLimit) GetQps() float64 {
 	if m != nil && m.Qps != nil {
@@ -6624,7 +7847,7 @@ type RateLimits struct {
 func (m *RateLimits) Reset()                    { *m = RateLimits{} }
 func (m *RateLimits) String() string            { return proto.CompactTextString(m) }
 func (*RateLimits) ProtoMessage()               {}
-func (*RateLimits) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{51} }
+func (*RateLimits) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{60} }
 
 func (m *RateLimits) GetLimits() []*RateLimit {
 	if m != nil {
@@ -6651,7 +7874,7 @@ func (m *RateLimits) GetAggregateDefaultCapacity() uint64 {
 // Describe an image used by tasks or executors. Note that it's only
 // for tasks or executors launched by MesosContainerizer currently.
 type Image struct {
-	Type *Image_Type `protobuf:"varint,1,req,name=type,enum=mesos.v1.Image_Type" json:"type,omitempty"`
+	Type *Image_Type `protobuf:"varint,1,req,name=type,enum=mesos.Image_Type" json:"type,omitempty"`
 	// Only one of the following image messages should be set to match
 	// the type.
 	Appc   *Image_Appc   `protobuf:"bytes,2,opt,name=appc" json:"appc,omitempty"`
@@ -6666,7 +7889,7 @@ type Image struct {
 func (m *Image) Reset()                    { *m = Image{} }
 func (m *Image) String() string            { return proto.CompactTextString(m) }
 func (*Image) ProtoMessage()               {}
-func (*Image) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{52} }
+func (*Image) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{61} }
 
 const Default_Image_Cached bool = true
 
@@ -6716,7 +7939,7 @@ type Image_Appc struct {
 func (m *Image_Appc) Reset()                    { *m = Image_Appc{} }
 func (m *Image_Appc) String() string            { return proto.CompactTextString(m) }
 func (*Image_Appc) ProtoMessage()               {}
-func (*Image_Appc) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{52, 0} }
+func (*Image_Appc) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{61, 0} }
 
 func (m *Image_Appc) GetName() string {
 	if m != nil && m.Name != nil {
@@ -6749,15 +7972,13 @@ type Image_Docker struct {
 	// NOTE: This is not encrypted, therefore framework and operators
 	// should enable SSL when passing this information.
 	//
-	// This is field is never used in Mesos before and is deprecated
-	// since Mesos 1.3. Please use the `Secret::Value` field `config`
-	// below (see MESOS-7088 for details).
+	// This field has never been used in Mesos before and is
+	// deprecated since Mesos 1.3. Please use `config` below
+	// (see MESOS-7088 for details).
 	Credential *Credential `protobuf:"bytes,2,opt,name=credential" json:"credential,omitempty"`
-	// The UTF-8 character encoded byte data, which is expected as
-	// a docker config file in JSON format. This field is used for
-	// supporting docker private registry credential per container.
-	// Users can specify different docker config files for pulling
-	// their private images from different registries.
+	// Docker config containing credentails to authenticate with
+	// docker registry. The secret is expected to be a docker
+	// config file in JSON format with UTF-8 character encoding.
 	Config           *Secret `protobuf:"bytes,3,opt,name=config" json:"config,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
@@ -6765,7 +7986,7 @@ type Image_Docker struct {
 func (m *Image_Docker) Reset()                    { *m = Image_Docker{} }
 func (m *Image_Docker) String() string            { return proto.CompactTextString(m) }
 func (*Image_Docker) ProtoMessage()               {}
-func (*Image_Docker) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{52, 1} }
+func (*Image_Docker) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{61, 1} }
 
 func (m *Image_Docker) GetName() string {
 	if m != nil && m.Name != nil {
@@ -6789,11 +8010,32 @@ func (m *Image_Docker) GetConfig() *Secret {
 }
 
 // *
+// Describes how the mount will be propagated for a volume. See the
+// following doc for more details about mount propagation:
+// https://www.kernel.org/doc/Documentation/filesystems/sharedsubtree.txt
+type MountPropagation struct {
+	Mode             *MountPropagation_Mode `protobuf:"varint,1,opt,name=mode,enum=mesos.MountPropagation_Mode" json:"mode,omitempty"`
+	XXX_unrecognized []byte                 `json:"-"`
+}
+
+func (m *MountPropagation) Reset()                    { *m = MountPropagation{} }
+func (m *MountPropagation) String() string            { return proto.CompactTextString(m) }
+func (*MountPropagation) ProtoMessage()               {}
+func (*MountPropagation) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{62} }
+
+func (m *MountPropagation) GetMode() MountPropagation_Mode {
+	if m != nil && m.Mode != nil {
+		return *m.Mode
+	}
+	return MountPropagation_UNKNOWN
+}
+
+// *
 // Describes a volume mapping either from host to container or vice
 // versa. Both paths can either refer to a directory or a file.
 type Volume struct {
 	// TODO(gyliu513): Make this as `optional` after deprecation cycle of 1.0.
-	Mode *Volume_Mode `protobuf:"varint,3,req,name=mode,enum=mesos.v1.Volume_Mode" json:"mode,omitempty"`
+	Mode *Volume_Mode `protobuf:"varint,3,req,name=mode,enum=mesos.Volume_Mode" json:"mode,omitempty"`
 	// Path pointing to a directory or file in the container. If the
 	// path is a relative path, it is relative to the container work
 	// directory. If the path is an absolute path, that path must
@@ -6812,7 +8054,7 @@ type Volume struct {
 func (m *Volume) Reset()                    { *m = Volume{} }
 func (m *Volume) String() string            { return proto.CompactTextString(m) }
 func (*Volume) ProtoMessage()               {}
-func (*Volume) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{53} }
+func (*Volume) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{63} }
 
 func (m *Volume) GetMode() Volume_Mode {
 	if m != nil && m.Mode != nil {
@@ -6852,9 +8094,10 @@ func (m *Volume) GetSource() *Volume_Source {
 // Describes where a volume originates from.
 type Volume_Source struct {
 	// Enum fields should be optional, see: MESOS-4997.
-	Type *Volume_Source_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.Volume_Source_Type" json:"type,omitempty"`
+	Type *Volume_Source_Type `protobuf:"varint,1,opt,name=type,enum=mesos.Volume_Source_Type" json:"type,omitempty"`
 	// The source of the volume created by docker volume driver.
 	DockerVolume *Volume_Source_DockerVolume `protobuf:"bytes,2,opt,name=docker_volume" json:"docker_volume,omitempty"`
+	HostPath     *Volume_Source_HostPath     `protobuf:"bytes,5,opt,name=host_path" json:"host_path,omitempty"`
 	SandboxPath  *Volume_Source_SandboxPath  `protobuf:"bytes,3,opt,name=sandbox_path" json:"sandbox_path,omitempty"`
 	// The volume/secret isolator uses the secret-fetcher module (third-party or
 	// internal) downloads the secret and makes it available at container_path.
@@ -6865,7 +8108,7 @@ type Volume_Source struct {
 func (m *Volume_Source) Reset()                    { *m = Volume_Source{} }
 func (m *Volume_Source) String() string            { return proto.CompactTextString(m) }
 func (*Volume_Source) ProtoMessage()               {}
-func (*Volume_Source) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{53, 0} }
+func (*Volume_Source) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{63, 0} }
 
 func (m *Volume_Source) GetType() Volume_Source_Type {
 	if m != nil && m.Type != nil {
@@ -6877,6 +8120,13 @@ func (m *Volume_Source) GetType() Volume_Source_Type {
 func (m *Volume_Source) GetDockerVolume() *Volume_Source_DockerVolume {
 	if m != nil {
 		return m.DockerVolume
+	}
+	return nil
+}
+
+func (m *Volume_Source) GetHostPath() *Volume_Source_HostPath {
+	if m != nil {
+		return m.HostPath
 	}
 	return nil
 }
@@ -6909,7 +8159,7 @@ func (m *Volume_Source_DockerVolume) Reset()         { *m = Volume_Source_Docker
 func (m *Volume_Source_DockerVolume) String() string { return proto.CompactTextString(m) }
 func (*Volume_Source_DockerVolume) ProtoMessage()    {}
 func (*Volume_Source_DockerVolume) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{53, 0, 0}
+	return fileDescriptorMesos, []int{63, 0, 0}
 }
 
 func (m *Volume_Source_DockerVolume) GetDriver() string {
@@ -6933,13 +8183,41 @@ func (m *Volume_Source_DockerVolume) GetDriverOptions() *Parameters {
 	return nil
 }
 
+// Absolute path pointing to a directory or file on the host.
+type Volume_Source_HostPath struct {
+	Path             *string           `protobuf:"bytes,1,req,name=path" json:"path,omitempty"`
+	MountPropagation *MountPropagation `protobuf:"bytes,2,opt,name=mount_propagation" json:"mount_propagation,omitempty"`
+	XXX_unrecognized []byte            `json:"-"`
+}
+
+func (m *Volume_Source_HostPath) Reset()         { *m = Volume_Source_HostPath{} }
+func (m *Volume_Source_HostPath) String() string { return proto.CompactTextString(m) }
+func (*Volume_Source_HostPath) ProtoMessage()    {}
+func (*Volume_Source_HostPath) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{63, 0, 1}
+}
+
+func (m *Volume_Source_HostPath) GetPath() string {
+	if m != nil && m.Path != nil {
+		return *m.Path
+	}
+	return ""
+}
+
+func (m *Volume_Source_HostPath) GetMountPropagation() *MountPropagation {
+	if m != nil {
+		return m.MountPropagation
+	}
+	return nil
+}
+
 // Describe a path from a container's sandbox. The container can
 // be the current container (SELF), or its parent container
 // (PARENT). PARENT allows all child containers to share a volume
 // from their parent container's sandbox. It'll be an error if
 // the current container is a top level container.
 type Volume_Source_SandboxPath struct {
-	Type *Volume_Source_SandboxPath_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.Volume_Source_SandboxPath_Type" json:"type,omitempty"`
+	Type *Volume_Source_SandboxPath_Type `protobuf:"varint,1,opt,name=type,enum=mesos.Volume_Source_SandboxPath_Type" json:"type,omitempty"`
 	// A path relative to the corresponding container's sandbox.
 	// Note that upwards traversal (i.e. ../../abc) is not allowed.
 	Path             *string `protobuf:"bytes,2,req,name=path" json:"path,omitempty"`
@@ -6950,7 +8228,7 @@ func (m *Volume_Source_SandboxPath) Reset()         { *m = Volume_Source_Sandbox
 func (m *Volume_Source_SandboxPath) String() string { return proto.CompactTextString(m) }
 func (*Volume_Source_SandboxPath) ProtoMessage()    {}
 func (*Volume_Source_SandboxPath) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{53, 0, 1}
+	return fileDescriptorMesos, []int{63, 0, 2}
 }
 
 func (m *Volume_Source_SandboxPath) GetType() Volume_Source_SandboxPath_Type {
@@ -7015,7 +8293,7 @@ type NetworkInfo struct {
 func (m *NetworkInfo) Reset()                    { *m = NetworkInfo{} }
 func (m *NetworkInfo) String() string            { return proto.CompactTextString(m) }
 func (*NetworkInfo) ProtoMessage()               {}
-func (*NetworkInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{54} }
+func (*NetworkInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{64} }
 
 func (m *NetworkInfo) GetIpAddresses() []*NetworkInfo_IPAddress {
 	if m != nil {
@@ -7064,7 +8342,7 @@ type NetworkInfo_IPAddress struct {
 	// request the network isolator on the Agent to assign an IP address to the
 	// container being launched. If a specific IP address is specified in
 	// ip_address, this field should not be set.
-	Protocol *NetworkInfo_Protocol `protobuf:"varint,1,opt,name=protocol,enum=mesos.v1.NetworkInfo_Protocol" json:"protocol,omitempty"`
+	Protocol *NetworkInfo_Protocol `protobuf:"varint,1,opt,name=protocol,enum=mesos.NetworkInfo_Protocol,def=1" json:"protocol,omitempty"`
 	// Statically assigned IP provided by the Framework. This IP will be
 	// assigned to the container by the network isolator module on the Agent.
 	// This field should not be used with the protocol field above.
@@ -7078,13 +8356,15 @@ type NetworkInfo_IPAddress struct {
 func (m *NetworkInfo_IPAddress) Reset()                    { *m = NetworkInfo_IPAddress{} }
 func (m *NetworkInfo_IPAddress) String() string            { return proto.CompactTextString(m) }
 func (*NetworkInfo_IPAddress) ProtoMessage()               {}
-func (*NetworkInfo_IPAddress) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{54, 0} }
+func (*NetworkInfo_IPAddress) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{64, 0} }
+
+const Default_NetworkInfo_IPAddress_Protocol NetworkInfo_Protocol = NetworkInfo_IPv4
 
 func (m *NetworkInfo_IPAddress) GetProtocol() NetworkInfo_Protocol {
 	if m != nil && m.Protocol != nil {
 		return *m.Protocol
 	}
-	return NetworkInfo_IPv4
+	return Default_NetworkInfo_IPAddress_Protocol
 }
 
 func (m *NetworkInfo_IPAddress) GetIpAddress() string {
@@ -7106,7 +8386,7 @@ type NetworkInfo_PortMapping struct {
 func (m *NetworkInfo_PortMapping) Reset()                    { *m = NetworkInfo_PortMapping{} }
 func (m *NetworkInfo_PortMapping) String() string            { return proto.CompactTextString(m) }
 func (*NetworkInfo_PortMapping) ProtoMessage()               {}
-func (*NetworkInfo_PortMapping) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{54, 1} }
+func (*NetworkInfo_PortMapping) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{64, 1} }
 
 func (m *NetworkInfo_PortMapping) GetHostPort() uint32 {
 	if m != nil && m.HostPort != nil {
@@ -7133,14 +8413,14 @@ func (m *NetworkInfo_PortMapping) GetProtocol() string {
 // Encapsulation of `Capabilities` supported by Linux.
 // Reference: http://linux.die.net/man/7/capabilities.
 type CapabilityInfo struct {
-	Capabilities     []CapabilityInfo_Capability `protobuf:"varint,1,rep,name=capabilities,enum=mesos.v1.CapabilityInfo_Capability" json:"capabilities,omitempty"`
+	Capabilities     []CapabilityInfo_Capability `protobuf:"varint,1,rep,name=capabilities,enum=mesos.CapabilityInfo_Capability" json:"capabilities,omitempty"`
 	XXX_unrecognized []byte                      `json:"-"`
 }
 
 func (m *CapabilityInfo) Reset()                    { *m = CapabilityInfo{} }
 func (m *CapabilityInfo) String() string            { return proto.CompactTextString(m) }
 func (*CapabilityInfo) ProtoMessage()               {}
-func (*CapabilityInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{55} }
+func (*CapabilityInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{65} }
 
 func (m *CapabilityInfo) GetCapabilities() []CapabilityInfo_Capability {
 	if m != nil {
@@ -7153,21 +8433,55 @@ func (m *CapabilityInfo) GetCapabilities() []CapabilityInfo_Capability {
 // Encapsulation for Linux specific configuration.
 // E.g, capabilities, limits etc.
 type LinuxInfo struct {
-	// Represents the capability whitelist.
-	CapabilityInfo   *CapabilityInfo `protobuf:"bytes,1,opt,name=capability_info" json:"capability_info,omitempty"`
-	XXX_unrecognized []byte          `json:"-"`
+	// Since 1.4.0, deprecated in favor of `effective_capabilities`.
+	CapabilityInfo *CapabilityInfo `protobuf:"bytes,1,opt,name=capability_info" json:"capability_info,omitempty"`
+	// The set of capabilities that are allowed but not initially
+	// granted to tasks.
+	BoundingCapabilities *CapabilityInfo `protobuf:"bytes,2,opt,name=bounding_capabilities" json:"bounding_capabilities,omitempty"`
+	// Represents the set of capabilities that the task will
+	// be executed with.
+	EffectiveCapabilities *CapabilityInfo `protobuf:"bytes,3,opt,name=effective_capabilities" json:"effective_capabilities,omitempty"`
+	// If set as 'true', the container shares the pid namespace with
+	// its parent. If the container is a top level container, it will
+	// share the pid namespace with the agent. If the container is a
+	// nested container, it will share the pid namespace with its
+	// parent container. This field will be ignored if 'namespaces/pid'
+	// isolator is not enabled.
+	SharePidNamespace *bool  `protobuf:"varint,4,opt,name=share_pid_namespace" json:"share_pid_namespace,omitempty"`
+	XXX_unrecognized  []byte `json:"-"`
 }
 
 func (m *LinuxInfo) Reset()                    { *m = LinuxInfo{} }
 func (m *LinuxInfo) String() string            { return proto.CompactTextString(m) }
 func (*LinuxInfo) ProtoMessage()               {}
-func (*LinuxInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{56} }
+func (*LinuxInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{66} }
 
 func (m *LinuxInfo) GetCapabilityInfo() *CapabilityInfo {
 	if m != nil {
 		return m.CapabilityInfo
 	}
 	return nil
+}
+
+func (m *LinuxInfo) GetBoundingCapabilities() *CapabilityInfo {
+	if m != nil {
+		return m.BoundingCapabilities
+	}
+	return nil
+}
+
+func (m *LinuxInfo) GetEffectiveCapabilities() *CapabilityInfo {
+	if m != nil {
+		return m.EffectiveCapabilities
+	}
+	return nil
+}
+
+func (m *LinuxInfo) GetSharePidNamespace() bool {
+	if m != nil && m.SharePidNamespace != nil {
+		return *m.SharePidNamespace
+	}
+	return false
 }
 
 // *
@@ -7184,7 +8498,7 @@ type RLimitInfo struct {
 func (m *RLimitInfo) Reset()                    { *m = RLimitInfo{} }
 func (m *RLimitInfo) String() string            { return proto.CompactTextString(m) }
 func (*RLimitInfo) ProtoMessage()               {}
-func (*RLimitInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{57} }
+func (*RLimitInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{67} }
 
 func (m *RLimitInfo) GetRlimits() []*RLimitInfo_RLimit {
 	if m != nil {
@@ -7194,7 +8508,7 @@ func (m *RLimitInfo) GetRlimits() []*RLimitInfo_RLimit {
 }
 
 type RLimitInfo_RLimit struct {
-	Type *RLimitInfo_RLimit_Type `protobuf:"varint,1,opt,name=type,enum=mesos.v1.RLimitInfo_RLimit_Type" json:"type,omitempty"`
+	Type *RLimitInfo_RLimit_Type `protobuf:"varint,1,opt,name=type,enum=mesos.RLimitInfo_RLimit_Type" json:"type,omitempty"`
 	// Either both are set or both are not set.
 	// If both are not set, it represents unlimited.
 	// If both are set, we require `soft` <= `hard`.
@@ -7206,7 +8520,7 @@ type RLimitInfo_RLimit struct {
 func (m *RLimitInfo_RLimit) Reset()                    { *m = RLimitInfo_RLimit{} }
 func (m *RLimitInfo_RLimit) String() string            { return proto.CompactTextString(m) }
 func (*RLimitInfo_RLimit) ProtoMessage()               {}
-func (*RLimitInfo_RLimit) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{57, 0} }
+func (*RLimitInfo_RLimit) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{67, 0} }
 
 func (m *RLimitInfo_RLimit) GetType() RLimitInfo_RLimit_Type {
 	if m != nil && m.Type != nil {
@@ -7240,7 +8554,7 @@ type TTYInfo struct {
 func (m *TTYInfo) Reset()                    { *m = TTYInfo{} }
 func (m *TTYInfo) String() string            { return proto.CompactTextString(m) }
 func (*TTYInfo) ProtoMessage()               {}
-func (*TTYInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{58} }
+func (*TTYInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{68} }
 
 func (m *TTYInfo) GetWindowSize() *TTYInfo_WindowSize {
 	if m != nil {
@@ -7258,7 +8572,7 @@ type TTYInfo_WindowSize struct {
 func (m *TTYInfo_WindowSize) Reset()                    { *m = TTYInfo_WindowSize{} }
 func (m *TTYInfo_WindowSize) String() string            { return proto.CompactTextString(m) }
 func (*TTYInfo_WindowSize) ProtoMessage()               {}
-func (*TTYInfo_WindowSize) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{58, 0} }
+func (*TTYInfo_WindowSize) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{68, 0} }
 
 func (m *TTYInfo_WindowSize) GetRows() uint32 {
 	if m != nil && m.Rows != nil {
@@ -7285,7 +8599,7 @@ func (m *TTYInfo_WindowSize) GetColumns() uint32 {
 // with URIs, wants to use features originally designed for containers,
 // for example custom network isolation via `NetworkInfo`.
 type ContainerInfo struct {
-	Type     *ContainerInfo_Type `protobuf:"varint,1,req,name=type,enum=mesos.v1.ContainerInfo_Type" json:"type,omitempty"`
+	Type     *ContainerInfo_Type `protobuf:"varint,1,req,name=type,enum=mesos.ContainerInfo_Type" json:"type,omitempty"`
 	Volumes  []*Volume           `protobuf:"bytes,2,rep,name=volumes" json:"volumes,omitempty"`
 	Hostname *string             `protobuf:"bytes,4,opt,name=hostname" json:"hostname,omitempty"`
 	// Only one of the following *Info messages should be set to match
@@ -7307,7 +8621,7 @@ type ContainerInfo struct {
 func (m *ContainerInfo) Reset()                    { *m = ContainerInfo{} }
 func (m *ContainerInfo) String() string            { return proto.CompactTextString(m) }
 func (*ContainerInfo) ProtoMessage()               {}
-func (*ContainerInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{59} }
+func (*ContainerInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{69} }
 
 func (m *ContainerInfo) GetType() ContainerInfo_Type {
 	if m != nil && m.Type != nil {
@@ -7375,7 +8689,7 @@ func (m *ContainerInfo) GetTtyInfo() *TTYInfo {
 type ContainerInfo_DockerInfo struct {
 	// The docker image that is going to be passed to the registry.
 	Image        *string                                 `protobuf:"bytes,1,req,name=image" json:"image,omitempty"`
-	Network      *ContainerInfo_DockerInfo_Network       `protobuf:"varint,2,opt,name=network,enum=mesos.v1.ContainerInfo_DockerInfo_Network,def=1" json:"network,omitempty"`
+	Network      *ContainerInfo_DockerInfo_Network       `protobuf:"varint,2,opt,name=network,enum=mesos.ContainerInfo_DockerInfo_Network,def=1" json:"network,omitempty"`
 	PortMappings []*ContainerInfo_DockerInfo_PortMapping `protobuf:"bytes,3,rep,name=port_mappings" json:"port_mappings,omitempty"`
 	Privileged   *bool                                   `protobuf:"varint,4,opt,name=privileged,def=0" json:"privileged,omitempty"`
 	// Allowing arbitrary parameters to be passed to docker CLI.
@@ -7385,7 +8699,7 @@ type ContainerInfo_DockerInfo struct {
 	Parameters []*Parameter `protobuf:"bytes,5,rep,name=parameters" json:"parameters,omitempty"`
 	// With this flag set to true, the docker containerizer will
 	// pull the docker image from the registry even if the image
-	// is already downloaded on the agent.
+	// is already downloaded on the slave.
 	ForcePullImage *bool `protobuf:"varint,6,opt,name=force_pull_image" json:"force_pull_image,omitempty"`
 	// The name of volume driver plugin.
 	VolumeDriver     *string `protobuf:"bytes,7,opt,name=volume_driver" json:"volume_driver,omitempty"`
@@ -7396,7 +8710,7 @@ func (m *ContainerInfo_DockerInfo) Reset()         { *m = ContainerInfo_DockerIn
 func (m *ContainerInfo_DockerInfo) String() string { return proto.CompactTextString(m) }
 func (*ContainerInfo_DockerInfo) ProtoMessage()    {}
 func (*ContainerInfo_DockerInfo) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{59, 0}
+	return fileDescriptorMesos, []int{69, 0}
 }
 
 const Default_ContainerInfo_DockerInfo_Network ContainerInfo_DockerInfo_Network = ContainerInfo_DockerInfo_HOST
@@ -7463,7 +8777,7 @@ func (m *ContainerInfo_DockerInfo_PortMapping) Reset()         { *m = ContainerI
 func (m *ContainerInfo_DockerInfo_PortMapping) String() string { return proto.CompactTextString(m) }
 func (*ContainerInfo_DockerInfo_PortMapping) ProtoMessage()    {}
 func (*ContainerInfo_DockerInfo_PortMapping) Descriptor() ([]byte, []int) {
-	return fileDescriptorMesos, []int{59, 0, 0}
+	return fileDescriptorMesos, []int{69, 0, 0}
 }
 
 func (m *ContainerInfo_DockerInfo_PortMapping) GetHostPort() uint32 {
@@ -7495,7 +8809,7 @@ type ContainerInfo_MesosInfo struct {
 func (m *ContainerInfo_MesosInfo) Reset()                    { *m = ContainerInfo_MesosInfo{} }
 func (m *ContainerInfo_MesosInfo) String() string            { return proto.CompactTextString(m) }
 func (*ContainerInfo_MesosInfo) ProtoMessage()               {}
-func (*ContainerInfo_MesosInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{59, 1} }
+func (*ContainerInfo_MesosInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{69, 1} }
 
 func (m *ContainerInfo_MesosInfo) GetImage() *Image {
 	if m != nil {
@@ -7522,7 +8836,7 @@ type ContainerStatus struct {
 func (m *ContainerStatus) Reset()                    { *m = ContainerStatus{} }
 func (m *ContainerStatus) String() string            { return proto.CompactTextString(m) }
 func (*ContainerStatus) ProtoMessage()               {}
-func (*ContainerStatus) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{60} }
+func (*ContainerStatus) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{70} }
 
 func (m *ContainerStatus) GetContainerId() *ContainerID {
 	if m != nil {
@@ -7562,11 +8876,238 @@ type CgroupInfo struct {
 func (m *CgroupInfo) Reset()                    { *m = CgroupInfo{} }
 func (m *CgroupInfo) String() string            { return proto.CompactTextString(m) }
 func (*CgroupInfo) ProtoMessage()               {}
-func (*CgroupInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{61} }
+func (*CgroupInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{71} }
 
 func (m *CgroupInfo) GetNetCls() *CgroupInfo_NetCls {
 	if m != nil {
 		return m.NetCls
+	}
+	return nil
+}
+
+// Configuration of a blkio cgroup subsystem.
+type CgroupInfo_Blkio struct {
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *CgroupInfo_Blkio) Reset()                    { *m = CgroupInfo_Blkio{} }
+func (m *CgroupInfo_Blkio) String() string            { return proto.CompactTextString(m) }
+func (*CgroupInfo_Blkio) ProtoMessage()               {}
+func (*CgroupInfo_Blkio) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{71, 0} }
+
+// Describes a stat value without the device descriptor part.
+type CgroupInfo_Blkio_Value struct {
+	Op               *CgroupInfo_Blkio_Operation `protobuf:"varint,1,opt,name=op,enum=mesos.CgroupInfo_Blkio_Operation" json:"op,omitempty"`
+	Value            *uint64                     `protobuf:"varint,2,opt,name=value" json:"value,omitempty"`
+	XXX_unrecognized []byte                      `json:"-"`
+}
+
+func (m *CgroupInfo_Blkio_Value) Reset()         { *m = CgroupInfo_Blkio_Value{} }
+func (m *CgroupInfo_Blkio_Value) String() string { return proto.CompactTextString(m) }
+func (*CgroupInfo_Blkio_Value) ProtoMessage()    {}
+func (*CgroupInfo_Blkio_Value) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{71, 0, 0}
+}
+
+func (m *CgroupInfo_Blkio_Value) GetOp() CgroupInfo_Blkio_Operation {
+	if m != nil && m.Op != nil {
+		return *m.Op
+	}
+	return CgroupInfo_Blkio_UNKNOWN
+}
+
+func (m *CgroupInfo_Blkio_Value) GetValue() uint64 {
+	if m != nil && m.Value != nil {
+		return *m.Value
+	}
+	return 0
+}
+
+type CgroupInfo_Blkio_CFQ struct {
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *CgroupInfo_Blkio_CFQ) Reset()                    { *m = CgroupInfo_Blkio_CFQ{} }
+func (m *CgroupInfo_Blkio_CFQ) String() string            { return proto.CompactTextString(m) }
+func (*CgroupInfo_Blkio_CFQ) ProtoMessage()               {}
+func (*CgroupInfo_Blkio_CFQ) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{71, 0, 1} }
+
+type CgroupInfo_Blkio_CFQ_Statistics struct {
+	// Stats are grouped by block devices. If `device` is not
+	// set, it represents `Total`.
+	Device *Device_Number `protobuf:"bytes,1,opt,name=device" json:"device,omitempty"`
+	// blkio.sectors
+	Sectors *uint64 `protobuf:"varint,2,opt,name=sectors" json:"sectors,omitempty"`
+	// blkio.time
+	Time *uint64 `protobuf:"varint,3,opt,name=time" json:"time,omitempty"`
+	// blkio.io_serviced
+	IoServiced []*CgroupInfo_Blkio_Value `protobuf:"bytes,4,rep,name=io_serviced" json:"io_serviced,omitempty"`
+	// blkio.io_service_bytes
+	IoServiceBytes []*CgroupInfo_Blkio_Value `protobuf:"bytes,5,rep,name=io_service_bytes" json:"io_service_bytes,omitempty"`
+	// blkio.io_service_time
+	IoServiceTime []*CgroupInfo_Blkio_Value `protobuf:"bytes,6,rep,name=io_service_time" json:"io_service_time,omitempty"`
+	// blkio.io_wait_time
+	IoWaitTime []*CgroupInfo_Blkio_Value `protobuf:"bytes,7,rep,name=io_wait_time" json:"io_wait_time,omitempty"`
+	// blkio.io_merged
+	IoMerged []*CgroupInfo_Blkio_Value `protobuf:"bytes,8,rep,name=io_merged" json:"io_merged,omitempty"`
+	// blkio.io_queued
+	IoQueued         []*CgroupInfo_Blkio_Value `protobuf:"bytes,9,rep,name=io_queued" json:"io_queued,omitempty"`
+	XXX_unrecognized []byte                    `json:"-"`
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) Reset()         { *m = CgroupInfo_Blkio_CFQ_Statistics{} }
+func (m *CgroupInfo_Blkio_CFQ_Statistics) String() string { return proto.CompactTextString(m) }
+func (*CgroupInfo_Blkio_CFQ_Statistics) ProtoMessage()    {}
+func (*CgroupInfo_Blkio_CFQ_Statistics) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{71, 0, 1, 0}
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetDevice() *Device_Number {
+	if m != nil {
+		return m.Device
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetSectors() uint64 {
+	if m != nil && m.Sectors != nil {
+		return *m.Sectors
+	}
+	return 0
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetTime() uint64 {
+	if m != nil && m.Time != nil {
+		return *m.Time
+	}
+	return 0
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetIoServiced() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoServiced
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetIoServiceBytes() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoServiceBytes
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetIoServiceTime() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoServiceTime
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetIoWaitTime() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoWaitTime
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetIoMerged() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoMerged
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) GetIoQueued() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoQueued
+	}
+	return nil
+}
+
+type CgroupInfo_Blkio_Throttling struct {
+	XXX_unrecognized []byte `json:"-"`
+}
+
+func (m *CgroupInfo_Blkio_Throttling) Reset()         { *m = CgroupInfo_Blkio_Throttling{} }
+func (m *CgroupInfo_Blkio_Throttling) String() string { return proto.CompactTextString(m) }
+func (*CgroupInfo_Blkio_Throttling) ProtoMessage()    {}
+func (*CgroupInfo_Blkio_Throttling) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{71, 0, 2}
+}
+
+type CgroupInfo_Blkio_Throttling_Statistics struct {
+	// Stats are grouped by block devices. If `device` is not
+	// set, it represents `Total`.
+	Device *Device_Number `protobuf:"bytes,1,opt,name=device" json:"device,omitempty"`
+	// blkio.throttle.io_serviced
+	IoServiced []*CgroupInfo_Blkio_Value `protobuf:"bytes,2,rep,name=io_serviced" json:"io_serviced,omitempty"`
+	// blkio.throttle.io_service_bytes
+	IoServiceBytes   []*CgroupInfo_Blkio_Value `protobuf:"bytes,3,rep,name=io_service_bytes" json:"io_service_bytes,omitempty"`
+	XXX_unrecognized []byte                    `json:"-"`
+}
+
+func (m *CgroupInfo_Blkio_Throttling_Statistics) Reset() {
+	*m = CgroupInfo_Blkio_Throttling_Statistics{}
+}
+func (m *CgroupInfo_Blkio_Throttling_Statistics) String() string { return proto.CompactTextString(m) }
+func (*CgroupInfo_Blkio_Throttling_Statistics) ProtoMessage()    {}
+func (*CgroupInfo_Blkio_Throttling_Statistics) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{71, 0, 2, 0}
+}
+
+func (m *CgroupInfo_Blkio_Throttling_Statistics) GetDevice() *Device_Number {
+	if m != nil {
+		return m.Device
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_Throttling_Statistics) GetIoServiced() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoServiced
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_Throttling_Statistics) GetIoServiceBytes() []*CgroupInfo_Blkio_Value {
+	if m != nil {
+		return m.IoServiceBytes
+	}
+	return nil
+}
+
+type CgroupInfo_Blkio_Statistics struct {
+	Cfq              []*CgroupInfo_Blkio_CFQ_Statistics        `protobuf:"bytes,1,rep,name=cfq" json:"cfq,omitempty"`
+	CfqRecursive     []*CgroupInfo_Blkio_CFQ_Statistics        `protobuf:"bytes,2,rep,name=cfq_recursive" json:"cfq_recursive,omitempty"`
+	Throttling       []*CgroupInfo_Blkio_Throttling_Statistics `protobuf:"bytes,3,rep,name=throttling" json:"throttling,omitempty"`
+	XXX_unrecognized []byte                                    `json:"-"`
+}
+
+func (m *CgroupInfo_Blkio_Statistics) Reset()         { *m = CgroupInfo_Blkio_Statistics{} }
+func (m *CgroupInfo_Blkio_Statistics) String() string { return proto.CompactTextString(m) }
+func (*CgroupInfo_Blkio_Statistics) ProtoMessage()    {}
+func (*CgroupInfo_Blkio_Statistics) Descriptor() ([]byte, []int) {
+	return fileDescriptorMesos, []int{71, 0, 3}
+}
+
+func (m *CgroupInfo_Blkio_Statistics) GetCfq() []*CgroupInfo_Blkio_CFQ_Statistics {
+	if m != nil {
+		return m.Cfq
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_Statistics) GetCfqRecursive() []*CgroupInfo_Blkio_CFQ_Statistics {
+	if m != nil {
+		return m.CfqRecursive
+	}
+	return nil
+}
+
+func (m *CgroupInfo_Blkio_Statistics) GetThrottling() []*CgroupInfo_Blkio_Throttling_Statistics {
+	if m != nil {
+		return m.Throttling
 	}
 	return nil
 }
@@ -7584,7 +9125,7 @@ type CgroupInfo_NetCls struct {
 func (m *CgroupInfo_NetCls) Reset()                    { *m = CgroupInfo_NetCls{} }
 func (m *CgroupInfo_NetCls) String() string            { return proto.CompactTextString(m) }
 func (*CgroupInfo_NetCls) ProtoMessage()               {}
-func (*CgroupInfo_NetCls) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{61, 0} }
+func (*CgroupInfo_NetCls) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{71, 1} }
 
 func (m *CgroupInfo_NetCls) GetClassid() uint32 {
 	if m != nil && m.Classid != nil {
@@ -7604,7 +9145,7 @@ type Labels struct {
 func (m *Labels) Reset()                    { *m = Labels{} }
 func (m *Labels) String() string            { return proto.CompactTextString(m) }
 func (*Labels) ProtoMessage()               {}
-func (*Labels) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{62} }
+func (*Labels) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{72} }
 
 func (m *Labels) GetLabels() []*Label {
 	if m != nil {
@@ -7624,7 +9165,7 @@ type Label struct {
 func (m *Label) Reset()                    { *m = Label{} }
 func (m *Label) String() string            { return proto.CompactTextString(m) }
 func (*Label) ProtoMessage()               {}
-func (*Label) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{63} }
+func (*Label) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{73} }
 
 func (m *Label) GetKey() string {
 	if m != nil && m.Key != nil {
@@ -7653,7 +9194,7 @@ type Port struct {
 	// within a Mesos cluster (CLUSTER), or places no restrictions (EXTERNAL).
 	// The visibility setting for a Port overrides the general visibility setting
 	// in the DiscoveryInfo.
-	Visibility *DiscoveryInfo_Visibility `protobuf:"varint,4,opt,name=visibility,enum=mesos.v1.DiscoveryInfo_Visibility" json:"visibility,omitempty"`
+	Visibility *DiscoveryInfo_Visibility `protobuf:"varint,4,opt,name=visibility,enum=mesos.DiscoveryInfo_Visibility" json:"visibility,omitempty"`
 	// This can be used to decorate the message with metadata to be
 	// interpreted by external applications such as firewalls.
 	Labels           *Labels `protobuf:"bytes,5,opt,name=labels" json:"labels,omitempty"`
@@ -7663,7 +9204,7 @@ type Port struct {
 func (m *Port) Reset()                    { *m = Port{} }
 func (m *Port) String() string            { return proto.CompactTextString(m) }
 func (*Port) ProtoMessage()               {}
-func (*Port) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{64} }
+func (*Port) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{74} }
 
 func (m *Port) GetNumber() uint32 {
 	if m != nil && m.Number != nil {
@@ -7710,7 +9251,7 @@ type Ports struct {
 func (m *Ports) Reset()                    { *m = Ports{} }
 func (m *Ports) String() string            { return proto.CompactTextString(m) }
 func (*Ports) ProtoMessage()               {}
-func (*Ports) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{65} }
+func (*Ports) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{75} }
 
 func (m *Ports) GetPorts() []*Port {
 	if m != nil {
@@ -7733,7 +9274,7 @@ func (m *Ports) GetPorts() []*Port {
 // receive values like v2.0/v0.9. The exact use of these fields is up to each
 // service discovery system.
 type DiscoveryInfo struct {
-	Visibility       *DiscoveryInfo_Visibility `protobuf:"varint,1,req,name=visibility,enum=mesos.v1.DiscoveryInfo_Visibility" json:"visibility,omitempty"`
+	Visibility       *DiscoveryInfo_Visibility `protobuf:"varint,1,req,name=visibility,enum=mesos.DiscoveryInfo_Visibility" json:"visibility,omitempty"`
 	Name             *string                   `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`
 	Environment      *string                   `protobuf:"bytes,3,opt,name=environment" json:"environment,omitempty"`
 	Location         *string                   `protobuf:"bytes,4,opt,name=location" json:"location,omitempty"`
@@ -7746,7 +9287,7 @@ type DiscoveryInfo struct {
 func (m *DiscoveryInfo) Reset()                    { *m = DiscoveryInfo{} }
 func (m *DiscoveryInfo) String() string            { return proto.CompactTextString(m) }
 func (*DiscoveryInfo) ProtoMessage()               {}
-func (*DiscoveryInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{66} }
+func (*DiscoveryInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{76} }
 
 func (m *DiscoveryInfo) GetVisibility() DiscoveryInfo_Visibility {
 	if m != nil && m.Visibility != nil {
@@ -7810,7 +9351,7 @@ type WeightInfo struct {
 func (m *WeightInfo) Reset()                    { *m = WeightInfo{} }
 func (m *WeightInfo) String() string            { return proto.CompactTextString(m) }
 func (*WeightInfo) ProtoMessage()               {}
-func (*WeightInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{67} }
+func (*WeightInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{77} }
 
 func (m *WeightInfo) GetWeight() float64 {
 	if m != nil && m.Weight != nil {
@@ -7842,7 +9383,7 @@ type VersionInfo struct {
 func (m *VersionInfo) Reset()                    { *m = VersionInfo{} }
 func (m *VersionInfo) String() string            { return proto.CompactTextString(m) }
 func (*VersionInfo) ProtoMessage()               {}
-func (*VersionInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{68} }
+func (*VersionInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{78} }
 
 func (m *VersionInfo) GetVersion() string {
 	if m != nil && m.Version != nil {
@@ -7904,7 +9445,7 @@ type Flag struct {
 func (m *Flag) Reset()                    { *m = Flag{} }
 func (m *Flag) String() string            { return proto.CompactTextString(m) }
 func (*Flag) ProtoMessage()               {}
-func (*Flag) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{69} }
+func (*Flag) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{79} }
 
 func (m *Flag) GetName() string {
 	if m != nil && m.Name != nil {
@@ -7934,7 +9475,7 @@ type Role struct {
 func (m *Role) Reset()                    { *m = Role{} }
 func (m *Role) String() string            { return proto.CompactTextString(m) }
 func (*Role) ProtoMessage()               {}
-func (*Role) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{70} }
+func (*Role) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{80} }
 
 func (m *Role) GetName() string {
 	if m != nil && m.Name != nil {
@@ -7975,7 +9516,7 @@ type Metric struct {
 func (m *Metric) Reset()                    { *m = Metric{} }
 func (m *Metric) String() string            { return proto.CompactTextString(m) }
 func (*Metric) ProtoMessage()               {}
-func (*Metric) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{71} }
+func (*Metric) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{81} }
 
 func (m *Metric) GetName() string {
 	if m != nil && m.Name != nil {
@@ -8015,7 +9556,7 @@ type FileInfo struct {
 func (m *FileInfo) Reset()                    { *m = FileInfo{} }
 func (m *FileInfo) String() string            { return proto.CompactTextString(m) }
 func (*FileInfo) ProtoMessage()               {}
-func (*FileInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{72} }
+func (*FileInfo) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{82} }
 
 func (m *FileInfo) GetPath() string {
 	if m != nil && m.Path != nil {
@@ -8069,20 +9610,53 @@ func (m *FileInfo) GetGid() string {
 // *
 // Describes information abount a device.
 type Device struct {
-	Path             *string `protobuf:"bytes,1,req,name=path" json:"path,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+	Path             *string        `protobuf:"bytes,1,opt,name=path" json:"path,omitempty"`
+	Number           *Device_Number `protobuf:"bytes,2,opt,name=number" json:"number,omitempty"`
+	XXX_unrecognized []byte         `json:"-"`
 }
 
 func (m *Device) Reset()                    { *m = Device{} }
 func (m *Device) String() string            { return proto.CompactTextString(m) }
 func (*Device) ProtoMessage()               {}
-func (*Device) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{73} }
+func (*Device) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{83} }
 
 func (m *Device) GetPath() string {
 	if m != nil && m.Path != nil {
 		return *m.Path
 	}
 	return ""
+}
+
+func (m *Device) GetNumber() *Device_Number {
+	if m != nil {
+		return m.Number
+	}
+	return nil
+}
+
+type Device_Number struct {
+	MajorNumber      *uint64 `protobuf:"varint,1,req,name=major_number" json:"major_number,omitempty"`
+	MinorNumber      *uint64 `protobuf:"varint,2,req,name=minor_number" json:"minor_number,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *Device_Number) Reset()                    { *m = Device_Number{} }
+func (m *Device_Number) String() string            { return proto.CompactTextString(m) }
+func (*Device_Number) ProtoMessage()               {}
+func (*Device_Number) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{83, 0} }
+
+func (m *Device_Number) GetMajorNumber() uint64 {
+	if m != nil && m.MajorNumber != nil {
+		return *m.MajorNumber
+	}
+	return 0
+}
+
+func (m *Device_Number) GetMinorNumber() uint64 {
+	if m != nil && m.MinorNumber != nil {
+		return *m.MinorNumber
+	}
+	return 0
 }
 
 // *
@@ -8096,7 +9670,7 @@ type DeviceAccess struct {
 func (m *DeviceAccess) Reset()                    { *m = DeviceAccess{} }
 func (m *DeviceAccess) String() string            { return proto.CompactTextString(m) }
 func (*DeviceAccess) ProtoMessage()               {}
-func (*DeviceAccess) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{74} }
+func (*DeviceAccess) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{84} }
 
 func (m *DeviceAccess) GetDevice() *Device {
 	if m != nil {
@@ -8122,7 +9696,7 @@ type DeviceAccess_Access struct {
 func (m *DeviceAccess_Access) Reset()                    { *m = DeviceAccess_Access{} }
 func (m *DeviceAccess_Access) String() string            { return proto.CompactTextString(m) }
 func (*DeviceAccess_Access) ProtoMessage()               {}
-func (*DeviceAccess_Access) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{74, 0} }
+func (*DeviceAccess_Access) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{84, 0} }
 
 func (m *DeviceAccess_Access) GetRead() bool {
 	if m != nil && m.Read != nil {
@@ -8153,7 +9727,7 @@ type DeviceWhitelist struct {
 func (m *DeviceWhitelist) Reset()                    { *m = DeviceWhitelist{} }
 func (m *DeviceWhitelist) String() string            { return proto.CompactTextString(m) }
 func (*DeviceWhitelist) ProtoMessage()               {}
-func (*DeviceWhitelist) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{75} }
+func (*DeviceWhitelist) Descriptor() ([]byte, []int) { return fileDescriptorMesos, []int{85} }
 
 func (m *DeviceWhitelist) GetAllowedDevices() []*DeviceAccess {
 	if m != nil {
@@ -8163,158 +9737,192 @@ func (m *DeviceWhitelist) GetAllowedDevices() []*DeviceAccess {
 }
 
 func init() {
-	proto.RegisterType((*FrameworkID)(nil), "mesos.v1.FrameworkID")
-	proto.RegisterType((*OfferID)(nil), "mesos.v1.OfferID")
-	proto.RegisterType((*AgentID)(nil), "mesos.v1.AgentID")
-	proto.RegisterType((*TaskID)(nil), "mesos.v1.TaskID")
-	proto.RegisterType((*ExecutorID)(nil), "mesos.v1.ExecutorID")
-	proto.RegisterType((*ContainerID)(nil), "mesos.v1.ContainerID")
-	proto.RegisterType((*ResourceProviderID)(nil), "mesos.v1.ResourceProviderID")
-	proto.RegisterType((*TimeInfo)(nil), "mesos.v1.TimeInfo")
-	proto.RegisterType((*DurationInfo)(nil), "mesos.v1.DurationInfo")
-	proto.RegisterType((*Address)(nil), "mesos.v1.Address")
-	proto.RegisterType((*URL)(nil), "mesos.v1.URL")
-	proto.RegisterType((*Unavailability)(nil), "mesos.v1.Unavailability")
-	proto.RegisterType((*MachineID)(nil), "mesos.v1.MachineID")
-	proto.RegisterType((*MachineInfo)(nil), "mesos.v1.MachineInfo")
-	proto.RegisterType((*FrameworkInfo)(nil), "mesos.v1.FrameworkInfo")
-	proto.RegisterType((*FrameworkInfo_Capability)(nil), "mesos.v1.FrameworkInfo.Capability")
-	proto.RegisterType((*CheckInfo)(nil), "mesos.v1.CheckInfo")
-	proto.RegisterType((*CheckInfo_Command)(nil), "mesos.v1.CheckInfo.Command")
-	proto.RegisterType((*CheckInfo_Http)(nil), "mesos.v1.CheckInfo.Http")
-	proto.RegisterType((*CheckInfo_Tcp)(nil), "mesos.v1.CheckInfo.Tcp")
-	proto.RegisterType((*HealthCheck)(nil), "mesos.v1.HealthCheck")
-	proto.RegisterType((*HealthCheck_HTTPCheckInfo)(nil), "mesos.v1.HealthCheck.HTTPCheckInfo")
-	proto.RegisterType((*HealthCheck_TCPCheckInfo)(nil), "mesos.v1.HealthCheck.TCPCheckInfo")
-	proto.RegisterType((*KillPolicy)(nil), "mesos.v1.KillPolicy")
-	proto.RegisterType((*CommandInfo)(nil), "mesos.v1.CommandInfo")
-	proto.RegisterType((*CommandInfo_URI)(nil), "mesos.v1.CommandInfo.URI")
-	proto.RegisterType((*ExecutorInfo)(nil), "mesos.v1.ExecutorInfo")
-	proto.RegisterType((*MasterInfo)(nil), "mesos.v1.MasterInfo")
-	proto.RegisterType((*AgentInfo)(nil), "mesos.v1.AgentInfo")
-	proto.RegisterType((*AgentInfo_Capability)(nil), "mesos.v1.AgentInfo.Capability")
-	proto.RegisterType((*Value)(nil), "mesos.v1.Value")
-	proto.RegisterType((*Value_Scalar)(nil), "mesos.v1.Value.Scalar")
-	proto.RegisterType((*Value_Range)(nil), "mesos.v1.Value.Range")
-	proto.RegisterType((*Value_Ranges)(nil), "mesos.v1.Value.Ranges")
-	proto.RegisterType((*Value_Set)(nil), "mesos.v1.Value.Set")
-	proto.RegisterType((*Value_Text)(nil), "mesos.v1.Value.Text")
-	proto.RegisterType((*Attribute)(nil), "mesos.v1.Attribute")
-	proto.RegisterType((*Resource)(nil), "mesos.v1.Resource")
-	proto.RegisterType((*Resource_AllocationInfo)(nil), "mesos.v1.Resource.AllocationInfo")
-	proto.RegisterType((*Resource_ReservationInfo)(nil), "mesos.v1.Resource.ReservationInfo")
-	proto.RegisterType((*Resource_DiskInfo)(nil), "mesos.v1.Resource.DiskInfo")
-	proto.RegisterType((*Resource_DiskInfo_Persistence)(nil), "mesos.v1.Resource.DiskInfo.Persistence")
-	proto.RegisterType((*Resource_DiskInfo_Source)(nil), "mesos.v1.Resource.DiskInfo.Source")
-	proto.RegisterType((*Resource_DiskInfo_Source_Path)(nil), "mesos.v1.Resource.DiskInfo.Source.Path")
-	proto.RegisterType((*Resource_DiskInfo_Source_Mount)(nil), "mesos.v1.Resource.DiskInfo.Source.Mount")
-	proto.RegisterType((*Resource_RevocableInfo)(nil), "mesos.v1.Resource.RevocableInfo")
-	proto.RegisterType((*Resource_SharedInfo)(nil), "mesos.v1.Resource.SharedInfo")
-	proto.RegisterType((*TrafficControlStatistics)(nil), "mesos.v1.TrafficControlStatistics")
-	proto.RegisterType((*IpStatistics)(nil), "mesos.v1.IpStatistics")
-	proto.RegisterType((*IcmpStatistics)(nil), "mesos.v1.IcmpStatistics")
-	proto.RegisterType((*TcpStatistics)(nil), "mesos.v1.TcpStatistics")
-	proto.RegisterType((*UdpStatistics)(nil), "mesos.v1.UdpStatistics")
-	proto.RegisterType((*SNMPStatistics)(nil), "mesos.v1.SNMPStatistics")
-	proto.RegisterType((*DiskStatistics)(nil), "mesos.v1.DiskStatistics")
-	proto.RegisterType((*ResourceStatistics)(nil), "mesos.v1.ResourceStatistics")
-	proto.RegisterType((*ResourceUsage)(nil), "mesos.v1.ResourceUsage")
-	proto.RegisterType((*ResourceUsage_Executor)(nil), "mesos.v1.ResourceUsage.Executor")
-	proto.RegisterType((*ResourceUsage_Executor_Task)(nil), "mesos.v1.ResourceUsage.Executor.Task")
-	proto.RegisterType((*PerfStatistics)(nil), "mesos.v1.PerfStatistics")
-	proto.RegisterType((*Request)(nil), "mesos.v1.Request")
-	proto.RegisterType((*Offer)(nil), "mesos.v1.Offer")
-	proto.RegisterType((*Offer_Operation)(nil), "mesos.v1.Offer.Operation")
-	proto.RegisterType((*Offer_Operation_Launch)(nil), "mesos.v1.Offer.Operation.Launch")
-	proto.RegisterType((*Offer_Operation_LaunchGroup)(nil), "mesos.v1.Offer.Operation.LaunchGroup")
-	proto.RegisterType((*Offer_Operation_Reserve)(nil), "mesos.v1.Offer.Operation.Reserve")
-	proto.RegisterType((*Offer_Operation_Unreserve)(nil), "mesos.v1.Offer.Operation.Unreserve")
-	proto.RegisterType((*Offer_Operation_Create)(nil), "mesos.v1.Offer.Operation.Create")
-	proto.RegisterType((*Offer_Operation_Destroy)(nil), "mesos.v1.Offer.Operation.Destroy")
-	proto.RegisterType((*InverseOffer)(nil), "mesos.v1.InverseOffer")
-	proto.RegisterType((*TaskInfo)(nil), "mesos.v1.TaskInfo")
-	proto.RegisterType((*TaskGroupInfo)(nil), "mesos.v1.TaskGroupInfo")
-	proto.RegisterType((*Task)(nil), "mesos.v1.Task")
-	proto.RegisterType((*CheckStatusInfo)(nil), "mesos.v1.CheckStatusInfo")
-	proto.RegisterType((*CheckStatusInfo_Command)(nil), "mesos.v1.CheckStatusInfo.Command")
-	proto.RegisterType((*CheckStatusInfo_Http)(nil), "mesos.v1.CheckStatusInfo.Http")
-	proto.RegisterType((*CheckStatusInfo_Tcp)(nil), "mesos.v1.CheckStatusInfo.Tcp")
-	proto.RegisterType((*TaskStatus)(nil), "mesos.v1.TaskStatus")
-	proto.RegisterType((*Filters)(nil), "mesos.v1.Filters")
-	proto.RegisterType((*Environment)(nil), "mesos.v1.Environment")
-	proto.RegisterType((*Environment_Variable)(nil), "mesos.v1.Environment.Variable")
-	proto.RegisterType((*Parameter)(nil), "mesos.v1.Parameter")
-	proto.RegisterType((*Parameters)(nil), "mesos.v1.Parameters")
-	proto.RegisterType((*Credential)(nil), "mesos.v1.Credential")
-	proto.RegisterType((*Credentials)(nil), "mesos.v1.Credentials")
-	proto.RegisterType((*Secret)(nil), "mesos.v1.Secret")
-	proto.RegisterType((*Secret_Reference)(nil), "mesos.v1.Secret.Reference")
-	proto.RegisterType((*Secret_Value)(nil), "mesos.v1.Secret.Value")
-	proto.RegisterType((*RateLimit)(nil), "mesos.v1.RateLimit")
-	proto.RegisterType((*RateLimits)(nil), "mesos.v1.RateLimits")
-	proto.RegisterType((*Image)(nil), "mesos.v1.Image")
-	proto.RegisterType((*Image_Appc)(nil), "mesos.v1.Image.Appc")
-	proto.RegisterType((*Image_Docker)(nil), "mesos.v1.Image.Docker")
-	proto.RegisterType((*Volume)(nil), "mesos.v1.Volume")
-	proto.RegisterType((*Volume_Source)(nil), "mesos.v1.Volume.Source")
-	proto.RegisterType((*Volume_Source_DockerVolume)(nil), "mesos.v1.Volume.Source.DockerVolume")
-	proto.RegisterType((*Volume_Source_SandboxPath)(nil), "mesos.v1.Volume.Source.SandboxPath")
-	proto.RegisterType((*NetworkInfo)(nil), "mesos.v1.NetworkInfo")
-	proto.RegisterType((*NetworkInfo_IPAddress)(nil), "mesos.v1.NetworkInfo.IPAddress")
-	proto.RegisterType((*NetworkInfo_PortMapping)(nil), "mesos.v1.NetworkInfo.PortMapping")
-	proto.RegisterType((*CapabilityInfo)(nil), "mesos.v1.CapabilityInfo")
-	proto.RegisterType((*LinuxInfo)(nil), "mesos.v1.LinuxInfo")
-	proto.RegisterType((*RLimitInfo)(nil), "mesos.v1.RLimitInfo")
-	proto.RegisterType((*RLimitInfo_RLimit)(nil), "mesos.v1.RLimitInfo.RLimit")
-	proto.RegisterType((*TTYInfo)(nil), "mesos.v1.TTYInfo")
-	proto.RegisterType((*TTYInfo_WindowSize)(nil), "mesos.v1.TTYInfo.WindowSize")
-	proto.RegisterType((*ContainerInfo)(nil), "mesos.v1.ContainerInfo")
-	proto.RegisterType((*ContainerInfo_DockerInfo)(nil), "mesos.v1.ContainerInfo.DockerInfo")
-	proto.RegisterType((*ContainerInfo_DockerInfo_PortMapping)(nil), "mesos.v1.ContainerInfo.DockerInfo.PortMapping")
-	proto.RegisterType((*ContainerInfo_MesosInfo)(nil), "mesos.v1.ContainerInfo.MesosInfo")
-	proto.RegisterType((*ContainerStatus)(nil), "mesos.v1.ContainerStatus")
-	proto.RegisterType((*CgroupInfo)(nil), "mesos.v1.CgroupInfo")
-	proto.RegisterType((*CgroupInfo_NetCls)(nil), "mesos.v1.CgroupInfo.NetCls")
-	proto.RegisterType((*Labels)(nil), "mesos.v1.Labels")
-	proto.RegisterType((*Label)(nil), "mesos.v1.Label")
-	proto.RegisterType((*Port)(nil), "mesos.v1.Port")
-	proto.RegisterType((*Ports)(nil), "mesos.v1.Ports")
-	proto.RegisterType((*DiscoveryInfo)(nil), "mesos.v1.DiscoveryInfo")
-	proto.RegisterType((*WeightInfo)(nil), "mesos.v1.WeightInfo")
-	proto.RegisterType((*VersionInfo)(nil), "mesos.v1.VersionInfo")
-	proto.RegisterType((*Flag)(nil), "mesos.v1.Flag")
-	proto.RegisterType((*Role)(nil), "mesos.v1.Role")
-	proto.RegisterType((*Metric)(nil), "mesos.v1.Metric")
-	proto.RegisterType((*FileInfo)(nil), "mesos.v1.FileInfo")
-	proto.RegisterType((*Device)(nil), "mesos.v1.Device")
-	proto.RegisterType((*DeviceAccess)(nil), "mesos.v1.DeviceAccess")
-	proto.RegisterType((*DeviceAccess_Access)(nil), "mesos.v1.DeviceAccess.Access")
-	proto.RegisterType((*DeviceWhitelist)(nil), "mesos.v1.DeviceWhitelist")
-	proto.RegisterEnum("mesos.v1.Status", Status_name, Status_value)
-	proto.RegisterEnum("mesos.v1.TaskState", TaskState_name, TaskState_value)
-	proto.RegisterEnum("mesos.v1.MachineInfo_Mode", MachineInfo_Mode_name, MachineInfo_Mode_value)
-	proto.RegisterEnum("mesos.v1.FrameworkInfo_Capability_Type", FrameworkInfo_Capability_Type_name, FrameworkInfo_Capability_Type_value)
-	proto.RegisterEnum("mesos.v1.CheckInfo_Type", CheckInfo_Type_name, CheckInfo_Type_value)
-	proto.RegisterEnum("mesos.v1.HealthCheck_Type", HealthCheck_Type_name, HealthCheck_Type_value)
-	proto.RegisterEnum("mesos.v1.ExecutorInfo_Type", ExecutorInfo_Type_name, ExecutorInfo_Type_value)
-	proto.RegisterEnum("mesos.v1.AgentInfo_Capability_Type", AgentInfo_Capability_Type_name, AgentInfo_Capability_Type_value)
-	proto.RegisterEnum("mesos.v1.Value_Type", Value_Type_name, Value_Type_value)
-	proto.RegisterEnum("mesos.v1.Resource_DiskInfo_Source_Type", Resource_DiskInfo_Source_Type_name, Resource_DiskInfo_Source_Type_value)
-	proto.RegisterEnum("mesos.v1.Offer_Operation_Type", Offer_Operation_Type_name, Offer_Operation_Type_value)
-	proto.RegisterEnum("mesos.v1.TaskStatus_Source", TaskStatus_Source_name, TaskStatus_Source_value)
-	proto.RegisterEnum("mesos.v1.TaskStatus_Reason", TaskStatus_Reason_name, TaskStatus_Reason_value)
-	proto.RegisterEnum("mesos.v1.Environment_Variable_Type", Environment_Variable_Type_name, Environment_Variable_Type_value)
-	proto.RegisterEnum("mesos.v1.Secret_Type", Secret_Type_name, Secret_Type_value)
-	proto.RegisterEnum("mesos.v1.Image_Type", Image_Type_name, Image_Type_value)
-	proto.RegisterEnum("mesos.v1.Volume_Mode", Volume_Mode_name, Volume_Mode_value)
-	proto.RegisterEnum("mesos.v1.Volume_Source_Type", Volume_Source_Type_name, Volume_Source_Type_value)
-	proto.RegisterEnum("mesos.v1.Volume_Source_SandboxPath_Type", Volume_Source_SandboxPath_Type_name, Volume_Source_SandboxPath_Type_value)
-	proto.RegisterEnum("mesos.v1.NetworkInfo_Protocol", NetworkInfo_Protocol_name, NetworkInfo_Protocol_value)
-	proto.RegisterEnum("mesos.v1.CapabilityInfo_Capability", CapabilityInfo_Capability_name, CapabilityInfo_Capability_value)
-	proto.RegisterEnum("mesos.v1.RLimitInfo_RLimit_Type", RLimitInfo_RLimit_Type_name, RLimitInfo_RLimit_Type_value)
-	proto.RegisterEnum("mesos.v1.ContainerInfo_Type", ContainerInfo_Type_name, ContainerInfo_Type_value)
-	proto.RegisterEnum("mesos.v1.ContainerInfo_DockerInfo_Network", ContainerInfo_DockerInfo_Network_name, ContainerInfo_DockerInfo_Network_value)
-	proto.RegisterEnum("mesos.v1.DiscoveryInfo_Visibility", DiscoveryInfo_Visibility_name, DiscoveryInfo_Visibility_value)
+	proto.RegisterType((*FrameworkID)(nil), "mesos.FrameworkID")
+	proto.RegisterType((*OfferID)(nil), "mesos.OfferID")
+	proto.RegisterType((*SlaveID)(nil), "mesos.SlaveID")
+	proto.RegisterType((*TaskID)(nil), "mesos.TaskID")
+	proto.RegisterType((*ExecutorID)(nil), "mesos.ExecutorID")
+	proto.RegisterType((*ContainerID)(nil), "mesos.ContainerID")
+	proto.RegisterType((*ResourceProviderID)(nil), "mesos.ResourceProviderID")
+	proto.RegisterType((*OperationID)(nil), "mesos.OperationID")
+	proto.RegisterType((*TimeInfo)(nil), "mesos.TimeInfo")
+	proto.RegisterType((*DurationInfo)(nil), "mesos.DurationInfo")
+	proto.RegisterType((*Address)(nil), "mesos.Address")
+	proto.RegisterType((*URL)(nil), "mesos.URL")
+	proto.RegisterType((*Unavailability)(nil), "mesos.Unavailability")
+	proto.RegisterType((*MachineID)(nil), "mesos.MachineID")
+	proto.RegisterType((*MachineInfo)(nil), "mesos.MachineInfo")
+	proto.RegisterType((*FrameworkInfo)(nil), "mesos.FrameworkInfo")
+	proto.RegisterType((*FrameworkInfo_Capability)(nil), "mesos.FrameworkInfo.Capability")
+	proto.RegisterType((*CheckInfo)(nil), "mesos.CheckInfo")
+	proto.RegisterType((*CheckInfo_Command)(nil), "mesos.CheckInfo.Command")
+	proto.RegisterType((*CheckInfo_Http)(nil), "mesos.CheckInfo.Http")
+	proto.RegisterType((*CheckInfo_Tcp)(nil), "mesos.CheckInfo.Tcp")
+	proto.RegisterType((*HealthCheck)(nil), "mesos.HealthCheck")
+	proto.RegisterType((*HealthCheck_HTTPCheckInfo)(nil), "mesos.HealthCheck.HTTPCheckInfo")
+	proto.RegisterType((*HealthCheck_TCPCheckInfo)(nil), "mesos.HealthCheck.TCPCheckInfo")
+	proto.RegisterType((*KillPolicy)(nil), "mesos.KillPolicy")
+	proto.RegisterType((*CommandInfo)(nil), "mesos.CommandInfo")
+	proto.RegisterType((*CommandInfo_URI)(nil), "mesos.CommandInfo.URI")
+	proto.RegisterType((*ExecutorInfo)(nil), "mesos.ExecutorInfo")
+	proto.RegisterType((*DomainInfo)(nil), "mesos.DomainInfo")
+	proto.RegisterType((*DomainInfo_FaultDomain)(nil), "mesos.DomainInfo.FaultDomain")
+	proto.RegisterType((*DomainInfo_FaultDomain_RegionInfo)(nil), "mesos.DomainInfo.FaultDomain.RegionInfo")
+	proto.RegisterType((*DomainInfo_FaultDomain_ZoneInfo)(nil), "mesos.DomainInfo.FaultDomain.ZoneInfo")
+	proto.RegisterType((*MasterInfo)(nil), "mesos.MasterInfo")
+	proto.RegisterType((*MasterInfo_Capability)(nil), "mesos.MasterInfo.Capability")
+	proto.RegisterType((*SlaveInfo)(nil), "mesos.SlaveInfo")
+	proto.RegisterType((*SlaveInfo_Capability)(nil), "mesos.SlaveInfo.Capability")
+	proto.RegisterType((*CSIPluginContainerInfo)(nil), "mesos.CSIPluginContainerInfo")
+	proto.RegisterType((*CSIPluginInfo)(nil), "mesos.CSIPluginInfo")
+	proto.RegisterType((*ResourceProviderInfo)(nil), "mesos.ResourceProviderInfo")
+	proto.RegisterType((*ResourceProviderInfo_Storage)(nil), "mesos.ResourceProviderInfo.Storage")
+	proto.RegisterType((*Value)(nil), "mesos.Value")
+	proto.RegisterType((*Value_Scalar)(nil), "mesos.Value.Scalar")
+	proto.RegisterType((*Value_Range)(nil), "mesos.Value.Range")
+	proto.RegisterType((*Value_Ranges)(nil), "mesos.Value.Ranges")
+	proto.RegisterType((*Value_Set)(nil), "mesos.Value.Set")
+	proto.RegisterType((*Value_Text)(nil), "mesos.Value.Text")
+	proto.RegisterType((*Attribute)(nil), "mesos.Attribute")
+	proto.RegisterType((*Resource)(nil), "mesos.Resource")
+	proto.RegisterType((*Resource_AllocationInfo)(nil), "mesos.Resource.AllocationInfo")
+	proto.RegisterType((*Resource_ReservationInfo)(nil), "mesos.Resource.ReservationInfo")
+	proto.RegisterType((*Resource_DiskInfo)(nil), "mesos.Resource.DiskInfo")
+	proto.RegisterType((*Resource_DiskInfo_Persistence)(nil), "mesos.Resource.DiskInfo.Persistence")
+	proto.RegisterType((*Resource_DiskInfo_Source)(nil), "mesos.Resource.DiskInfo.Source")
+	proto.RegisterType((*Resource_DiskInfo_Source_Path)(nil), "mesos.Resource.DiskInfo.Source.Path")
+	proto.RegisterType((*Resource_DiskInfo_Source_Mount)(nil), "mesos.Resource.DiskInfo.Source.Mount")
+	proto.RegisterType((*Resource_RevocableInfo)(nil), "mesos.Resource.RevocableInfo")
+	proto.RegisterType((*Resource_SharedInfo)(nil), "mesos.Resource.SharedInfo")
+	proto.RegisterType((*TrafficControlStatistics)(nil), "mesos.TrafficControlStatistics")
+	proto.RegisterType((*IpStatistics)(nil), "mesos.IpStatistics")
+	proto.RegisterType((*IcmpStatistics)(nil), "mesos.IcmpStatistics")
+	proto.RegisterType((*TcpStatistics)(nil), "mesos.TcpStatistics")
+	proto.RegisterType((*UdpStatistics)(nil), "mesos.UdpStatistics")
+	proto.RegisterType((*SNMPStatistics)(nil), "mesos.SNMPStatistics")
+	proto.RegisterType((*DiskStatistics)(nil), "mesos.DiskStatistics")
+	proto.RegisterType((*ResourceStatistics)(nil), "mesos.ResourceStatistics")
+	proto.RegisterType((*ResourceUsage)(nil), "mesos.ResourceUsage")
+	proto.RegisterType((*ResourceUsage_Executor)(nil), "mesos.ResourceUsage.Executor")
+	proto.RegisterType((*ResourceUsage_Executor_Task)(nil), "mesos.ResourceUsage.Executor.Task")
+	proto.RegisterType((*PerfStatistics)(nil), "mesos.PerfStatistics")
+	proto.RegisterType((*Request)(nil), "mesos.Request")
+	proto.RegisterType((*Offer)(nil), "mesos.Offer")
+	proto.RegisterType((*Offer_Operation)(nil), "mesos.Offer.Operation")
+	proto.RegisterType((*Offer_Operation_Launch)(nil), "mesos.Offer.Operation.Launch")
+	proto.RegisterType((*Offer_Operation_LaunchGroup)(nil), "mesos.Offer.Operation.LaunchGroup")
+	proto.RegisterType((*Offer_Operation_Reserve)(nil), "mesos.Offer.Operation.Reserve")
+	proto.RegisterType((*Offer_Operation_Unreserve)(nil), "mesos.Offer.Operation.Unreserve")
+	proto.RegisterType((*Offer_Operation_Create)(nil), "mesos.Offer.Operation.Create")
+	proto.RegisterType((*Offer_Operation_Destroy)(nil), "mesos.Offer.Operation.Destroy")
+	proto.RegisterType((*Offer_Operation_CreateVolume)(nil), "mesos.Offer.Operation.CreateVolume")
+	proto.RegisterType((*Offer_Operation_DestroyVolume)(nil), "mesos.Offer.Operation.DestroyVolume")
+	proto.RegisterType((*Offer_Operation_CreateBlock)(nil), "mesos.Offer.Operation.CreateBlock")
+	proto.RegisterType((*Offer_Operation_DestroyBlock)(nil), "mesos.Offer.Operation.DestroyBlock")
+	proto.RegisterType((*InverseOffer)(nil), "mesos.InverseOffer")
+	proto.RegisterType((*TaskInfo)(nil), "mesos.TaskInfo")
+	proto.RegisterType((*TaskGroupInfo)(nil), "mesos.TaskGroupInfo")
+	proto.RegisterType((*Task)(nil), "mesos.Task")
+	proto.RegisterType((*TaskResourceLimitation)(nil), "mesos.TaskResourceLimitation")
+	proto.RegisterType((*UUID)(nil), "mesos.UUID")
+	proto.RegisterType((*Operation)(nil), "mesos.Operation")
+	proto.RegisterType((*OperationStatus)(nil), "mesos.OperationStatus")
+	proto.RegisterType((*CheckStatusInfo)(nil), "mesos.CheckStatusInfo")
+	proto.RegisterType((*CheckStatusInfo_Command)(nil), "mesos.CheckStatusInfo.Command")
+	proto.RegisterType((*CheckStatusInfo_Http)(nil), "mesos.CheckStatusInfo.Http")
+	proto.RegisterType((*CheckStatusInfo_Tcp)(nil), "mesos.CheckStatusInfo.Tcp")
+	proto.RegisterType((*TaskStatus)(nil), "mesos.TaskStatus")
+	proto.RegisterType((*Filters)(nil), "mesos.Filters")
+	proto.RegisterType((*Environment)(nil), "mesos.Environment")
+	proto.RegisterType((*Environment_Variable)(nil), "mesos.Environment.Variable")
+	proto.RegisterType((*Parameter)(nil), "mesos.Parameter")
+	proto.RegisterType((*Parameters)(nil), "mesos.Parameters")
+	proto.RegisterType((*Credential)(nil), "mesos.Credential")
+	proto.RegisterType((*Credentials)(nil), "mesos.Credentials")
+	proto.RegisterType((*Secret)(nil), "mesos.Secret")
+	proto.RegisterType((*Secret_Reference)(nil), "mesos.Secret.Reference")
+	proto.RegisterType((*Secret_Value)(nil), "mesos.Secret.Value")
+	proto.RegisterType((*RateLimit)(nil), "mesos.RateLimit")
+	proto.RegisterType((*RateLimits)(nil), "mesos.RateLimits")
+	proto.RegisterType((*Image)(nil), "mesos.Image")
+	proto.RegisterType((*Image_Appc)(nil), "mesos.Image.Appc")
+	proto.RegisterType((*Image_Docker)(nil), "mesos.Image.Docker")
+	proto.RegisterType((*MountPropagation)(nil), "mesos.MountPropagation")
+	proto.RegisterType((*Volume)(nil), "mesos.Volume")
+	proto.RegisterType((*Volume_Source)(nil), "mesos.Volume.Source")
+	proto.RegisterType((*Volume_Source_DockerVolume)(nil), "mesos.Volume.Source.DockerVolume")
+	proto.RegisterType((*Volume_Source_HostPath)(nil), "mesos.Volume.Source.HostPath")
+	proto.RegisterType((*Volume_Source_SandboxPath)(nil), "mesos.Volume.Source.SandboxPath")
+	proto.RegisterType((*NetworkInfo)(nil), "mesos.NetworkInfo")
+	proto.RegisterType((*NetworkInfo_IPAddress)(nil), "mesos.NetworkInfo.IPAddress")
+	proto.RegisterType((*NetworkInfo_PortMapping)(nil), "mesos.NetworkInfo.PortMapping")
+	proto.RegisterType((*CapabilityInfo)(nil), "mesos.CapabilityInfo")
+	proto.RegisterType((*LinuxInfo)(nil), "mesos.LinuxInfo")
+	proto.RegisterType((*RLimitInfo)(nil), "mesos.RLimitInfo")
+	proto.RegisterType((*RLimitInfo_RLimit)(nil), "mesos.RLimitInfo.RLimit")
+	proto.RegisterType((*TTYInfo)(nil), "mesos.TTYInfo")
+	proto.RegisterType((*TTYInfo_WindowSize)(nil), "mesos.TTYInfo.WindowSize")
+	proto.RegisterType((*ContainerInfo)(nil), "mesos.ContainerInfo")
+	proto.RegisterType((*ContainerInfo_DockerInfo)(nil), "mesos.ContainerInfo.DockerInfo")
+	proto.RegisterType((*ContainerInfo_DockerInfo_PortMapping)(nil), "mesos.ContainerInfo.DockerInfo.PortMapping")
+	proto.RegisterType((*ContainerInfo_MesosInfo)(nil), "mesos.ContainerInfo.MesosInfo")
+	proto.RegisterType((*ContainerStatus)(nil), "mesos.ContainerStatus")
+	proto.RegisterType((*CgroupInfo)(nil), "mesos.CgroupInfo")
+	proto.RegisterType((*CgroupInfo_Blkio)(nil), "mesos.CgroupInfo.Blkio")
+	proto.RegisterType((*CgroupInfo_Blkio_Value)(nil), "mesos.CgroupInfo.Blkio.Value")
+	proto.RegisterType((*CgroupInfo_Blkio_CFQ)(nil), "mesos.CgroupInfo.Blkio.CFQ")
+	proto.RegisterType((*CgroupInfo_Blkio_CFQ_Statistics)(nil), "mesos.CgroupInfo.Blkio.CFQ.Statistics")
+	proto.RegisterType((*CgroupInfo_Blkio_Throttling)(nil), "mesos.CgroupInfo.Blkio.Throttling")
+	proto.RegisterType((*CgroupInfo_Blkio_Throttling_Statistics)(nil), "mesos.CgroupInfo.Blkio.Throttling.Statistics")
+	proto.RegisterType((*CgroupInfo_Blkio_Statistics)(nil), "mesos.CgroupInfo.Blkio.Statistics")
+	proto.RegisterType((*CgroupInfo_NetCls)(nil), "mesos.CgroupInfo.NetCls")
+	proto.RegisterType((*Labels)(nil), "mesos.Labels")
+	proto.RegisterType((*Label)(nil), "mesos.Label")
+	proto.RegisterType((*Port)(nil), "mesos.Port")
+	proto.RegisterType((*Ports)(nil), "mesos.Ports")
+	proto.RegisterType((*DiscoveryInfo)(nil), "mesos.DiscoveryInfo")
+	proto.RegisterType((*WeightInfo)(nil), "mesos.WeightInfo")
+	proto.RegisterType((*VersionInfo)(nil), "mesos.VersionInfo")
+	proto.RegisterType((*Flag)(nil), "mesos.Flag")
+	proto.RegisterType((*Role)(nil), "mesos.Role")
+	proto.RegisterType((*Metric)(nil), "mesos.Metric")
+	proto.RegisterType((*FileInfo)(nil), "mesos.FileInfo")
+	proto.RegisterType((*Device)(nil), "mesos.Device")
+	proto.RegisterType((*Device_Number)(nil), "mesos.Device.Number")
+	proto.RegisterType((*DeviceAccess)(nil), "mesos.DeviceAccess")
+	proto.RegisterType((*DeviceAccess_Access)(nil), "mesos.DeviceAccess.Access")
+	proto.RegisterType((*DeviceWhitelist)(nil), "mesos.DeviceWhitelist")
+	proto.RegisterEnum("mesos.Status", Status_name, Status_value)
+	proto.RegisterEnum("mesos.TaskState", TaskState_name, TaskState_value)
+	proto.RegisterEnum("mesos.OperationState", OperationState_name, OperationState_value)
+	proto.RegisterEnum("mesos.MachineInfo_Mode", MachineInfo_Mode_name, MachineInfo_Mode_value)
+	proto.RegisterEnum("mesos.FrameworkInfo_Capability_Type", FrameworkInfo_Capability_Type_name, FrameworkInfo_Capability_Type_value)
+	proto.RegisterEnum("mesos.CheckInfo_Type", CheckInfo_Type_name, CheckInfo_Type_value)
+	proto.RegisterEnum("mesos.HealthCheck_Type", HealthCheck_Type_name, HealthCheck_Type_value)
+	proto.RegisterEnum("mesos.ExecutorInfo_Type", ExecutorInfo_Type_name, ExecutorInfo_Type_value)
+	proto.RegisterEnum("mesos.MasterInfo_Capability_Type", MasterInfo_Capability_Type_name, MasterInfo_Capability_Type_value)
+	proto.RegisterEnum("mesos.SlaveInfo_Capability_Type", SlaveInfo_Capability_Type_name, SlaveInfo_Capability_Type_value)
+	proto.RegisterEnum("mesos.CSIPluginContainerInfo_Service", CSIPluginContainerInfo_Service_name, CSIPluginContainerInfo_Service_value)
+	proto.RegisterEnum("mesos.Value_Type", Value_Type_name, Value_Type_value)
+	proto.RegisterEnum("mesos.Resource_ReservationInfo_Type", Resource_ReservationInfo_Type_name, Resource_ReservationInfo_Type_value)
+	proto.RegisterEnum("mesos.Resource_DiskInfo_Source_Type", Resource_DiskInfo_Source_Type_name, Resource_DiskInfo_Source_Type_value)
+	proto.RegisterEnum("mesos.Offer_Operation_Type", Offer_Operation_Type_name, Offer_Operation_Type_value)
+	proto.RegisterEnum("mesos.TaskStatus_Source", TaskStatus_Source_name, TaskStatus_Source_value)
+	proto.RegisterEnum("mesos.TaskStatus_Reason", TaskStatus_Reason_name, TaskStatus_Reason_value)
+	proto.RegisterEnum("mesos.Environment_Variable_Type", Environment_Variable_Type_name, Environment_Variable_Type_value)
+	proto.RegisterEnum("mesos.Secret_Type", Secret_Type_name, Secret_Type_value)
+	proto.RegisterEnum("mesos.Image_Type", Image_Type_name, Image_Type_value)
+	proto.RegisterEnum("mesos.MountPropagation_Mode", MountPropagation_Mode_name, MountPropagation_Mode_value)
+	proto.RegisterEnum("mesos.Volume_Mode", Volume_Mode_name, Volume_Mode_value)
+	proto.RegisterEnum("mesos.Volume_Source_Type", Volume_Source_Type_name, Volume_Source_Type_value)
+	proto.RegisterEnum("mesos.Volume_Source_SandboxPath_Type", Volume_Source_SandboxPath_Type_name, Volume_Source_SandboxPath_Type_value)
+	proto.RegisterEnum("mesos.NetworkInfo_Protocol", NetworkInfo_Protocol_name, NetworkInfo_Protocol_value)
+	proto.RegisterEnum("mesos.CapabilityInfo_Capability", CapabilityInfo_Capability_name, CapabilityInfo_Capability_value)
+	proto.RegisterEnum("mesos.RLimitInfo_RLimit_Type", RLimitInfo_RLimit_Type_name, RLimitInfo_RLimit_Type_value)
+	proto.RegisterEnum("mesos.ContainerInfo_Type", ContainerInfo_Type_name, ContainerInfo_Type_value)
+	proto.RegisterEnum("mesos.ContainerInfo_DockerInfo_Network", ContainerInfo_DockerInfo_Network_name, ContainerInfo_DockerInfo_Network_value)
+	proto.RegisterEnum("mesos.CgroupInfo_Blkio_Operation", CgroupInfo_Blkio_Operation_name, CgroupInfo_Blkio_Operation_value)
+	proto.RegisterEnum("mesos.DiscoveryInfo_Visibility", DiscoveryInfo_Visibility_name, DiscoveryInfo_Visibility_value)
 }
 func (m *FrameworkID) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -8374,7 +9982,7 @@ func (m *OfferID) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *AgentID) Marshal() (dAtA []byte, err error) {
+func (m *SlaveID) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -8384,7 +9992,7 @@ func (m *AgentID) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AgentID) MarshalTo(dAtA []byte) (int, error) {
+func (m *SlaveID) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -8511,6 +10119,35 @@ func (m *ResourceProviderID) Marshal() (dAtA []byte, err error) {
 }
 
 func (m *ResourceProviderID) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Value == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Value)))
+		i += copy(dAtA[i:], *m.Value)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *OperationID) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *OperationID) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -9251,6 +10888,11 @@ func (m *HealthCheck_HTTPCheckInfo) MarshalTo(dAtA []byte) (int, error) {
 			i = encodeVarintMesos(dAtA, i, uint64(num))
 		}
 	}
+	if m.Protocol != nil {
+		dAtA[i] = 0x28
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Protocol))
+	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
 	}
@@ -9278,6 +10920,11 @@ func (m *HealthCheck_TCPCheckInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x8
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(*m.Port))
+	}
+	if m.Protocol != nil {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Protocol))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -9589,6 +11236,140 @@ func (m *ExecutorInfo) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *DomainInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DomainInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.FaultDomain != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.FaultDomain.Size()))
+		n25, err := m.FaultDomain.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n25
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DomainInfo_FaultDomain) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DomainInfo_FaultDomain) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Region == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Region.Size()))
+		n26, err := m.Region.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n26
+	}
+	if m.Zone == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Zone.Size()))
+		n27, err := m.Zone.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n27
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DomainInfo_FaultDomain_RegionInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DomainInfo_FaultDomain_RegionInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Name == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Name)))
+		i += copy(dAtA[i:], *m.Name)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *DomainInfo_FaultDomain_ZoneInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *DomainInfo_FaultDomain_ZoneInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Name == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Name)))
+		i += copy(dAtA[i:], *m.Name)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *MasterInfo) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -9648,11 +11429,33 @@ func (m *MasterInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Address.Size()))
-		n25, err := m.Address.MarshalTo(dAtA[i:])
+		n28, err := m.Address.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n25
+		i += n28
+	}
+	if m.Domain != nil {
+		dAtA[i] = 0x42
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Domain.Size()))
+		n29, err := m.Domain.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n29
+	}
+	if len(m.Capabilities) > 0 {
+		for _, msg := range m.Capabilities {
+			dAtA[i] = 0x4a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -9660,7 +11463,7 @@ func (m *MasterInfo) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *AgentInfo) Marshal() (dAtA []byte, err error) {
+func (m *MasterInfo_Capability) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -9670,7 +11473,33 @@ func (m *AgentInfo) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AgentInfo) MarshalTo(dAtA []byte) (int, error) {
+func (m *MasterInfo_Capability) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Type != nil {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Type))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *SlaveInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SlaveInfo) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -9711,16 +11540,36 @@ func (m *AgentInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Id.Size()))
-		n26, err := m.Id.MarshalTo(dAtA[i:])
+		n30, err := m.Id.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n26
+		i += n30
+	}
+	if m.Checkpoint != nil {
+		dAtA[i] = 0x38
+		i++
+		if *m.Checkpoint {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
 	}
 	if m.Port != nil {
 		dAtA[i] = 0x40
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(*m.Port))
+	}
+	if m.Domain != nil {
+		dAtA[i] = 0x52
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Domain.Size()))
+		n31, err := m.Domain.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n31
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -9728,7 +11577,7 @@ func (m *AgentInfo) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
-func (m *AgentInfo_Capability) Marshal() (dAtA []byte, err error) {
+func (m *SlaveInfo_Capability) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalTo(dAtA)
@@ -9738,7 +11587,7 @@ func (m *AgentInfo_Capability) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *AgentInfo_Capability) MarshalTo(dAtA []byte) (int, error) {
+func (m *SlaveInfo_Capability) MarshalTo(dAtA []byte) (int, error) {
 	var i int
 	_ = i
 	var l int
@@ -9747,6 +11596,229 @@ func (m *AgentInfo_Capability) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x8
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(*m.Type))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CSIPluginContainerInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CSIPluginContainerInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for _, num := range m.Services {
+			dAtA[i] = 0x8
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(num))
+		}
+	}
+	if m.Command != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Command.Size()))
+		n32, err := m.Command.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n32
+	}
+	if len(m.Resources) > 0 {
+		for _, msg := range m.Resources {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Container != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Container.Size()))
+		n33, err := m.Container.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n33
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CSIPluginInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CSIPluginInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Type == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Type)))
+		i += copy(dAtA[i:], *m.Type)
+	}
+	if m.Name == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Name)))
+		i += copy(dAtA[i:], *m.Name)
+	}
+	if len(m.Containers) > 0 {
+		for _, msg := range m.Containers {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ResourceProviderInfo) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ResourceProviderInfo) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Id != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Id.Size()))
+		n34, err := m.Id.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n34
+	}
+	if len(m.Attributes) > 0 {
+		for _, msg := range m.Attributes {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Type == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Type)))
+		i += copy(dAtA[i:], *m.Type)
+	}
+	if m.Name == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Name)))
+		i += copy(dAtA[i:], *m.Name)
+	}
+	if len(m.DefaultReservations) > 0 {
+		for _, msg := range m.DefaultReservations {
+			dAtA[i] = 0x2a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Storage != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Storage.Size()))
+		n35, err := m.Storage.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n35
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *ResourceProviderInfo_Storage) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ResourceProviderInfo_Storage) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Plugin == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Plugin.Size()))
+		n36, err := m.Plugin.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n36
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -9780,41 +11852,41 @@ func (m *Value) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Scalar.Size()))
-		n27, err := m.Scalar.MarshalTo(dAtA[i:])
+		n37, err := m.Scalar.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n27
+		i += n37
 	}
 	if m.Ranges != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Ranges.Size()))
-		n28, err := m.Ranges.MarshalTo(dAtA[i:])
+		n38, err := m.Ranges.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n28
+		i += n38
 	}
 	if m.Set != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Set.Size()))
-		n29, err := m.Set.MarshalTo(dAtA[i:])
+		n39, err := m.Set.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n29
+		i += n39
 	}
 	if m.Text != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Text.Size()))
-		n30, err := m.Text.MarshalTo(dAtA[i:])
+		n40, err := m.Text.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n30
+		i += n40
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -10017,41 +12089,41 @@ func (m *Attribute) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Scalar.Size()))
-		n31, err := m.Scalar.MarshalTo(dAtA[i:])
+		n41, err := m.Scalar.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n31
+		i += n41
 	}
 	if m.Ranges != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Ranges.Size()))
-		n32, err := m.Ranges.MarshalTo(dAtA[i:])
+		n42, err := m.Ranges.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n32
+		i += n42
 	}
 	if m.Text != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Text.Size()))
-		n33, err := m.Text.MarshalTo(dAtA[i:])
+		n43, err := m.Text.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n33
+		i += n43
 	}
 	if m.Set != nil {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Set.Size()))
-		n34, err := m.Set.MarshalTo(dAtA[i:])
+		n44, err := m.Set.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n34
+		i += n44
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -10093,31 +12165,31 @@ func (m *Resource) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Scalar.Size()))
-		n35, err := m.Scalar.MarshalTo(dAtA[i:])
+		n45, err := m.Scalar.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n35
+		i += n45
 	}
 	if m.Ranges != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Ranges.Size()))
-		n36, err := m.Ranges.MarshalTo(dAtA[i:])
+		n46, err := m.Ranges.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n36
+		i += n46
 	}
 	if m.Set != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Set.Size()))
-		n37, err := m.Set.MarshalTo(dAtA[i:])
+		n47, err := m.Set.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n37
+		i += n47
 	}
 	if m.Role != nil {
 		dAtA[i] = 0x32
@@ -10129,61 +12201,73 @@ func (m *Resource) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Disk.Size()))
-		n38, err := m.Disk.MarshalTo(dAtA[i:])
+		n48, err := m.Disk.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n38
+		i += n48
 	}
 	if m.Reservation != nil {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Reservation.Size()))
-		n39, err := m.Reservation.MarshalTo(dAtA[i:])
+		n49, err := m.Reservation.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n39
+		i += n49
 	}
 	if m.Revocable != nil {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Revocable.Size()))
-		n40, err := m.Revocable.MarshalTo(dAtA[i:])
+		n50, err := m.Revocable.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n40
+		i += n50
 	}
 	if m.Shared != nil {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Shared.Size()))
-		n41, err := m.Shared.MarshalTo(dAtA[i:])
+		n51, err := m.Shared.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n41
+		i += n51
 	}
 	if m.AllocationInfo != nil {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.AllocationInfo.Size()))
-		n42, err := m.AllocationInfo.MarshalTo(dAtA[i:])
+		n52, err := m.AllocationInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n42
+		i += n52
 	}
 	if m.ProviderId != nil {
 		dAtA[i] = 0x62
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.ProviderId.Size()))
-		n43, err := m.ProviderId.MarshalTo(dAtA[i:])
+		n53, err := m.ProviderId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n43
+		i += n53
+	}
+	if len(m.Reservations) > 0 {
+		for _, msg := range m.Reservations {
+			dAtA[i] = 0x6a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -10243,11 +12327,22 @@ func (m *Resource_ReservationInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n44, err := m.Labels.MarshalTo(dAtA[i:])
+		n54, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n44
+		i += n54
+	}
+	if m.Role != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Role)))
+		i += copy(dAtA[i:], *m.Role)
+	}
+	if m.Type != nil {
+		dAtA[i] = 0x20
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Type))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -10274,31 +12369,31 @@ func (m *Resource_DiskInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Persistence.Size()))
-		n45, err := m.Persistence.MarshalTo(dAtA[i:])
+		n55, err := m.Persistence.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n45
+		i += n55
 	}
 	if m.Volume != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Volume.Size()))
-		n46, err := m.Volume.MarshalTo(dAtA[i:])
+		n56, err := m.Volume.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n46
+		i += n56
 	}
 	if m.Source != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Source.Size()))
-		n47, err := m.Source.MarshalTo(dAtA[i:])
+		n57, err := m.Source.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n47
+		i += n57
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -10367,21 +12462,43 @@ func (m *Resource_DiskInfo_Source) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Path.Size()))
-		n48, err := m.Path.MarshalTo(dAtA[i:])
+		n58, err := m.Path.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n48
+		i += n58
 	}
 	if m.Mount != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Mount.Size()))
-		n49, err := m.Mount.MarshalTo(dAtA[i:])
+		n59, err := m.Mount.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n49
+		i += n59
+	}
+	if m.Id != nil {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Id)))
+		i += copy(dAtA[i:], *m.Id)
+	}
+	if m.Metadata != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Metadata.Size()))
+		n60, err := m.Metadata.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n60
+	}
+	if m.Profile != nil {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Profile)))
+		i += copy(dAtA[i:], *m.Profile)
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -11039,41 +13156,41 @@ func (m *SNMPStatistics) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.IpStats.Size()))
-		n50, err := m.IpStats.MarshalTo(dAtA[i:])
+		n61, err := m.IpStats.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n50
+		i += n61
 	}
 	if m.IcmpStats != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.IcmpStats.Size()))
-		n51, err := m.IcmpStats.MarshalTo(dAtA[i:])
+		n62, err := m.IcmpStats.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n51
+		i += n62
 	}
 	if m.TcpStats != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.TcpStats.Size()))
-		n52, err := m.TcpStats.MarshalTo(dAtA[i:])
+		n63, err := m.TcpStats.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n52
+		i += n63
 	}
 	if m.UdpStats != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.UdpStats.Size()))
-		n53, err := m.UdpStats.MarshalTo(dAtA[i:])
+		n64, err := m.UdpStats.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n53
+		i += n64
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -11100,21 +13217,21 @@ func (m *DiskStatistics) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Source.Size()))
-		n54, err := m.Source.MarshalTo(dAtA[i:])
+		n65, err := m.Source.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n54
+		i += n65
 	}
 	if m.Persistence != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Persistence.Size()))
-		n55, err := m.Persistence.MarshalTo(dAtA[i:])
+		n66, err := m.Persistence.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n55
+		i += n66
 	}
 	if m.LimitBytes != nil {
 		dAtA[i] = 0x18
@@ -11213,11 +13330,11 @@ func (m *ResourceStatistics) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x6a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Perf.Size()))
-		n56, err := m.Perf.MarshalTo(dAtA[i:])
+		n67, err := m.Perf.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n56
+		i += n67
 	}
 	if m.NetRxPackets != nil {
 		dAtA[i] = 0x70
@@ -11424,11 +13541,11 @@ func (m *ResourceStatistics) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.NetSnmpStatistics.Size()))
-		n57, err := m.NetSnmpStatistics.MarshalTo(dAtA[i:])
+		n68, err := m.NetSnmpStatistics.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n57
+		i += n68
 	}
 	if len(m.DiskStatistics) > 0 {
 		for _, msg := range m.DiskStatistics {
@@ -11443,6 +13560,18 @@ func (m *ResourceStatistics) MarshalTo(dAtA []byte) (int, error) {
 			}
 			i += n
 		}
+	}
+	if m.BlkioStatistics != nil {
+		dAtA[i] = 0xe2
+		i++
+		dAtA[i] = 0x2
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.BlkioStatistics.Size()))
+		n69, err := m.BlkioStatistics.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n69
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -11516,11 +13645,11 @@ func (m *ResourceUsage_Executor) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.ExecutorInfo.Size()))
-		n58, err := m.ExecutorInfo.MarshalTo(dAtA[i:])
+		n70, err := m.ExecutorInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n58
+		i += n70
 	}
 	if len(m.Allocated) > 0 {
 		for _, msg := range m.Allocated {
@@ -11538,11 +13667,11 @@ func (m *ResourceUsage_Executor) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Statistics.Size()))
-		n59, err := m.Statistics.MarshalTo(dAtA[i:])
+		n71, err := m.Statistics.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n59
+		i += n71
 	}
 	if m.ContainerId == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -11550,11 +13679,11 @@ func (m *ResourceUsage_Executor) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.ContainerId.Size()))
-		n60, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n72, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n60
+		i += n72
 	}
 	if len(m.Tasks) > 0 {
 		for _, msg := range m.Tasks {
@@ -11603,11 +13732,11 @@ func (m *ResourceUsage_Executor_Task) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Id.Size()))
-		n61, err := m.Id.MarshalTo(dAtA[i:])
+		n73, err := m.Id.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n61
+		i += n73
 	}
 	if len(m.Resources) > 0 {
 		for _, msg := range m.Resources {
@@ -11625,11 +13754,11 @@ func (m *ResourceUsage_Executor_Task) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n62, err := m.Labels.MarshalTo(dAtA[i:])
+		n74, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n62
+		i += n74
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -12018,15 +14147,15 @@ func (m *Request) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.AgentId != nil {
+	if m.SlaveId != nil {
 		dAtA[i] = 0xa
 		i++
-		i = encodeVarintMesos(dAtA, i, uint64(m.AgentId.Size()))
-		n63, err := m.AgentId.MarshalTo(dAtA[i:])
+		i = encodeVarintMesos(dAtA, i, uint64(m.SlaveId.Size()))
+		n75, err := m.SlaveId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n63
+		i += n75
 	}
 	if len(m.Resources) > 0 {
 		for _, msg := range m.Resources {
@@ -12067,11 +14196,11 @@ func (m *Offer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Id.Size()))
-		n64, err := m.Id.MarshalTo(dAtA[i:])
+		n76, err := m.Id.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n64
+		i += n76
 	}
 	if m.FrameworkId == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -12079,23 +14208,23 @@ func (m *Offer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.FrameworkId.Size()))
-		n65, err := m.FrameworkId.MarshalTo(dAtA[i:])
+		n77, err := m.FrameworkId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n65
+		i += n77
 	}
-	if m.AgentId == nil {
+	if m.SlaveId == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	} else {
 		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintMesos(dAtA, i, uint64(m.AgentId.Size()))
-		n66, err := m.AgentId.MarshalTo(dAtA[i:])
+		i = encodeVarintMesos(dAtA, i, uint64(m.SlaveId.Size()))
+		n78, err := m.SlaveId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n66
+		i += n78
 	}
 	if m.Hostname == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -12145,31 +14274,41 @@ func (m *Offer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Url.Size()))
-		n67, err := m.Url.MarshalTo(dAtA[i:])
+		n79, err := m.Url.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n67
+		i += n79
 	}
 	if m.Unavailability != nil {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Unavailability.Size()))
-		n68, err := m.Unavailability.MarshalTo(dAtA[i:])
+		n80, err := m.Unavailability.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n68
+		i += n80
 	}
 	if m.AllocationInfo != nil {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.AllocationInfo.Size()))
-		n69, err := m.AllocationInfo.MarshalTo(dAtA[i:])
+		n81, err := m.AllocationInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n69
+		i += n81
+	}
+	if m.Domain != nil {
+		dAtA[i] = 0x5a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Domain.Size()))
+		n82, err := m.Domain.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n82
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -12201,61 +14340,111 @@ func (m *Offer_Operation) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Launch.Size()))
-		n70, err := m.Launch.MarshalTo(dAtA[i:])
+		n83, err := m.Launch.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n70
+		i += n83
 	}
 	if m.Reserve != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Reserve.Size()))
-		n71, err := m.Reserve.MarshalTo(dAtA[i:])
+		n84, err := m.Reserve.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n71
+		i += n84
 	}
 	if m.Unreserve != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Unreserve.Size()))
-		n72, err := m.Unreserve.MarshalTo(dAtA[i:])
+		n85, err := m.Unreserve.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n72
+		i += n85
 	}
 	if m.Create != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Create.Size()))
-		n73, err := m.Create.MarshalTo(dAtA[i:])
+		n86, err := m.Create.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n73
+		i += n86
 	}
 	if m.Destroy != nil {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Destroy.Size()))
-		n74, err := m.Destroy.MarshalTo(dAtA[i:])
+		n87, err := m.Destroy.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n74
+		i += n87
 	}
 	if m.LaunchGroup != nil {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.LaunchGroup.Size()))
-		n75, err := m.LaunchGroup.MarshalTo(dAtA[i:])
+		n88, err := m.LaunchGroup.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n75
+		i += n88
+	}
+	if m.CreateVolume != nil {
+		dAtA[i] = 0x42
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.CreateVolume.Size()))
+		n89, err := m.CreateVolume.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n89
+	}
+	if m.DestroyVolume != nil {
+		dAtA[i] = 0x4a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.DestroyVolume.Size()))
+		n90, err := m.DestroyVolume.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n90
+	}
+	if m.CreateBlock != nil {
+		dAtA[i] = 0x52
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.CreateBlock.Size()))
+		n91, err := m.CreateBlock.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n91
+	}
+	if m.DestroyBlock != nil {
+		dAtA[i] = 0x5a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.DestroyBlock.Size()))
+		n92, err := m.DestroyBlock.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n92
+	}
+	if m.Id != nil {
+		dAtA[i] = 0x62
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Id.Size()))
+		n93, err := m.Id.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n93
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -12317,11 +14506,11 @@ func (m *Offer_Operation_LaunchGroup) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Executor.Size()))
-		n76, err := m.Executor.MarshalTo(dAtA[i:])
+		n94, err := m.Executor.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n76
+		i += n94
 	}
 	if m.TaskGroup == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -12329,11 +14518,11 @@ func (m *Offer_Operation_LaunchGroup) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.TaskGroup.Size()))
-		n77, err := m.TaskGroup.MarshalTo(dAtA[i:])
+		n95, err := m.TaskGroup.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n77
+		i += n95
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -12473,6 +14662,145 @@ func (m *Offer_Operation_Destroy) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *Offer_Operation_CreateVolume) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Offer_Operation_CreateVolume) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Source == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Source.Size()))
+		n96, err := m.Source.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n96
+	}
+	if m.TargetType == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.TargetType))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Offer_Operation_DestroyVolume) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Offer_Operation_DestroyVolume) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Volume == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Volume.Size()))
+		n97, err := m.Volume.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n97
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Offer_Operation_CreateBlock) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Offer_Operation_CreateBlock) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Source == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Source.Size()))
+		n98, err := m.Source.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n98
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Offer_Operation_DestroyBlock) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Offer_Operation_DestroyBlock) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Block == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Block.Size()))
+		n99, err := m.Block.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n99
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
 func (m *InverseOffer) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -12494,21 +14822,21 @@ func (m *InverseOffer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Id.Size()))
-		n78, err := m.Id.MarshalTo(dAtA[i:])
+		n100, err := m.Id.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n78
+		i += n100
 	}
 	if m.Url != nil {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Url.Size()))
-		n79, err := m.Url.MarshalTo(dAtA[i:])
+		n101, err := m.Url.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n79
+		i += n101
 	}
 	if m.FrameworkId == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -12516,21 +14844,21 @@ func (m *InverseOffer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.FrameworkId.Size()))
-		n80, err := m.FrameworkId.MarshalTo(dAtA[i:])
+		n102, err := m.FrameworkId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n80
+		i += n102
 	}
-	if m.AgentId != nil {
+	if m.SlaveId != nil {
 		dAtA[i] = 0x22
 		i++
-		i = encodeVarintMesos(dAtA, i, uint64(m.AgentId.Size()))
-		n81, err := m.AgentId.MarshalTo(dAtA[i:])
+		i = encodeVarintMesos(dAtA, i, uint64(m.SlaveId.Size()))
+		n103, err := m.SlaveId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n81
+		i += n103
 	}
 	if m.Unavailability == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -12538,11 +14866,11 @@ func (m *InverseOffer) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Unavailability.Size()))
-		n82, err := m.Unavailability.MarshalTo(dAtA[i:])
+		n104, err := m.Unavailability.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n82
+		i += n104
 	}
 	if len(m.Resources) > 0 {
 		for _, msg := range m.Resources {
@@ -12591,23 +14919,23 @@ func (m *TaskInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.TaskId.Size()))
-		n83, err := m.TaskId.MarshalTo(dAtA[i:])
+		n105, err := m.TaskId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n83
+		i += n105
 	}
-	if m.AgentId == nil {
+	if m.SlaveId == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	} else {
 		dAtA[i] = 0x1a
 		i++
-		i = encodeVarintMesos(dAtA, i, uint64(m.AgentId.Size()))
-		n84, err := m.AgentId.MarshalTo(dAtA[i:])
+		i = encodeVarintMesos(dAtA, i, uint64(m.SlaveId.Size()))
+		n106, err := m.SlaveId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n84
+		i += n106
 	}
 	if len(m.Resources) > 0 {
 		for _, msg := range m.Resources {
@@ -12625,11 +14953,11 @@ func (m *TaskInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Executor.Size()))
-		n85, err := m.Executor.MarshalTo(dAtA[i:])
+		n107, err := m.Executor.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n85
+		i += n107
 	}
 	if m.Data != nil {
 		dAtA[i] = 0x32
@@ -12641,71 +14969,71 @@ func (m *TaskInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Command.Size()))
-		n86, err := m.Command.MarshalTo(dAtA[i:])
+		n108, err := m.Command.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n86
+		i += n108
 	}
 	if m.HealthCheck != nil {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.HealthCheck.Size()))
-		n87, err := m.HealthCheck.MarshalTo(dAtA[i:])
+		n109, err := m.HealthCheck.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n87
+		i += n109
 	}
 	if m.Container != nil {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Container.Size()))
-		n88, err := m.Container.MarshalTo(dAtA[i:])
+		n110, err := m.Container.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n88
+		i += n110
 	}
 	if m.Labels != nil {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n89, err := m.Labels.MarshalTo(dAtA[i:])
+		n111, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n89
+		i += n111
 	}
 	if m.Discovery != nil {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Discovery.Size()))
-		n90, err := m.Discovery.MarshalTo(dAtA[i:])
+		n112, err := m.Discovery.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n90
+		i += n112
 	}
 	if m.KillPolicy != nil {
 		dAtA[i] = 0x62
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.KillPolicy.Size()))
-		n91, err := m.KillPolicy.MarshalTo(dAtA[i:])
+		n113, err := m.KillPolicy.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n91
+		i += n113
 	}
 	if m.Check != nil {
 		dAtA[i] = 0x6a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Check.Size()))
-		n92, err := m.Check.MarshalTo(dAtA[i:])
+		n114, err := m.Check.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n92
+		i += n114
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -12775,11 +15103,11 @@ func (m *Task) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.TaskId.Size()))
-		n93, err := m.TaskId.MarshalTo(dAtA[i:])
+		n115, err := m.TaskId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n93
+		i += n115
 	}
 	if m.FrameworkId == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -12787,33 +15115,33 @@ func (m *Task) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.FrameworkId.Size()))
-		n94, err := m.FrameworkId.MarshalTo(dAtA[i:])
+		n116, err := m.FrameworkId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n94
+		i += n116
 	}
 	if m.ExecutorId != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.ExecutorId.Size()))
-		n95, err := m.ExecutorId.MarshalTo(dAtA[i:])
+		n117, err := m.ExecutorId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n95
+		i += n117
 	}
-	if m.AgentId == nil {
+	if m.SlaveId == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	} else {
 		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintMesos(dAtA, i, uint64(m.AgentId.Size()))
-		n96, err := m.AgentId.MarshalTo(dAtA[i:])
+		i = encodeVarintMesos(dAtA, i, uint64(m.SlaveId.Size()))
+		n118, err := m.SlaveId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n96
+		i += n118
 	}
 	if m.State == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -12861,37 +15189,254 @@ func (m *Task) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x5a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n97, err := m.Labels.MarshalTo(dAtA[i:])
+		n119, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n97
+		i += n119
 	}
 	if m.Discovery != nil {
 		dAtA[i] = 0x62
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Discovery.Size()))
-		n98, err := m.Discovery.MarshalTo(dAtA[i:])
+		n120, err := m.Discovery.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n98
+		i += n120
 	}
 	if m.Container != nil {
 		dAtA[i] = 0x6a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Container.Size()))
-		n99, err := m.Container.MarshalTo(dAtA[i:])
+		n121, err := m.Container.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n99
+		i += n121
 	}
 	if m.User != nil {
 		dAtA[i] = 0x72
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(len(*m.User)))
 		i += copy(dAtA[i:], *m.User)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *TaskResourceLimitation) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TaskResourceLimitation) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Resources) > 0 {
+		for _, msg := range m.Resources {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *UUID) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *UUID) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Value == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(m.Value)))
+		i += copy(dAtA[i:], m.Value)
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Operation) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Operation) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.FrameworkId != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.FrameworkId.Size()))
+		n122, err := m.FrameworkId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n122
+	}
+	if m.SlaveId != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.SlaveId.Size()))
+		n123, err := m.SlaveId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n123
+	}
+	if m.Info == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Info.Size()))
+		n124, err := m.Info.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n124
+	}
+	if m.LatestStatus == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x22
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.LatestStatus.Size()))
+		n125, err := m.LatestStatus.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n125
+	}
+	if len(m.Statuses) > 0 {
+		for _, msg := range m.Statuses {
+			dAtA[i] = 0x2a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Uuid == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x32
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Uuid.Size()))
+		n126, err := m.Uuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n126
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *OperationStatus) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *OperationStatus) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.OperationId != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.OperationId.Size()))
+		n127, err := m.OperationId.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n127
+	}
+	if m.State == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.State))
+	}
+	if m.Message != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Message)))
+		i += copy(dAtA[i:], *m.Message)
+	}
+	if len(m.ConvertedResources) > 0 {
+		for _, msg := range m.ConvertedResources {
+			dAtA[i] = 0x22
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.Uuid != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Uuid.Size()))
+		n128, err := m.Uuid.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n128
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -12923,31 +15468,31 @@ func (m *CheckStatusInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Command.Size()))
-		n100, err := m.Command.MarshalTo(dAtA[i:])
+		n129, err := m.Command.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n100
+		i += n129
 	}
 	if m.Http != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Http.Size()))
-		n101, err := m.Http.MarshalTo(dAtA[i:])
+		n130, err := m.Http.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n101
+		i += n130
 	}
 	if m.Tcp != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Tcp.Size()))
-		n102, err := m.Tcp.MarshalTo(dAtA[i:])
+		n131, err := m.Tcp.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n102
+		i += n131
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13059,11 +15604,11 @@ func (m *TaskStatus) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.TaskId.Size()))
-		n103, err := m.TaskId.MarshalTo(dAtA[i:])
+		n132, err := m.TaskId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n103
+		i += n132
 	}
 	if m.State == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -13084,15 +15629,15 @@ func (m *TaskStatus) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Message)))
 		i += copy(dAtA[i:], *m.Message)
 	}
-	if m.AgentId != nil {
+	if m.SlaveId != nil {
 		dAtA[i] = 0x2a
 		i++
-		i = encodeVarintMesos(dAtA, i, uint64(m.AgentId.Size()))
-		n104, err := m.AgentId.MarshalTo(dAtA[i:])
+		i = encodeVarintMesos(dAtA, i, uint64(m.SlaveId.Size()))
+		n133, err := m.SlaveId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n104
+		i += n133
 	}
 	if m.Timestamp != nil {
 		dAtA[i] = 0x31
@@ -13103,11 +15648,11 @@ func (m *TaskStatus) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.ExecutorId.Size()))
-		n105, err := m.ExecutorId.MarshalTo(dAtA[i:])
+		n134, err := m.ExecutorId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n105
+		i += n134
 	}
 	if m.Healthy != nil {
 		dAtA[i] = 0x40
@@ -13139,41 +15684,53 @@ func (m *TaskStatus) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x62
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n106, err := m.Labels.MarshalTo(dAtA[i:])
+		n135, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n106
+		i += n135
 	}
 	if m.ContainerStatus != nil {
 		dAtA[i] = 0x6a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.ContainerStatus.Size()))
-		n107, err := m.ContainerStatus.MarshalTo(dAtA[i:])
+		n136, err := m.ContainerStatus.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n107
+		i += n136
 	}
 	if m.UnreachableTime != nil {
 		dAtA[i] = 0x72
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.UnreachableTime.Size()))
-		n108, err := m.UnreachableTime.MarshalTo(dAtA[i:])
+		n137, err := m.UnreachableTime.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n108
+		i += n137
 	}
 	if m.CheckStatus != nil {
 		dAtA[i] = 0x7a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.CheckStatus.Size()))
-		n109, err := m.CheckStatus.MarshalTo(dAtA[i:])
+		n138, err := m.CheckStatus.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n109
+		i += n138
+	}
+	if m.Limitation != nil {
+		dAtA[i] = 0x82
+		i++
+		dAtA[i] = 0x1
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Limitation.Size()))
+		n139, err := m.Limitation.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n139
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13278,11 +15835,11 @@ func (m *Environment_Variable) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Secret.Size()))
-		n110, err := m.Secret.MarshalTo(dAtA[i:])
+		n140, err := m.Secret.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n110
+		i += n140
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13452,21 +16009,21 @@ func (m *Secret) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Reference.Size()))
-		n111, err := m.Reference.MarshalTo(dAtA[i:])
+		n141, err := m.Reference.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n111
+		i += n141
 	}
 	if m.Value != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Value.Size()))
-		n112, err := m.Value.MarshalTo(dAtA[i:])
+		n142, err := m.Value.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n112
+		i += n142
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13646,21 +16203,21 @@ func (m *Image) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Appc.Size()))
-		n113, err := m.Appc.MarshalTo(dAtA[i:])
+		n143, err := m.Appc.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n113
+		i += n143
 	}
 	if m.Docker != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Docker.Size()))
-		n114, err := m.Docker.MarshalTo(dAtA[i:])
+		n144, err := m.Docker.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n114
+		i += n144
 	}
 	if m.Cached != nil {
 		dAtA[i] = 0x20
@@ -13711,11 +16268,11 @@ func (m *Image_Appc) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n115, err := m.Labels.MarshalTo(dAtA[i:])
+		n145, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n115
+		i += n145
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13750,21 +16307,47 @@ func (m *Image_Docker) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Credential.Size()))
-		n116, err := m.Credential.MarshalTo(dAtA[i:])
+		n146, err := m.Credential.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n116
+		i += n146
 	}
 	if m.Config != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Config.Size()))
-		n117, err := m.Config.MarshalTo(dAtA[i:])
+		n147, err := m.Config.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n117
+		i += n147
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *MountPropagation) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *MountPropagation) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Mode != nil {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Mode))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13812,21 +16395,21 @@ func (m *Volume) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Image.Size()))
-		n118, err := m.Image.MarshalTo(dAtA[i:])
+		n148, err := m.Image.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n118
+		i += n148
 	}
 	if m.Source != nil {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Source.Size()))
-		n119, err := m.Source.MarshalTo(dAtA[i:])
+		n149, err := m.Source.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n119
+		i += n149
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13858,31 +16441,41 @@ func (m *Volume_Source) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.DockerVolume.Size()))
-		n120, err := m.DockerVolume.MarshalTo(dAtA[i:])
+		n150, err := m.DockerVolume.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n120
+		i += n150
 	}
 	if m.SandboxPath != nil {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.SandboxPath.Size()))
-		n121, err := m.SandboxPath.MarshalTo(dAtA[i:])
+		n151, err := m.SandboxPath.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n121
+		i += n151
 	}
 	if m.Secret != nil {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Secret.Size()))
-		n122, err := m.Secret.MarshalTo(dAtA[i:])
+		n152, err := m.Secret.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n122
+		i += n152
+	}
+	if m.HostPath != nil {
+		dAtA[i] = 0x2a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.HostPath.Size()))
+		n153, err := m.HostPath.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n153
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -13923,11 +16516,50 @@ func (m *Volume_Source_DockerVolume) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.DriverOptions.Size()))
-		n123, err := m.DriverOptions.MarshalTo(dAtA[i:])
+		n154, err := m.DriverOptions.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n123
+		i += n154
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Volume_Source_HostPath) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Volume_Source_HostPath) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Path == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Path)))
+		i += copy(dAtA[i:], *m.Path)
+	}
+	if m.MountPropagation != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.MountPropagation.Size()))
+		n155, err := m.MountPropagation.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n155
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14003,11 +16635,11 @@ func (m *NetworkInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n124, err := m.Labels.MarshalTo(dAtA[i:])
+		n156, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n124
+		i += n156
 	}
 	if len(m.IpAddresses) > 0 {
 		for _, msg := range m.IpAddresses {
@@ -14165,11 +16797,41 @@ func (m *LinuxInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.CapabilityInfo.Size()))
-		n125, err := m.CapabilityInfo.MarshalTo(dAtA[i:])
+		n157, err := m.CapabilityInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n125
+		i += n157
+	}
+	if m.BoundingCapabilities != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.BoundingCapabilities.Size()))
+		n158, err := m.BoundingCapabilities.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n158
+	}
+	if m.EffectiveCapabilities != nil {
+		dAtA[i] = 0x1a
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.EffectiveCapabilities.Size()))
+		n159, err := m.EffectiveCapabilities.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n159
+	}
+	if m.SharePidNamespace != nil {
+		dAtA[i] = 0x20
+		i++
+		if *m.SharePidNamespace {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i++
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14265,11 +16927,11 @@ func (m *TTYInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.WindowSize.Size()))
-		n126, err := m.WindowSize.MarshalTo(dAtA[i:])
+		n160, err := m.WindowSize.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n126
+		i += n160
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14350,11 +17012,11 @@ func (m *ContainerInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Docker.Size()))
-		n127, err := m.Docker.MarshalTo(dAtA[i:])
+		n161, err := m.Docker.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n127
+		i += n161
 	}
 	if m.Hostname != nil {
 		dAtA[i] = 0x22
@@ -14366,11 +17028,11 @@ func (m *ContainerInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Mesos.Size()))
-		n128, err := m.Mesos.MarshalTo(dAtA[i:])
+		n162, err := m.Mesos.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n128
+		i += n162
 	}
 	if len(m.NetworkInfos) > 0 {
 		for _, msg := range m.NetworkInfos {
@@ -14388,31 +17050,31 @@ func (m *ContainerInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x42
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.LinuxInfo.Size()))
-		n129, err := m.LinuxInfo.MarshalTo(dAtA[i:])
+		n163, err := m.LinuxInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n129
+		i += n163
 	}
 	if m.RlimitInfo != nil {
 		dAtA[i] = 0x4a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.RlimitInfo.Size()))
-		n130, err := m.RlimitInfo.MarshalTo(dAtA[i:])
+		n164, err := m.RlimitInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n130
+		i += n164
 	}
 	if m.TtyInfo != nil {
 		dAtA[i] = 0x52
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.TtyInfo.Size()))
-		n131, err := m.TtyInfo.MarshalTo(dAtA[i:])
+		n165, err := m.TtyInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n131
+		i += n165
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14564,11 +17226,11 @@ func (m *ContainerInfo_MesosInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Image.Size()))
-		n132, err := m.Image.MarshalTo(dAtA[i:])
+		n166, err := m.Image.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n132
+		i += n166
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14607,11 +17269,11 @@ func (m *ContainerStatus) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.CgroupInfo.Size()))
-		n133, err := m.CgroupInfo.MarshalTo(dAtA[i:])
+		n167, err := m.CgroupInfo.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n133
+		i += n167
 	}
 	if m.ExecutorPid != nil {
 		dAtA[i] = 0x18
@@ -14622,11 +17284,11 @@ func (m *ContainerStatus) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.ContainerId.Size()))
-		n134, err := m.ContainerId.MarshalTo(dAtA[i:])
+		n168, err := m.ContainerId.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n134
+		i += n168
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14653,11 +17315,330 @@ func (m *CgroupInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.NetCls.Size()))
-		n135, err := m.NetCls.MarshalTo(dAtA[i:])
+		n169, err := m.NetCls.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n135
+		i += n169
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CgroupInfo_Blkio) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CgroupInfo_Blkio) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CgroupInfo_Blkio_Value) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CgroupInfo_Blkio_Value) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Op != nil {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Op))
+	}
+	if m.Value != nil {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Value))
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Device != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Device.Size()))
+		n170, err := m.Device.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n170
+	}
+	if m.Sectors != nil {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Sectors))
+	}
+	if m.Time != nil {
+		dAtA[i] = 0x18
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.Time))
+	}
+	if len(m.IoServiced) > 0 {
+		for _, msg := range m.IoServiced {
+			dAtA[i] = 0x22
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.IoServiceBytes) > 0 {
+		for _, msg := range m.IoServiceBytes {
+			dAtA[i] = 0x2a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.IoServiceTime) > 0 {
+		for _, msg := range m.IoServiceTime {
+			dAtA[i] = 0x32
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.IoWaitTime) > 0 {
+		for _, msg := range m.IoWaitTime {
+			dAtA[i] = 0x3a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.IoMerged) > 0 {
+		for _, msg := range m.IoMerged {
+			dAtA[i] = 0x42
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.IoQueued) > 0 {
+		for _, msg := range m.IoQueued {
+			dAtA[i] = 0x4a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CgroupInfo_Blkio_Throttling) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CgroupInfo_Blkio_Throttling) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CgroupInfo_Blkio_Throttling_Statistics) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CgroupInfo_Blkio_Throttling_Statistics) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Device != nil {
+		dAtA[i] = 0xa
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Device.Size()))
+		n171, err := m.Device.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n171
+	}
+	if len(m.IoServiced) > 0 {
+		for _, msg := range m.IoServiced {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.IoServiceBytes) > 0 {
+		for _, msg := range m.IoServiceBytes {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *CgroupInfo_Blkio_Statistics) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *CgroupInfo_Blkio_Statistics) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Cfq) > 0 {
+		for _, msg := range m.Cfq {
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.CfqRecursive) > 0 {
+		for _, msg := range m.CfqRecursive {
+			dAtA[i] = 0x12
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
+	}
+	if len(m.Throttling) > 0 {
+		for _, msg := range m.Throttling {
+			dAtA[i] = 0x1a
+			i++
+			i = encodeVarintMesos(dAtA, i, uint64(msg.Size()))
+			n, err := msg.MarshalTo(dAtA[i:])
+			if err != nil {
+				return 0, err
+			}
+			i += n
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14802,11 +17783,11 @@ func (m *Port) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x2a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n136, err := m.Labels.MarshalTo(dAtA[i:])
+		n172, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n136
+		i += n172
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -14897,21 +17878,21 @@ func (m *DiscoveryInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x32
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Ports.Size()))
-		n137, err := m.Ports.MarshalTo(dAtA[i:])
+		n173, err := m.Ports.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n137
+		i += n173
 	}
 	if m.Labels != nil {
 		dAtA[i] = 0x3a
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Labels.Size()))
-		n138, err := m.Labels.MarshalTo(dAtA[i:])
+		n174, err := m.Labels.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n138
+		i += n174
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -15183,11 +18164,11 @@ func (m *FileInfo) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x22
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Mtime.Size()))
-		n139, err := m.Mtime.MarshalTo(dAtA[i:])
+		n175, err := m.Mtime.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n139
+		i += n175
 	}
 	if m.Mode != nil {
 		dAtA[i] = 0x28
@@ -15227,13 +18208,56 @@ func (m *Device) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.Path == nil {
-		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
-	} else {
+	if m.Path != nil {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(len(*m.Path)))
 		i += copy(dAtA[i:], *m.Path)
+	}
+	if m.Number != nil {
+		dAtA[i] = 0x12
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(m.Number.Size()))
+		n176, err := m.Number.MarshalTo(dAtA[i:])
+		if err != nil {
+			return 0, err
+		}
+		i += n176
+	}
+	if m.XXX_unrecognized != nil {
+		i += copy(dAtA[i:], m.XXX_unrecognized)
+	}
+	return i, nil
+}
+
+func (m *Device_Number) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Device_Number) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.MajorNumber == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.MajorNumber))
+	}
+	if m.MinorNumber == nil {
+		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	} else {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintMesos(dAtA, i, uint64(*m.MinorNumber))
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -15262,11 +18286,11 @@ func (m *DeviceAccess) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0xa
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Device.Size()))
-		n140, err := m.Device.MarshalTo(dAtA[i:])
+		n177, err := m.Device.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n140
+		i += n177
 	}
 	if m.Access == nil {
 		return 0, new(github_com_golang_protobuf_proto.RequiredNotSetError)
@@ -15274,11 +18298,11 @@ func (m *DeviceAccess) MarshalTo(dAtA []byte) (int, error) {
 		dAtA[i] = 0x12
 		i++
 		i = encodeVarintMesos(dAtA, i, uint64(m.Access.Size()))
-		n141, err := m.Access.MarshalTo(dAtA[i:])
+		n178, err := m.Access.MarshalTo(dAtA[i:])
 		if err != nil {
 			return 0, err
 		}
-		i += n141
+		i += n178
 	}
 	if m.XXX_unrecognized != nil {
 		i += copy(dAtA[i:], m.XXX_unrecognized)
@@ -15423,7 +18447,7 @@ func (m *OfferID) Size() (n int) {
 	return n
 }
 
-func (m *AgentID) Size() (n int) {
+func (m *SlaveID) Size() (n int) {
 	var l int
 	_ = l
 	if m.Value != nil {
@@ -15480,6 +18504,19 @@ func (m *ContainerID) Size() (n int) {
 }
 
 func (m *ResourceProviderID) Size() (n int) {
+	var l int
+	_ = l
+	if m.Value != nil {
+		l = len(*m.Value)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *OperationID) Size() (n int) {
 	var l int
 	_ = l
 	if m.Value != nil {
@@ -15824,6 +18861,9 @@ func (m *HealthCheck_HTTPCheckInfo) Size() (n int) {
 			n += 1 + sovMesos(uint64(e))
 		}
 	}
+	if m.Protocol != nil {
+		n += 1 + sovMesos(uint64(*m.Protocol))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -15835,6 +18875,9 @@ func (m *HealthCheck_TCPCheckInfo) Size() (n int) {
 	_ = l
 	if m.Port != nil {
 		n += 1 + sovMesos(uint64(*m.Port))
+	}
+	if m.Protocol != nil {
+		n += 1 + sovMesos(uint64(*m.Protocol))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -15975,6 +19018,62 @@ func (m *ExecutorInfo) Size() (n int) {
 	return n
 }
 
+func (m *DomainInfo) Size() (n int) {
+	var l int
+	_ = l
+	if m.FaultDomain != nil {
+		l = m.FaultDomain.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DomainInfo_FaultDomain) Size() (n int) {
+	var l int
+	_ = l
+	if m.Region != nil {
+		l = m.Region.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Zone != nil {
+		l = m.Zone.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DomainInfo_FaultDomain_RegionInfo) Size() (n int) {
+	var l int
+	_ = l
+	if m.Name != nil {
+		l = len(*m.Name)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *DomainInfo_FaultDomain_ZoneInfo) Size() (n int) {
+	var l int
+	_ = l
+	if m.Name != nil {
+		l = len(*m.Name)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *MasterInfo) Size() (n int) {
 	var l int
 	_ = l
@@ -16004,13 +19103,35 @@ func (m *MasterInfo) Size() (n int) {
 		l = m.Address.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
+	if m.Domain != nil {
+		l = m.Domain.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.Capabilities) > 0 {
+		for _, e := range m.Capabilities {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
 	return n
 }
 
-func (m *AgentInfo) Size() (n int) {
+func (m *MasterInfo_Capability) Size() (n int) {
+	var l int
+	_ = l
+	if m.Type != nil {
+		n += 1 + sovMesos(uint64(*m.Type))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *SlaveInfo) Size() (n int) {
 	var l int
 	_ = l
 	if m.Hostname != nil {
@@ -16033,8 +19154,15 @@ func (m *AgentInfo) Size() (n int) {
 		l = m.Id.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
+	if m.Checkpoint != nil {
+		n += 2
+	}
 	if m.Port != nil {
 		n += 1 + sovMesos(uint64(*m.Port))
+	}
+	if m.Domain != nil {
+		l = m.Domain.Size()
+		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -16042,11 +19170,112 @@ func (m *AgentInfo) Size() (n int) {
 	return n
 }
 
-func (m *AgentInfo_Capability) Size() (n int) {
+func (m *SlaveInfo_Capability) Size() (n int) {
 	var l int
 	_ = l
 	if m.Type != nil {
 		n += 1 + sovMesos(uint64(*m.Type))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CSIPluginContainerInfo) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Services) > 0 {
+		for _, e := range m.Services {
+			n += 1 + sovMesos(uint64(e))
+		}
+	}
+	if m.Command != nil {
+		l = m.Command.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.Resources) > 0 {
+		for _, e := range m.Resources {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.Container != nil {
+		l = m.Container.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CSIPluginInfo) Size() (n int) {
+	var l int
+	_ = l
+	if m.Type != nil {
+		l = len(*m.Type)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Name != nil {
+		l = len(*m.Name)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.Containers) > 0 {
+		for _, e := range m.Containers {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ResourceProviderInfo) Size() (n int) {
+	var l int
+	_ = l
+	if m.Id != nil {
+		l = m.Id.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.Attributes) > 0 {
+		for _, e := range m.Attributes {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.Type != nil {
+		l = len(*m.Type)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Name != nil {
+		l = len(*m.Name)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.DefaultReservations) > 0 {
+		for _, e := range m.DefaultReservations {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.Storage != nil {
+		l = m.Storage.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *ResourceProviderInfo_Storage) Size() (n int) {
+	var l int
+	_ = l
+	if m.Plugin != nil {
+		l = m.Plugin.Size()
+		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -16234,6 +19463,12 @@ func (m *Resource) Size() (n int) {
 		l = m.ProviderId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
+	if len(m.Reservations) > 0 {
+		for _, e := range m.Reservations {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -16263,6 +19498,13 @@ func (m *Resource_ReservationInfo) Size() (n int) {
 	if m.Labels != nil {
 		l = m.Labels.Size()
 		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Role != nil {
+		l = len(*m.Role)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Type != nil {
+		n += 1 + sovMesos(uint64(*m.Type))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -16320,6 +19562,18 @@ func (m *Resource_DiskInfo_Source) Size() (n int) {
 	}
 	if m.Mount != nil {
 		l = m.Mount.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Id != nil {
+		l = len(*m.Id)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Metadata != nil {
+		l = m.Metadata.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Profile != nil {
+		l = len(*m.Profile)
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -16843,6 +20097,10 @@ func (m *ResourceStatistics) Size() (n int) {
 			n += 2 + l + sovMesos(uint64(l))
 		}
 	}
+	if m.BlkioStatistics != nil {
+		l = m.BlkioStatistics.Size()
+		n += 2 + l + sovMesos(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -17101,8 +20359,8 @@ func (m *PerfStatistics) Size() (n int) {
 func (m *Request) Size() (n int) {
 	var l int
 	_ = l
-	if m.AgentId != nil {
-		l = m.AgentId.Size()
+	if m.SlaveId != nil {
+		l = m.SlaveId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if len(m.Resources) > 0 {
@@ -17128,8 +20386,8 @@ func (m *Offer) Size() (n int) {
 		l = m.FrameworkId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
-	if m.AgentId != nil {
-		l = m.AgentId.Size()
+	if m.SlaveId != nil {
+		l = m.SlaveId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.Hostname != nil {
@@ -17166,6 +20424,10 @@ func (m *Offer) Size() (n int) {
 		l = m.AllocationInfo.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
+	if m.Domain != nil {
+		l = m.Domain.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -17200,6 +20462,26 @@ func (m *Offer_Operation) Size() (n int) {
 	}
 	if m.LaunchGroup != nil {
 		l = m.LaunchGroup.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.CreateVolume != nil {
+		l = m.CreateVolume.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.DestroyVolume != nil {
+		l = m.DestroyVolume.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.CreateBlock != nil {
+		l = m.CreateBlock.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.DestroyBlock != nil {
+		l = m.DestroyBlock.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Id != nil {
+		l = m.Id.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -17300,6 +20582,61 @@ func (m *Offer_Operation_Destroy) Size() (n int) {
 	return n
 }
 
+func (m *Offer_Operation_CreateVolume) Size() (n int) {
+	var l int
+	_ = l
+	if m.Source != nil {
+		l = m.Source.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.TargetType != nil {
+		n += 1 + sovMesos(uint64(*m.TargetType))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Offer_Operation_DestroyVolume) Size() (n int) {
+	var l int
+	_ = l
+	if m.Volume != nil {
+		l = m.Volume.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Offer_Operation_CreateBlock) Size() (n int) {
+	var l int
+	_ = l
+	if m.Source != nil {
+		l = m.Source.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Offer_Operation_DestroyBlock) Size() (n int) {
+	var l int
+	_ = l
+	if m.Block != nil {
+		l = m.Block.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *InverseOffer) Size() (n int) {
 	var l int
 	_ = l
@@ -17315,8 +20652,8 @@ func (m *InverseOffer) Size() (n int) {
 		l = m.FrameworkId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
-	if m.AgentId != nil {
-		l = m.AgentId.Size()
+	if m.SlaveId != nil {
+		l = m.SlaveId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.Unavailability != nil {
@@ -17346,8 +20683,8 @@ func (m *TaskInfo) Size() (n int) {
 		l = m.TaskId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
-	if m.AgentId != nil {
-		l = m.AgentId.Size()
+	if m.SlaveId != nil {
+		l = m.SlaveId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if len(m.Resources) > 0 {
@@ -17432,8 +20769,8 @@ func (m *Task) Size() (n int) {
 		l = m.ExecutorId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
-	if m.AgentId != nil {
-		l = m.AgentId.Size()
+	if m.SlaveId != nil {
+		l = m.SlaveId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.State != nil {
@@ -17472,6 +20809,99 @@ func (m *Task) Size() (n int) {
 	}
 	if m.User != nil {
 		l = len(*m.User)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *TaskResourceLimitation) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Resources) > 0 {
+		for _, e := range m.Resources {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *UUID) Size() (n int) {
+	var l int
+	_ = l
+	if m.Value != nil {
+		l = len(m.Value)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Operation) Size() (n int) {
+	var l int
+	_ = l
+	if m.FrameworkId != nil {
+		l = m.FrameworkId.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.SlaveId != nil {
+		l = m.SlaveId.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Info != nil {
+		l = m.Info.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.LatestStatus != nil {
+		l = m.LatestStatus.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.Statuses) > 0 {
+		for _, e := range m.Statuses {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.Uuid != nil {
+		l = m.Uuid.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *OperationStatus) Size() (n int) {
+	var l int
+	_ = l
+	if m.OperationId != nil {
+		l = m.OperationId.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.State != nil {
+		n += 1 + sovMesos(uint64(*m.State))
+	}
+	if m.Message != nil {
+		l = len(*m.Message)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.ConvertedResources) > 0 {
+		for _, e := range m.ConvertedResources {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.Uuid != nil {
+		l = m.Uuid.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -17558,8 +20988,8 @@ func (m *TaskStatus) Size() (n int) {
 		l = len(*m.Message)
 		n += 1 + l + sovMesos(uint64(l))
 	}
-	if m.AgentId != nil {
-		l = m.AgentId.Size()
+	if m.SlaveId != nil {
+		l = m.SlaveId.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.Timestamp != nil {
@@ -17597,6 +21027,10 @@ func (m *TaskStatus) Size() (n int) {
 	if m.CheckStatus != nil {
 		l = m.CheckStatus.Size()
 		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Limitation != nil {
+		l = m.Limitation.Size()
+		n += 2 + l + sovMesos(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -17874,6 +21308,18 @@ func (m *Image_Docker) Size() (n int) {
 	return n
 }
 
+func (m *MountPropagation) Size() (n int) {
+	var l int
+	_ = l
+	if m.Mode != nil {
+		n += 1 + sovMesos(uint64(*m.Mode))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
 func (m *Volume) Size() (n int) {
 	var l int
 	_ = l
@@ -17920,6 +21366,10 @@ func (m *Volume_Source) Size() (n int) {
 		l = m.Secret.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
+	if m.HostPath != nil {
+		l = m.HostPath.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -17939,6 +21389,23 @@ func (m *Volume_Source_DockerVolume) Size() (n int) {
 	}
 	if m.DriverOptions != nil {
 		l = m.DriverOptions.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Volume_Source_HostPath) Size() (n int) {
+	var l int
+	_ = l
+	if m.Path != nil {
+		l = len(*m.Path)
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.MountPropagation != nil {
+		l = m.MountPropagation.Size()
 		n += 1 + l + sovMesos(uint64(l))
 	}
 	if m.XXX_unrecognized != nil {
@@ -18053,6 +21520,17 @@ func (m *LinuxInfo) Size() (n int) {
 	if m.CapabilityInfo != nil {
 		l = m.CapabilityInfo.Size()
 		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.BoundingCapabilities != nil {
+		l = m.BoundingCapabilities.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.EffectiveCapabilities != nil {
+		l = m.EffectiveCapabilities.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.SharePidNamespace != nil {
+		n += 2
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -18271,6 +21749,155 @@ func (m *CgroupInfo) Size() (n int) {
 	if m.NetCls != nil {
 		l = m.NetCls.Size()
 		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CgroupInfo_Blkio) Size() (n int) {
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CgroupInfo_Blkio_Value) Size() (n int) {
+	var l int
+	_ = l
+	if m.Op != nil {
+		n += 1 + sovMesos(uint64(*m.Op))
+	}
+	if m.Value != nil {
+		n += 1 + sovMesos(uint64(*m.Value))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CgroupInfo_Blkio_CFQ) Size() (n int) {
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CgroupInfo_Blkio_CFQ_Statistics) Size() (n int) {
+	var l int
+	_ = l
+	if m.Device != nil {
+		l = m.Device.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.Sectors != nil {
+		n += 1 + sovMesos(uint64(*m.Sectors))
+	}
+	if m.Time != nil {
+		n += 1 + sovMesos(uint64(*m.Time))
+	}
+	if len(m.IoServiced) > 0 {
+		for _, e := range m.IoServiced {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.IoServiceBytes) > 0 {
+		for _, e := range m.IoServiceBytes {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.IoServiceTime) > 0 {
+		for _, e := range m.IoServiceTime {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.IoWaitTime) > 0 {
+		for _, e := range m.IoWaitTime {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.IoMerged) > 0 {
+		for _, e := range m.IoMerged {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.IoQueued) > 0 {
+		for _, e := range m.IoQueued {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CgroupInfo_Blkio_Throttling) Size() (n int) {
+	var l int
+	_ = l
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CgroupInfo_Blkio_Throttling_Statistics) Size() (n int) {
+	var l int
+	_ = l
+	if m.Device != nil {
+		l = m.Device.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if len(m.IoServiced) > 0 {
+		for _, e := range m.IoServiced {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.IoServiceBytes) > 0 {
+		for _, e := range m.IoServiceBytes {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *CgroupInfo_Blkio_Statistics) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Cfq) > 0 {
+		for _, e := range m.Cfq {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.CfqRecursive) > 0 {
+		for _, e := range m.CfqRecursive {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
+	}
+	if len(m.Throttling) > 0 {
+		for _, e := range m.Throttling {
+			l = e.Size()
+			n += 1 + l + sovMesos(uint64(l))
+		}
 	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
@@ -18554,6 +22181,25 @@ func (m *Device) Size() (n int) {
 		l = len(*m.Path)
 		n += 1 + l + sovMesos(uint64(l))
 	}
+	if m.Number != nil {
+		l = m.Number.Size()
+		n += 1 + l + sovMesos(uint64(l))
+	}
+	if m.XXX_unrecognized != nil {
+		n += len(m.XXX_unrecognized)
+	}
+	return n
+}
+
+func (m *Device_Number) Size() (n int) {
+	var l int
+	_ = l
+	if m.MajorNumber != nil {
+		n += 1 + sovMesos(uint64(*m.MajorNumber))
+	}
+	if m.MinorNumber != nil {
+		n += 1 + sovMesos(uint64(*m.MinorNumber))
+	}
 	if m.XXX_unrecognized != nil {
 		n += len(m.XXX_unrecognized)
 	}
@@ -18795,7 +22441,7 @@ func (m *OfferID) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AgentID) Unmarshal(dAtA []byte) error {
+func (m *SlaveID) Unmarshal(dAtA []byte) error {
 	var hasFields [1]uint64
 	l := len(dAtA)
 	iNdEx := 0
@@ -18819,10 +22465,10 @@ func (m *AgentID) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AgentID: wiretype end group for non-group")
+			return fmt.Errorf("proto: SlaveID: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AgentID: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SlaveID: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -19200,6 +22846,92 @@ func (m *ResourceProviderID) Unmarshal(dAtA []byte) error {
 		}
 		if fieldNum <= 0 {
 			return fmt.Errorf("proto: ResourceProviderID: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Value = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *OperationID) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: OperationID: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: OperationID: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -21549,6 +25281,26 @@ func (m *HealthCheck_HTTPCheckInfo) Unmarshal(dAtA []byte) error {
 			} else {
 				return fmt.Errorf("proto: wrong wireType = %d for field Statuses", wireType)
 			}
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Protocol", wireType)
+			}
+			var v NetworkInfo_Protocol
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (NetworkInfo_Protocol(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Protocol = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -21625,6 +25377,26 @@ func (m *HealthCheck_TCPCheckInfo) Unmarshal(dAtA []byte) error {
 			}
 			m.Port = &v
 			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Protocol", wireType)
+			}
+			var v NetworkInfo_Protocol
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (NetworkInfo_Protocol(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Protocol = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -22567,6 +26339,388 @@ func (m *ExecutorInfo) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *DomainInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DomainInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DomainInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FaultDomain", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FaultDomain == nil {
+				m.FaultDomain = &DomainInfo_FaultDomain{}
+			}
+			if err := m.FaultDomain.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DomainInfo_FaultDomain) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: FaultDomain: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: FaultDomain: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Region", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Region == nil {
+				m.Region = &DomainInfo_FaultDomain_RegionInfo{}
+			}
+			if err := m.Region.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Zone", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Zone == nil {
+				m.Zone = &DomainInfo_FaultDomain_ZoneInfo{}
+			}
+			if err := m.Zone.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DomainInfo_FaultDomain_RegionInfo) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RegionInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RegionInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Name = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *DomainInfo_FaultDomain_ZoneInfo) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ZoneInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ZoneInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Name = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *MasterInfo) Unmarshal(dAtA []byte) error {
 	var hasFields [1]uint64
 	l := len(dAtA)
@@ -22793,6 +26947,70 @@ func (m *MasterInfo) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Domain", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Domain == nil {
+				m.Domain = &DomainInfo{}
+			}
+			if err := m.Domain.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Capabilities", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Capabilities = append(m.Capabilities, &MasterInfo_Capability{})
+			if err := m.Capabilities[len(m.Capabilities)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -22824,7 +27042,78 @@ func (m *MasterInfo) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AgentInfo) Unmarshal(dAtA []byte) error {
+func (m *MasterInfo_Capability) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Capability: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Capability: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			var v MasterInfo_Capability_Type
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (MasterInfo_Capability_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Type = &v
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SlaveInfo) Unmarshal(dAtA []byte) error {
 	var hasFields [1]uint64
 	l := len(dAtA)
 	iNdEx := 0
@@ -22848,10 +27137,10 @@ func (m *AgentInfo) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: AgentInfo: wiretype end group for non-group")
+			return fmt.Errorf("proto: SlaveInfo: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: AgentInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: SlaveInfo: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -22974,12 +27263,33 @@ func (m *AgentInfo) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Id == nil {
-				m.Id = &AgentID{}
+				m.Id = &SlaveID{}
 			}
 			if err := m.Id.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Checkpoint", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.Checkpoint = &b
 		case 8:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Port", wireType)
@@ -23000,6 +27310,39 @@ func (m *AgentInfo) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.Port = &v
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Domain", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Domain == nil {
+				m.Domain = &DomainInfo{}
+			}
+			if err := m.Domain.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -23025,7 +27368,7 @@ func (m *AgentInfo) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *AgentInfo_Capability) Unmarshal(dAtA []byte) error {
+func (m *SlaveInfo_Capability) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -23058,7 +27401,7 @@ func (m *AgentInfo_Capability) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
 			}
-			var v AgentInfo_Capability_Type
+			var v SlaveInfo_Capability_Type
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMesos
@@ -23068,7 +27411,7 @@ func (m *AgentInfo_Capability) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (AgentInfo_Capability_Type(b) & 0x7F) << shift
+				v |= (SlaveInfo_Capability_Type(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -23089,6 +27432,704 @@ func (m *AgentInfo_Capability) Unmarshal(dAtA []byte) error {
 			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
 			iNdEx += skippy
 		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CSIPluginContainerInfo) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CSIPluginContainerInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CSIPluginContainerInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType == 0 {
+				var v CSIPluginContainerInfo_Service
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowMesos
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					v |= (CSIPluginContainerInfo_Service(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				m.Services = append(m.Services, v)
+			} else if wireType == 2 {
+				var packedLen int
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowMesos
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					packedLen |= (int(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				if packedLen < 0 {
+					return ErrInvalidLengthMesos
+				}
+				postIndex := iNdEx + packedLen
+				if postIndex > l {
+					return io.ErrUnexpectedEOF
+				}
+				for iNdEx < postIndex {
+					var v CSIPluginContainerInfo_Service
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowMesos
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						v |= (CSIPluginContainerInfo_Service(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					m.Services = append(m.Services, v)
+				}
+			} else {
+				return fmt.Errorf("proto: wrong wireType = %d for field Services", wireType)
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Command", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Command == nil {
+				m.Command = &CommandInfo{}
+			}
+			if err := m.Command.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Resources = append(m.Resources, &Resource{})
+			if err := m.Resources[len(m.Resources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Container", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Container == nil {
+				m.Container = &ContainerInfo{}
+			}
+			if err := m.Container.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CSIPluginInfo) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CSIPluginInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CSIPluginInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Type = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Name = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Containers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Containers = append(m.Containers, &CSIPluginContainerInfo{})
+			if err := m.Containers[len(m.Containers)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ResourceProviderInfo) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ResourceProviderInfo: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ResourceProviderInfo: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Id == nil {
+				m.Id = &ResourceProviderID{}
+			}
+			if err := m.Id.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Attributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Attributes = append(m.Attributes, &Attribute{})
+			if err := m.Attributes[len(m.Attributes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Type = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Name", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Name = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DefaultReservations", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.DefaultReservations = append(m.DefaultReservations, &Resource_ReservationInfo{})
+			if err := m.DefaultReservations[len(m.DefaultReservations)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Storage", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Storage == nil {
+				m.Storage = &ResourceProviderInfo_Storage{}
+			}
+			if err := m.Storage.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ResourceProviderInfo_Storage) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Storage: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Storage: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Plugin", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Plugin == nil {
+				m.Plugin = &CSIPluginInfo{}
+			}
+			if err := m.Plugin.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	}
 
 	if iNdEx > l {
@@ -24378,6 +29419,37 @@ func (m *Resource) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 13:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Reservations", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Reservations = append(m.Reservations, &Resource_ReservationInfo{})
+			if err := m.Reservations[len(m.Reservations)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -24579,6 +29651,56 @@ func (m *Resource_ReservationInfo) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Role", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Role = &s
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Type", wireType)
+			}
+			var v Resource_ReservationInfo_Type
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (Resource_ReservationInfo_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Type = &v
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -24983,6 +30105,99 @@ func (m *Resource_DiskInfo_Source) Unmarshal(dAtA []byte) error {
 			if err := m.Mount.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Id = &s
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Metadata", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Metadata == nil {
+				m.Metadata = &Labels{}
+			}
+			if err := m.Metadata.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Profile", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Profile = &s
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -28391,6 +33606,39 @@ func (m *ResourceStatistics) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 44:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BlkioStatistics", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.BlkioStatistics == nil {
+				m.BlkioStatistics = &CgroupInfo_Blkio_Statistics{}
+			}
+			if err := m.BlkioStatistics.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -30084,7 +35332,7 @@ func (m *Request) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveId", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -30108,10 +35356,10 @@ func (m *Request) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentId == nil {
-				m.AgentId = &AgentID{}
+			if m.SlaveId == nil {
+				m.SlaveId = &SlaveID{}
 			}
-			if err := m.AgentId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -30268,7 +35516,7 @@ func (m *Offer) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveId", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -30292,10 +35540,10 @@ func (m *Offer) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentId == nil {
-				m.AgentId = &AgentID{}
+			if m.SlaveId == nil {
+				m.SlaveId = &SlaveID{}
 			}
-			if err := m.AgentId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -30520,6 +35768,39 @@ func (m *Offer) Unmarshal(dAtA []byte) error {
 				m.AllocationInfo = &Resource_AllocationInfo{}
 			}
 			if err := m.AllocationInfo.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Domain", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Domain == nil {
+				m.Domain = &DomainInfo{}
+			}
+			if err := m.Domain.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -30801,6 +36082,171 @@ func (m *Offer_Operation) Unmarshal(dAtA []byte) error {
 				m.LaunchGroup = &Offer_Operation_LaunchGroup{}
 			}
 			if err := m.LaunchGroup.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreateVolume", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.CreateVolume == nil {
+				m.CreateVolume = &Offer_Operation_CreateVolume{}
+			}
+			if err := m.CreateVolume.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DestroyVolume", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DestroyVolume == nil {
+				m.DestroyVolume = &Offer_Operation_DestroyVolume{}
+			}
+			if err := m.DestroyVolume.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CreateBlock", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.CreateBlock == nil {
+				m.CreateBlock = &Offer_Operation_CreateBlock{}
+			}
+			if err := m.CreateBlock.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DestroyBlock", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.DestroyBlock == nil {
+				m.DestroyBlock = &Offer_Operation_DestroyBlock{}
+			}
+			if err := m.DestroyBlock.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 12:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Id == nil {
+				m.Id = &OperationID{}
+			}
+			if err := m.Id.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -31362,6 +36808,386 @@ func (m *Offer_Operation_Destroy) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *Offer_Operation_CreateVolume) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CreateVolume: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CreateVolume: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Source == nil {
+				m.Source = &Resource{}
+			}
+			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TargetType", wireType)
+			}
+			var v Resource_DiskInfo_Source_Type
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (Resource_DiskInfo_Source_Type(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.TargetType = &v
+			hasFields[0] |= uint64(0x00000002)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Offer_Operation_DestroyVolume) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DestroyVolume: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DestroyVolume: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Volume", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Volume == nil {
+				m.Volume = &Resource{}
+			}
+			if err := m.Volume.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Offer_Operation_CreateBlock) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CreateBlock: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CreateBlock: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Source", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Source == nil {
+				m.Source = &Resource{}
+			}
+			if err := m.Source.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Offer_Operation_DestroyBlock) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: DestroyBlock: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: DestroyBlock: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Block", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Block == nil {
+				m.Block = &Resource{}
+			}
+			if err := m.Block.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *InverseOffer) Unmarshal(dAtA []byte) error {
 	var hasFields [1]uint64
 	l := len(dAtA)
@@ -31495,7 +37321,7 @@ func (m *InverseOffer) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000002)
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveId", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -31519,10 +37345,10 @@ func (m *InverseOffer) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentId == nil {
-				m.AgentId = &AgentID{}
+			if m.SlaveId == nil {
+				m.SlaveId = &SlaveID{}
 			}
-			if err := m.AgentId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -31719,7 +37545,7 @@ func (m *TaskInfo) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveId", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -31743,10 +37569,10 @@ func (m *TaskInfo) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentId == nil {
-				m.AgentId = &AgentID{}
+			if m.SlaveId == nil {
+				m.SlaveId = &SlaveID{}
 			}
-			if err := m.AgentId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -32354,7 +38180,7 @@ func (m *Task) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveId", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -32378,10 +38204,10 @@ func (m *Task) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentId == nil {
-				m.AgentId = &AgentID{}
+			if m.SlaveId == nil {
+				m.SlaveId = &SlaveID{}
 			}
-			if err := m.AgentId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -32678,6 +38504,638 @@ func (m *Task) Unmarshal(dAtA []byte) error {
 		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	}
 	if hasFields[0]&uint64(0x00000010) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TaskResourceLimitation) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TaskResourceLimitation: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TaskResourceLimitation: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Resources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Resources = append(m.Resources, &Resource{})
+			if err := m.Resources[len(m.Resources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *UUID) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: UUID: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: UUID: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Value = append(m.Value[:0], dAtA[iNdEx:postIndex]...)
+			if m.Value == nil {
+				m.Value = []byte{}
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Operation) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Operation: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Operation: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FrameworkId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FrameworkId == nil {
+				m.FrameworkId = &FrameworkID{}
+			}
+			if err := m.FrameworkId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.SlaveId == nil {
+				m.SlaveId = &SlaveID{}
+			}
+			if err := m.SlaveId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Info", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Info == nil {
+				m.Info = &Offer_Operation{}
+			}
+			if err := m.Info.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field LatestStatus", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.LatestStatus == nil {
+				m.LatestStatus = &OperationStatus{}
+			}
+			if err := m.LatestStatus.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Statuses", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Statuses = append(m.Statuses, &OperationStatus{})
+			if err := m.Statuses[len(m.Statuses)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Uuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Uuid == nil {
+				m.Uuid = &UUID{}
+			}
+			if err := m.Uuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000004)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000004) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *OperationStatus) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: OperationStatus: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: OperationStatus: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field OperationId", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.OperationId == nil {
+				m.OperationId = &OperationID{}
+			}
+			if err := m.OperationId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field State", wireType)
+			}
+			var v OperationState
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (OperationState(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.State = &v
+			hasFields[0] |= uint64(0x00000001)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Message", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Message = &s
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ConvertedResources", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ConvertedResources = append(m.ConvertedResources, &Resource{})
+			if err := m.ConvertedResources[len(m.ConvertedResources)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Uuid", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Uuid == nil {
+				m.Uuid = &UUID{}
+			}
+			if err := m.Uuid.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
 		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	}
 
@@ -33218,7 +39676,7 @@ func (m *TaskStatus) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field AgentId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field SlaveId", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -33242,10 +39700,10 @@ func (m *TaskStatus) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if m.AgentId == nil {
-				m.AgentId = &AgentID{}
+			if m.SlaveId == nil {
+				m.SlaveId = &SlaveID{}
 			}
-			if err := m.AgentId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+			if err := m.SlaveId.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -33522,6 +39980,39 @@ func (m *TaskStatus) Unmarshal(dAtA []byte) error {
 				m.CheckStatus = &CheckStatusInfo{}
 			}
 			if err := m.CheckStatus.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 16:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Limitation", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Limitation == nil {
+				m.Limitation = &TaskResourceLimitation{}
+			}
+			if err := m.Limitation.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -35324,6 +41815,77 @@ func (m *Image_Docker) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *MountPropagation) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: MountPropagation: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: MountPropagation: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mode", wireType)
+			}
+			var v MountPropagation_Mode
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (MountPropagation_Mode(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Mode = &v
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *Volume) Unmarshal(dAtA []byte) error {
 	var hasFields [1]uint64
 	l := len(dAtA)
@@ -35678,6 +42240,39 @@ func (m *Volume_Source) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field HostPath", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.HostPath == nil {
+				m.HostPath = &Volume_Source_HostPath{}
+			}
+			if err := m.HostPath.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -35821,6 +42416,125 @@ func (m *Volume_Source_DockerVolume) Unmarshal(dAtA []byte) error {
 				m.DriverOptions = &Parameters{}
 			}
 			if err := m.DriverOptions.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Volume_Source_HostPath) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HostPath: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HostPath: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Path", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			s := string(dAtA[iNdEx:postIndex])
+			m.Path = &s
+			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MountPropagation", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.MountPropagation == nil {
+				m.MountPropagation = &MountPropagation{}
+			}
+			if err := m.MountPropagation.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -36566,6 +43280,93 @@ func (m *LinuxInfo) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BoundingCapabilities", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.BoundingCapabilities == nil {
+				m.BoundingCapabilities = &CapabilityInfo{}
+			}
+			if err := m.BoundingCapabilities.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field EffectiveCapabilities", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.EffectiveCapabilities == nil {
+				m.EffectiveCapabilities = &CapabilityInfo{}
+			}
+			if err := m.EffectiveCapabilities.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SharePidNamespace", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			b := bool(v != 0)
+			m.SharePidNamespace = &b
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -37979,6 +44780,850 @@ func (m *CgroupInfo) Unmarshal(dAtA []byte) error {
 				m.NetCls = &CgroupInfo_NetCls{}
 			}
 			if err := m.NetCls.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CgroupInfo_Blkio) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Blkio: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Blkio: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CgroupInfo_Blkio_Value) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Value: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Value: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Op", wireType)
+			}
+			var v CgroupInfo_Blkio_Operation
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (CgroupInfo_Blkio_Operation(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Op = &v
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Value", wireType)
+			}
+			var v uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Value = &v
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CgroupInfo_Blkio_CFQ) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: CFQ: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: CFQ: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CgroupInfo_Blkio_CFQ_Statistics) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Statistics: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Statistics: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Device", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Device == nil {
+				m.Device = &Device_Number{}
+			}
+			if err := m.Device.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sectors", wireType)
+			}
+			var v uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Sectors = &v
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Time", wireType)
+			}
+			var v uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.Time = &v
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoServiced", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoServiced = append(m.IoServiced, &CgroupInfo_Blkio_Value{})
+			if err := m.IoServiced[len(m.IoServiced)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoServiceBytes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoServiceBytes = append(m.IoServiceBytes, &CgroupInfo_Blkio_Value{})
+			if err := m.IoServiceBytes[len(m.IoServiceBytes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoServiceTime", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoServiceTime = append(m.IoServiceTime, &CgroupInfo_Blkio_Value{})
+			if err := m.IoServiceTime[len(m.IoServiceTime)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoWaitTime", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoWaitTime = append(m.IoWaitTime, &CgroupInfo_Blkio_Value{})
+			if err := m.IoWaitTime[len(m.IoWaitTime)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoMerged", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoMerged = append(m.IoMerged, &CgroupInfo_Blkio_Value{})
+			if err := m.IoMerged[len(m.IoMerged)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoQueued", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoQueued = append(m.IoQueued, &CgroupInfo_Blkio_Value{})
+			if err := m.IoQueued[len(m.IoQueued)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CgroupInfo_Blkio_Throttling) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Throttling: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Throttling: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CgroupInfo_Blkio_Throttling_Statistics) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Statistics: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Statistics: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Device", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Device == nil {
+				m.Device = &Device_Number{}
+			}
+			if err := m.Device.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoServiced", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoServiced = append(m.IoServiced, &CgroupInfo_Blkio_Value{})
+			if err := m.IoServiced[len(m.IoServiced)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IoServiceBytes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.IoServiceBytes = append(m.IoServiceBytes, &CgroupInfo_Blkio_Value{})
+			if err := m.IoServiceBytes[len(m.IoServiceBytes)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *CgroupInfo_Blkio_Statistics) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Statistics: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Statistics: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Cfq", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Cfq = append(m.Cfq, &CgroupInfo_Blkio_CFQ_Statistics{})
+			if err := m.Cfq[len(m.Cfq)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CfqRecursive", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CfqRecursive = append(m.CfqRecursive, &CgroupInfo_Blkio_CFQ_Statistics{})
+			if err := m.CfqRecursive[len(m.CfqRecursive)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Throttling", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Throttling = append(m.Throttling, &CgroupInfo_Blkio_Throttling_Statistics{})
+			if err := m.Throttling[len(m.Throttling)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -39798,7 +47443,6 @@ func (m *FileInfo) Unmarshal(dAtA []byte) error {
 	return nil
 }
 func (m *Device) Unmarshal(dAtA []byte) error {
-	var hasFields [1]uint64
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -39857,7 +47501,133 @@ func (m *Device) Unmarshal(dAtA []byte) error {
 			s := string(dAtA[iNdEx:postIndex])
 			m.Path = &s
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Number", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMesos
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Number == nil {
+				m.Number = &Device_Number{}
+			}
+			if err := m.Number.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMesos(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMesos
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.XXX_unrecognized = append(m.XXX_unrecognized, dAtA[iNdEx:iNdEx+skippy]...)
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *Device_Number) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMesos
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Number: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Number: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MajorNumber", wireType)
+			}
+			var v uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.MajorNumber = &v
 			hasFields[0] |= uint64(0x00000001)
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MinorNumber", wireType)
+			}
+			var v uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMesos
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.MinorNumber = &v
+			hasFields[0] |= uint64(0x00000002)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipMesos(dAtA[iNdEx:])
@@ -39875,6 +47645,9 @@ func (m *Device) Unmarshal(dAtA []byte) error {
 		}
 	}
 	if hasFields[0]&uint64(0x00000001) == 0 {
+		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
 		return new(github_com_golang_protobuf_proto.RequiredNotSetError)
 	}
 
@@ -40313,496 +48086,580 @@ var (
 func init() { proto.RegisterFile("lib/mesos.proto", fileDescriptorMesos) }
 
 var fileDescriptorMesos = []byte{
-	// 7843 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x7c, 0x5b, 0x8c, 0x1c, 0xd9,
-	0x92, 0xd0, 0xd4, 0xbb, 0x2a, 0xea, 0x95, 0x9d, 0xdd, 0x6d, 0x97, 0xcb, 0x76, 0x4f, 0x3b, 0x3d,
-	0xb6, 0xdb, 0x8f, 0xe9, 0xb1, 0x3d, 0xe3, 0xd9, 0xbd, 0x5e, 0x40, 0x4a, 0x57, 0x65, 0xb7, 0x6b,
-	0x5d, 0xaf, 0xcd, 0xca, 0xb2, 0x67, 0xae, 0x40, 0xa9, 0xec, 0xac, 0xd3, 0xd5, 0x89, 0xab, 0x32,
-	0x6b, 0x32, 0xb3, 0xda, 0xf6, 0x22, 0xd0, 0xc2, 0xc2, 0x5d, 0x1e, 0x17, 0x84, 0x90, 0x16, 0x81,
-	0x84, 0xc4, 0xdf, 0x7e, 0xc0, 0x22, 0x10, 0x12, 0x7f, 0x48, 0xf0, 0xc9, 0x27, 0xb0, 0x5a, 0xc1,
-	0x07, 0x48, 0xe8, 0xf2, 0x03, 0x2c, 0xcb, 0xee, 0x5e, 0x16, 0x96, 0xd7, 0x5d, 0xd0, 0x79, 0xe5,
-	0xab, 0xaa, 0x7a, 0x7a, 0xa4, 0x95, 0xf8, 0xea, 0xce, 0x38, 0x71, 0xe2, 0xc4, 0x89, 0x88, 0x13,
-	0x11, 0xe7, 0x9c, 0x38, 0x05, 0xf5, 0x99, 0x75, 0xf2, 0xd9, 0x1c, 0x79, 0x8e, 0x77, 0xb8, 0x70,
-	0x1d, 0xdf, 0x11, 0x8b, 0xf4, 0xe3, 0xfc, 0x89, 0x74, 0x03, 0xca, 0x47, 0xae, 0x31, 0x47, 0xef,
-	0x1c, 0xf7, 0x6d, 0xa7, 0x2d, 0x56, 0x21, 0x77, 0x6e, 0xcc, 0x96, 0xa8, 0x91, 0xda, 0x4f, 0x1f,
-	0x94, 0xa4, 0x06, 0x14, 0x06, 0xa7, 0xa7, 0xc8, 0x5d, 0xdb, 0x22, 0x4f, 0x91, 0xed, 0xaf, 0xb6,
-	0x5c, 0x85, 0xbc, 0x66, 0x78, 0x6b, 0x88, 0x5d, 0x07, 0x50, 0xde, 0x23, 0x73, 0xe9, 0x3b, 0x6b,
-	0xe8, 0xb5, 0xa0, 0xdc, 0x72, 0x6c, 0xdf, 0xb0, 0xec, 0x35, 0xa3, 0x89, 0x77, 0x20, 0xbf, 0x30,
-	0x5c, 0x64, 0xfb, 0x8d, 0xf4, 0x7e, 0xea, 0xa0, 0xfc, 0x74, 0xf7, 0x90, 0x4f, 0xe0, 0x30, 0xd2,
-	0x4b, 0xba, 0x0d, 0xa2, 0x8a, 0x3c, 0x67, 0xe9, 0x9a, 0x68, 0xe8, 0x3a, 0xe7, 0xd6, 0x64, 0x1d,
-	0xe7, 0x1f, 0x43, 0x51, 0xb3, 0xe6, 0xa8, 0x63, 0x9f, 0x3a, 0xe2, 0x36, 0x94, 0x6d, 0xc3, 0x76,
-	0x3c, 0x64, 0x3a, 0xf6, 0xc4, 0x23, 0x08, 0x19, 0xe9, 0x36, 0x54, 0xda, 0x4b, 0xd7, 0xf0, 0x2d,
-	0xc7, 0xde, 0x8c, 0xf4, 0x0c, 0x0a, 0xf2, 0x64, 0xe2, 0x22, 0xcf, 0x13, 0x05, 0x28, 0x9e, 0x39,
-	0x9e, 0x6f, 0x1b, 0x73, 0x3c, 0x44, 0xea, 0xa0, 0x24, 0x02, 0xa4, 0xad, 0x05, 0x61, 0xb5, 0x24,
-	0x56, 0x20, 0xbb, 0x70, 0x5c, 0xbf, 0x91, 0xd9, 0x4f, 0x1f, 0xe4, 0xa4, 0x3f, 0x09, 0x99, 0xb1,
-	0xda, 0x15, 0x6b, 0x90, 0xf7, 0xcc, 0x33, 0x34, 0xe7, 0xf3, 0x93, 0xa0, 0x60, 0x50, 0x6a, 0x8d,
-	0xf4, 0x7e, 0xfa, 0xa0, 0xfc, 0x74, 0x2b, 0x9c, 0x20, 0x1f, 0x06, 0x13, 0x32, 0xfc, 0xb3, 0x46,
-	0x86, 0x90, 0x95, 0x20, 0xf7, 0xcd, 0x12, 0xb9, 0x1f, 0x1a, 0xd9, 0xfd, 0xcc, 0x41, 0xf9, 0xe9,
-	0x76, 0x88, 0x3f, 0x34, 0xb0, 0x3e, 0x7d, 0xe4, 0x62, 0xc6, 0x4e, 0x5d, 0x63, 0x3a, 0xc7, 0x72,
-	0xcb, 0xe1, 0x5e, 0xd2, 0x1f, 0x83, 0xda, 0xd8, 0x36, 0xce, 0x0d, 0x6b, 0x66, 0x9c, 0x58, 0x33,
-	0xcb, 0xff, 0x20, 0xde, 0x82, 0x9c, 0xe7, 0x1b, 0xae, 0x4f, 0x18, 0x29, 0x3f, 0x15, 0x43, 0x3a,
-	0x81, 0x90, 0x0e, 0xa0, 0x38, 0x61, 0xf2, 0x60, 0xe2, 0xbf, 0x12, 0x62, 0x45, 0x25, 0x25, 0xdd,
-	0x87, 0x52, 0xcf, 0x30, 0xcf, 0x2c, 0x1b, 0x75, 0xda, 0x17, 0x8b, 0x45, 0xfa, 0x87, 0x29, 0x28,
-	0x73, 0x5c, 0x3c, 0xc8, 0xc7, 0x90, 0xb6, 0x26, 0x8c, 0x89, 0xc8, 0x64, 0x42, 0x72, 0x07, 0x90,
-	0x9d, 0x3b, 0x13, 0x44, 0xba, 0xd7, 0x9e, 0x36, 0x57, 0x51, 0xec, 0x53, 0xe7, 0xb0, 0xe7, 0x4c,
-	0x90, 0xf8, 0x18, 0x6a, 0xcb, 0xd8, 0x24, 0x89, 0xc8, 0xca, 0x4f, 0x1b, 0x61, 0x9f, 0xb8, 0x10,
-	0xa4, 0xbb, 0x90, 0x25, 0x3d, 0xf3, 0x90, 0x1e, 0x0f, 0x85, 0x94, 0x58, 0x81, 0x62, 0x5b, 0x95,
-	0x3b, 0xfd, 0x4e, 0xff, 0x58, 0x48, 0x8b, 0x45, 0xc8, 0xb6, 0x07, 0x6f, 0xfa, 0x42, 0x46, 0xfa,
-	0x9b, 0x59, 0xa8, 0x86, 0xab, 0x05, 0xb3, 0x5d, 0x81, 0xec, 0xd2, 0x43, 0x2e, 0x53, 0x63, 0x05,
-	0xb2, 0x64, 0xba, 0x69, 0xf2, 0x75, 0x8b, 0x4c, 0x29, 0x93, 0x34, 0xd8, 0xe8, 0x72, 0xbb, 0x0e,
-	0xc2, 0xa9, 0x61, 0xcd, 0x9c, 0x73, 0xe4, 0xea, 0xbe, 0x35, 0x47, 0xce, 0xd2, 0x6f, 0x64, 0xf7,
-	0x53, 0x07, 0xa9, 0xe7, 0xa9, 0xc7, 0xe2, 0x35, 0x00, 0xf3, 0x0c, 0x99, 0x6f, 0x17, 0x8e, 0xc5,
-	0x14, 0x58, 0x7c, 0x9e, 0x3b, 0x35, 0x66, 0x1e, 0x12, 0xb7, 0x21, 0xeb, 0x3a, 0x33, 0xd4, 0xc8,
-	0x63, 0x59, 0x3e, 0x4f, 0x3d, 0x78, 0x91, 0x6e, 0xa4, 0x62, 0x02, 0x2f, 0x10, 0x81, 0x6f, 0x41,
-	0x69, 0xe1, 0x5a, 0xb6, 0x69, 0x2d, 0x8c, 0x59, 0xa3, 0xc8, 0x41, 0xef, 0xd0, 0xc9, 0xd2, 0xd2,
-	0x97, 0xee, 0xac, 0x51, 0x22, 0xa0, 0x9f, 0x86, 0x8a, 0x69, 0x2c, 0xa8, 0x2c, 0x2c, 0xe4, 0x35,
-	0x80, 0x58, 0x94, 0xb4, 0x8e, 0x63, 0x2c, 0xe3, 0x16, 0xc7, 0xfd, 0x20, 0xee, 0x43, 0x7e, 0x66,
-	0x9c, 0xa0, 0x99, 0xd7, 0x28, 0x93, 0x59, 0x0a, 0x61, 0x9f, 0x2e, 0x81, 0xe3, 0xb5, 0x87, 0x19,
-	0xf5, 0x1a, 0x95, 0xfd, 0xcc, 0x41, 0xa9, 0xf9, 0xaf, 0x53, 0x00, 0x91, 0xfe, 0xcf, 0x20, 0xeb,
-	0x7f, 0x58, 0x50, 0xf3, 0xa8, 0x3d, 0xbd, 0xf7, 0xed, 0x23, 0x1e, 0x6a, 0x1f, 0x16, 0x48, 0xfa,
-	0x6b, 0x29, 0xc8, 0xe2, 0x7f, 0xc4, 0x32, 0x14, 0xc6, 0xfd, 0x57, 0x7d, 0xac, 0x9c, 0x8f, 0xc4,
-	0xab, 0xb0, 0xad, 0x2a, 0xaf, 0x07, 0x2d, 0xf9, 0x45, 0x57, 0xd1, 0x55, 0x65, 0x34, 0x18, 0xab,
-	0x2d, 0x65, 0x24, 0xa4, 0xc4, 0x2b, 0x20, 0x6a, 0xf2, 0xe8, 0x95, 0xfe, 0xaa, 0xd3, 0xed, 0x76,
-	0xfa, 0xc7, 0xfa, 0x48, 0x93, 0x35, 0x45, 0x48, 0x8b, 0x5b, 0x50, 0x3d, 0x1e, 0x8e, 0x23, 0xa8,
-	0x19, 0x71, 0x07, 0x84, 0xd1, 0x4b, 0x59, 0x55, 0xda, 0x11, 0x68, 0x56, 0xdc, 0x86, 0xfa, 0x50,
-	0x56, 0xb5, 0x8e, 0xd6, 0x19, 0xf4, 0x75, 0xf9, 0x8d, 0xac, 0x2a, 0x42, 0x4e, 0xac, 0x01, 0xf4,
-	0xc6, 0x5d, 0xad, 0xa3, 0xab, 0x83, 0xae, 0x22, 0xe4, 0xa5, 0x5f, 0xc9, 0x40, 0xa9, 0x85, 0xd5,
-	0x45, 0xec, 0xe2, 0x6e, 0x6c, 0x66, 0x11, 0xcb, 0x0b, 0x50, 0xc8, 0x54, 0xc4, 0x47, 0x50, 0x30,
-	0x9d, 0xf9, 0xdc, 0xb0, 0x27, 0x6c, 0x69, 0x5d, 0x5f, 0x87, 0xda, 0xa2, 0x28, 0x98, 0xea, 0x99,
-	0xef, 0x2f, 0x56, 0xed, 0x39, 0x44, 0x7d, 0xe9, 0xfb, 0x0b, 0xf1, 0x1a, 0x54, 0x27, 0x68, 0x66,
-	0x7c, 0xd0, 0xb9, 0xcf, 0xa2, 0x36, 0x95, 0x7e, 0xf2, 0x4c, 0xbc, 0x01, 0x82, 0x65, 0xfb, 0xc8,
-	0x3d, 0x37, 0x66, 0x41, 0x6b, 0x8e, 0xb5, 0x3e, 0x16, 0xaf, 0x43, 0x9d, 0x99, 0x61, 0xd0, 0x98,
-	0xa7, 0x8d, 0x4f, 0x1f, 0x8b, 0x9f, 0x40, 0xc6, 0x37, 0x17, 0xc4, 0xb4, 0xca, 0x4f, 0xaf, 0xae,
-	0x9d, 0x92, 0xb9, 0x68, 0x3e, 0x81, 0x42, 0xc8, 0x6e, 0x30, 0x39, 0xba, 0xb0, 0x63, 0x6e, 0x9b,
-	0x34, 0xe0, 0x6e, 0x4d, 0x09, 0xb2, 0x84, 0x6d, 0xee, 0x2a, 0x31, 0x72, 0x35, 0xf0, 0x77, 0xc4,
-	0x5f, 0x34, 0xb7, 0x21, 0xa3, 0x99, 0x09, 0x14, 0xe9, 0xf3, 0x75, 0x76, 0x50, 0x86, 0x42, 0x6b,
-	0xd0, 0xeb, 0xc9, 0xfd, 0xb6, 0x90, 0xc2, 0x6b, 0xf7, 0xa5, 0xa6, 0x0d, 0x85, 0xb4, 0x58, 0x80,
-	0x8c, 0xd6, 0x1a, 0x0a, 0x19, 0xe9, 0xf7, 0x33, 0x50, 0x7e, 0x89, 0x8c, 0x99, 0x7f, 0x46, 0x18,
-	0x17, 0x9f, 0x30, 0xa1, 0xa6, 0xc8, 0xbc, 0x6e, 0x87, 0x2c, 0x46, 0x90, 0x0e, 0x31, 0x91, 0x50,
-	0xbb, 0x2b, 0xf2, 0x4d, 0x5f, 0x28, 0xdf, 0xcc, 0x45, 0xf2, 0xcd, 0x06, 0xf2, 0xfd, 0x18, 0x76,
-	0x4c, 0xc7, 0xf6, 0x70, 0x84, 0xb4, 0xce, 0x91, 0x8e, 0x1d, 0xc3, 0xd2, 0x45, 0x54, 0x3d, 0xd5,
-	0xe7, 0xa9, 0xcf, 0xc5, 0x7d, 0xd8, 0x99, 0xba, 0x86, 0x89, 0xf4, 0x05, 0x72, 0x2d, 0x67, 0x92,
-	0x54, 0xd1, 0x93, 0xc7, 0x51, 0x89, 0x17, 0x56, 0x03, 0x65, 0x20, 0x71, 0xec, 0x4c, 0x89, 0x79,
-	0x16, 0x93, 0xce, 0x34, 0x3a, 0x67, 0x22, 0xda, 0xcf, 0xa8, 0xd2, 0x4b, 0x84, 0x9a, 0xb4, 0x01,
-	0xb1, 0x15, 0xca, 0xa6, 0xd9, 0x83, 0x6a, 0x5c, 0x58, 0x17, 0x68, 0x35, 0x12, 0x07, 0x69, 0x54,
-	0x13, 0xa0, 0xe8, 0xf9, 0x86, 0xbf, 0xf4, 0x90, 0x47, 0x02, 0x5b, 0xb5, 0x79, 0x03, 0x2a, 0x51,
-	0xf2, 0x7f, 0x10, 0x06, 0xf0, 0x1c, 0xe0, 0x95, 0x35, 0x9b, 0x0d, 0x9d, 0x99, 0x65, 0x7e, 0x10,
-	0x1f, 0x41, 0x25, 0x2a, 0x54, 0x66, 0x06, 0x9b, 0x22, 0xdc, 0x0f, 0xd3, 0x38, 0x4f, 0x09, 0x05,
-	0x79, 0x0f, 0xb2, 0x4b, 0xd7, 0xc2, 0x49, 0x01, 0xf6, 0x99, 0xd7, 0xd6, 0x4a, 0xfb, 0x70, 0xac,
-	0x76, 0xc4, 0x07, 0x50, 0x46, 0xf6, 0xb9, 0xe5, 0x3a, 0xf6, 0x7c, 0x6d, 0x1a, 0xa3, 0x84, 0x8d,
-	0x61, 0xc2, 0x92, 0xe1, 0x19, 0x04, 0x89, 0x31, 0x24, 0x84, 0x8b, 0xdb, 0x90, 0xf3, 0xce, 0xd0,
-	0x6c, 0x46, 0xb4, 0x5e, 0x7c, 0x9e, 0xf5, 0xdd, 0x25, 0xc2, 0x5e, 0xdd, 0x70, 0xa7, 0x4b, 0xdc,
-	0xdb, 0x6b, 0x14, 0x88, 0xab, 0x35, 0x71, 0xa6, 0xd1, 0x49, 0x26, 0x52, 0x22, 0x00, 0x22, 0x39,
-	0x98, 0x71, 0x32, 0xa3, 0xb1, 0xb4, 0x28, 0xee, 0x42, 0x01, 0xbd, 0xf7, 0x5d, 0xc3, 0xf4, 0xc9,
-	0x80, 0x9c, 0x66, 0x15, 0x72, 0xa6, 0x61, 0x9e, 0x21, 0x62, 0xa1, 0x45, 0x9c, 0x05, 0x39, 0x4b,
-	0x7f, 0xb1, 0xf4, 0xf5, 0x53, 0x6b, 0x86, 0x58, 0x3e, 0xf1, 0x5b, 0x19, 0xa8, 0x04, 0x39, 0x1d,
-	0x96, 0xc7, 0x7d, 0x28, 0x23, 0xf6, 0xad, 0x07, 0xf1, 0x7c, 0x27, 0x32, 0xcd, 0x30, 0x01, 0xac,
-	0x40, 0x76, 0x62, 0xf8, 0x06, 0x21, 0x5f, 0x11, 0xef, 0x40, 0xc9, 0x65, 0xa9, 0x1b, 0xb6, 0xf8,
-	0x4c, 0x3c, 0x17, 0xe1, 0x59, 0xdd, 0xa5, 0x0d, 0xfc, 0x21, 0x54, 0x4e, 0x79, 0x0c, 0xc1, 0x8c,
-	0x14, 0x2f, 0x8a, 0xc2, 0x3c, 0x6c, 0xd3, 0x70, 0x28, 0x42, 0x9e, 0x0e, 0xd6, 0x00, 0xfc, 0x4d,
-	0x42, 0xeb, 0x03, 0x28, 0x99, 0x3c, 0xcf, 0x64, 0xb1, 0xee, 0xea, 0xba, 0x14, 0x14, 0x0f, 0xfd,
-	0x00, 0x4a, 0x13, 0xcb, 0x33, 0x71, 0x4c, 0xff, 0xd0, 0xa8, 0x24, 0x71, 0xdb, 0xbc, 0x89, 0xe0,
-	0x3e, 0x83, 0x5d, 0xef, 0x6c, 0xe9, 0x4f, 0x9c, 0x77, 0xb6, 0x1e, 0xb3, 0xc2, 0xea, 0x45, 0x56,
-	0x18, 0x89, 0xbb, 0xb5, 0x0d, 0x71, 0xf7, 0x3e, 0x5b, 0xe0, 0x75, 0xb2, 0xc0, 0xaf, 0xaf, 0x51,
-	0x00, 0x0f, 0x41, 0xd2, 0xa3, 0x0d, 0x6b, 0xa8, 0xad, 0x1c, 0xc9, 0xe3, 0xae, 0x26, 0xa4, 0x44,
-	0x80, 0x7c, 0x6b, 0x3c, 0xd2, 0x06, 0x3d, 0x21, 0x2d, 0xfd, 0x30, 0x05, 0xd0, 0x33, 0x3c, 0x9f,
-	0x4d, 0x16, 0x82, 0xb4, 0x2d, 0x4c, 0xef, 0xf0, 0x32, 0x17, 0x23, 0x59, 0x6f, 0xf5, 0x79, 0xf6,
-	0xd9, 0xe3, 0x67, 0x8f, 0xc5, 0x32, 0x64, 0x16, 0xd6, 0x84, 0xe8, 0xbb, 0x14, 0x4b, 0x56, 0xa8,
-	0x61, 0xd7, 0xa1, 0x70, 0x8e, 0x5c, 0x0f, 0x67, 0x99, 0x79, 0x96, 0xe2, 0x06, 0x49, 0x31, 0xd5,
-	0xf5, 0x6a, 0x52, 0x2c, 0xfd, 0x20, 0x0d, 0x25, 0xba, 0x0f, 0xc1, 0xdc, 0xc4, 0x53, 0x4e, 0xba,
-	0x71, 0x88, 0x98, 0x55, 0x66, 0xa3, 0x59, 0xdd, 0x03, 0x30, 0x7c, 0xdf, 0xb5, 0x4e, 0x96, 0x7e,
-	0x60, 0x7e, 0x91, 0x2c, 0x54, 0xe6, 0x6d, 0xe2, 0x4d, 0x32, 0xdf, 0xfc, 0x0a, 0x3b, 0x6c, 0x2b,
-	0xc4, 0xa7, 0x8d, 0xcd, 0x2d, 0x47, 0xa6, 0xfd, 0xa4, 0x39, 0x89, 0xa5, 0x3c, 0x4f, 0x62, 0x89,
-	0xc1, 0xed, 0x24, 0x89, 0x75, 0xe9, 0xce, 0xed, 0x75, 0x0a, 0x8a, 0xa7, 0x1f, 0x29, 0xe9, 0xaf,
-	0x64, 0x20, 0xf7, 0x1a, 0x2f, 0x74, 0x51, 0x0a, 0x46, 0x48, 0x1f, 0xd4, 0xa2, 0x6b, 0x8f, 0x34,
-	0x53, 0xaf, 0x7e, 0x17, 0xfb, 0x5d, 0x63, 0x66, 0xb8, 0xab, 0x09, 0x3d, 0xc5, 0x1a, 0x91, 0x56,
-	0x8c, 0xe7, 0x1a, 0xf6, 0x14, 0x79, 0x2c, 0xe5, 0x58, 0xc1, 0x53, 0x49, 0xab, 0xb8, 0x0f, 0x19,
-	0x0f, 0xd1, 0xd4, 0x35, 0x26, 0x38, 0x46, 0x0c, 0xf9, 0x84, 0x2b, 0xf4, 0x9e, 0xa6, 0xb1, 0xe5,
-	0x35, 0x5c, 0xa1, 0xf7, 0x7e, 0xf3, 0x2a, 0xe4, 0xd9, 0xb8, 0x31, 0xaf, 0x95, 0x6a, 0xde, 0x86,
-	0x1c, 0x19, 0x08, 0xc3, 0x4f, 0xd0, 0xd4, 0xb2, 0x09, 0x3c, 0x8b, 0x2d, 0x0a, 0x91, 0xcc, 0x29,
-	0x7d, 0x90, 0x6d, 0x1e, 0x42, 0x9e, 0x71, 0xf3, 0x09, 0xe4, 0x08, 0xd7, 0xcc, 0x2b, 0xef, 0xae,
-	0x65, 0x1a, 0x67, 0x14, 0x98, 0xb1, 0x0a, 0x64, 0x2d, 0x1f, 0xcd, 0x09, 0x6e, 0xa9, 0xb9, 0x0b,
-	0x59, 0xcc, 0x4a, 0x72, 0xcf, 0xf8, 0x84, 0xa9, 0x00, 0x20, 0x3f, 0x6a, 0xc9, 0x5d, 0x59, 0x15,
-	0x3e, 0xc2, 0xff, 0xab, 0x72, 0xff, 0x98, 0xa4, 0x98, 0x05, 0xc8, 0x8c, 0x14, 0x8d, 0xee, 0x15,
-	0x34, 0xe5, 0x2b, 0x4d, 0xc8, 0x48, 0xbf, 0x96, 0x82, 0x52, 0x68, 0x37, 0xdc, 0xc5, 0xf0, 0xed,
-	0x1e, 0x55, 0x51, 0xfa, 0x52, 0x2a, 0xca, 0x5c, 0x52, 0x45, 0xd9, 0x0b, 0x55, 0x74, 0x09, 0x05,
-	0x70, 0x35, 0xe6, 0x37, 0xaa, 0x51, 0xfa, 0xf5, 0x22, 0x14, 0x83, 0x55, 0xf3, 0xff, 0x7f, 0x52,
-	0x8c, 0xe1, 0xdc, 0x66, 0xbb, 0xab, 0x27, 0x76, 0x4a, 0xd8, 0x33, 0x4e, 0x2c, 0xef, 0x2d, 0x73,
-	0x29, 0xd7, 0x57, 0x9d, 0x01, 0x76, 0xd1, 0x34, 0xd7, 0xf8, 0x29, 0x28, 0xbb, 0xc8, 0xc3, 0xb9,
-	0x1c, 0xd9, 0xfb, 0x16, 0x93, 0x39, 0x50, 0xd0, 0x43, 0x0d, 0xb1, 0x48, 0xc7, 0xcf, 0xb1, 0xd7,
-	0x39, 0x77, 0x4c, 0x12, 0x64, 0x69, 0xea, 0xb4, 0xbf, 0xb6, 0x1b, 0xc3, 0x21, 0x9d, 0x3e, 0x85,
-	0xbc, 0x77, 0x66, 0xb8, 0x68, 0x42, 0xe2, 0x4e, 0xf9, 0xe9, 0xcd, 0x35, 0x3d, 0x46, 0x04, 0x81,
-	0xa0, 0x3f, 0x87, 0xba, 0x31, 0x9b, 0x39, 0x26, 0x19, 0x55, 0xb7, 0xec, 0x53, 0x87, 0x05, 0xa6,
-	0x5b, 0x6b, 0xfa, 0xc9, 0x01, 0x26, 0xe9, 0xfb, 0x04, 0xca, 0x0b, 0x76, 0x3e, 0x82, 0x83, 0x23,
-	0x0d, 0x52, 0x37, 0x56, 0xfb, 0x85, 0x87, 0x28, 0xcd, 0x3d, 0xa8, 0x25, 0x88, 0x54, 0x98, 0x64,
-	0xc9, 0xde, 0xbe, 0x79, 0x04, 0xf5, 0xa4, 0x14, 0x62, 0xbb, 0x4f, 0x7a, 0x02, 0x10, 0x06, 0xae,
-	0xf4, 0xfa, 0xc0, 0xd5, 0xfc, 0xf5, 0x0c, 0x14, 0x03, 0x05, 0xfc, 0x21, 0x28, 0x2f, 0x70, 0x48,
-	0xf0, 0x7c, 0x64, 0x9b, 0x88, 0xa5, 0x66, 0xf7, 0x2e, 0x50, 0xd9, 0xe1, 0x30, 0x44, 0xc7, 0x83,
-	0x9d, 0x3b, 0xb3, 0xe5, 0x1c, 0xad, 0x0e, 0xf6, 0x9a, 0xc0, 0xc5, 0xa7, 0x41, 0xa8, 0xcf, 0x6c,
-	0xd4, 0x6d, 0x40, 0x7a, 0x44, 0xbe, 0x9b, 0x8f, 0xa0, 0x1c, 0x1d, 0x24, 0x1a, 0x00, 0x63, 0x13,
-	0xa6, 0xdb, 0x96, 0x1f, 0xa4, 0x21, 0x4f, 0x3b, 0x46, 0x36, 0xbb, 0xe9, 0xf8, 0x66, 0x77, 0xd3,
-	0x50, 0x74, 0xc9, 0x3c, 0x8b, 0x24, 0xcc, 0xe5, 0x4b, 0x75, 0x1b, 0x1a, 0xfe, 0x99, 0xf8, 0x53,
-	0x90, 0x9b, 0x3b, 0x4b, 0xdb, 0x67, 0x33, 0x3b, 0xb8, 0x44, 0xbf, 0x1e, 0xc6, 0x6f, 0xee, 0x40,
-	0x96, 0x10, 0x20, 0xea, 0x75, 0x7c, 0xa6, 0xde, 0x5d, 0xc8, 0x91, 0xe6, 0x38, 0x58, 0x3a, 0x58,
-	0x17, 0x9a, 0x8a, 0x90, 0x1d, 0xca, 0xda, 0x4b, 0x21, 0x25, 0x96, 0x20, 0xd7, 0x1b, 0x8c, 0xfb,
-	0x9a, 0x90, 0x6e, 0xd6, 0xa1, 0x1a, 0x33, 0xf7, 0x66, 0x05, 0x20, 0xb4, 0x66, 0xe9, 0x1f, 0xa7,
-	0xa0, 0xa1, 0xb9, 0xc6, 0xe9, 0xa9, 0x65, 0xe2, 0x6c, 0xca, 0x75, 0x66, 0x23, 0xdf, 0xf0, 0x2d,
-	0xcf, 0xb7, 0x4c, 0x2f, 0x26, 0xe3, 0x3a, 0x14, 0x4e, 0x0c, 0xf3, 0xed, 0xcc, 0x99, 0x12, 0x89,
-	0x64, 0x49, 0x48, 0xf8, 0xe0, 0xb3, 0x08, 0x45, 0x3e, 0x27, 0xae, 0xb3, 0xa0, 0x8e, 0x23, 0x8b,
-	0xf3, 0x5d, 0x9c, 0x6d, 0xcd, 0xac, 0xb9, 0xe5, 0xd3, 0x9d, 0x54, 0x16, 0x93, 0x58, 0x18, 0xe6,
-	0x5b, 0xe4, 0xd3, 0x9d, 0x53, 0x16, 0xcf, 0xe9, 0x9b, 0x19, 0xb2, 0x89, 0x4b, 0x20, 0xcd, 0xae,
-	0xe1, 0xa3, 0x93, 0x85, 0x47, 0x56, 0x7c, 0x00, 0x58, 0x2c, 0x3c, 0xb2, 0x96, 0xb3, 0x38, 0xcd,
-	0x70, 0xd1, 0x37, 0x4b, 0xb4, 0x24, 0x87, 0x25, 0xa9, 0x83, 0xac, 0xf4, 0xcb, 0x19, 0xa8, 0x74,
-	0x16, 0x11, 0x96, 0x45, 0x80, 0x23, 0xc7, 0x7d, 0x67, 0xb8, 0x13, 0xcb, 0x9e, 0x12, 0x61, 0x65,
-	0x30, 0xac, 0x8d, 0x4e, 0x8d, 0xe5, 0xcc, 0xd7, 0xb4, 0x2e, 0xe1, 0x9e, 0xc0, 0x3a, 0xb6, 0x8a,
-	0x4c, 0x64, 0x9d, 0xb3, 0x29, 0x64, 0x70, 0xa6, 0xdd, 0xb1, 0x5f, 0x4e, 0x5c, 0xc5, 0x75, 0x1d,
-	0x97, 0x4e, 0x24, 0x23, 0xee, 0x40, 0xa5, 0x63, 0xe3, 0xac, 0x87, 0x41, 0x73, 0x04, 0xba, 0x0b,
-	0x55, 0x3c, 0x4c, 0xdb, 0xf0, 0x8d, 0xa9, 0x6b, 0xcc, 0xe9, 0x84, 0x32, 0xe2, 0x55, 0xa8, 0x77,
-	0xec, 0xb1, 0xfd, 0xd6, 0x76, 0xde, 0xd9, 0x43, 0xd7, 0xf1, 0x1d, 0x9a, 0x41, 0xb1, 0xe1, 0x70,
-	0x0a, 0x6a, 0xb8, 0x13, 0x3a, 0x3d, 0x0e, 0x43, 0x33, 0x0b, 0x67, 0x5f, 0x64, 0x86, 0x84, 0x85,
-	0xc1, 0xd2, 0x57, 0xf1, 0x24, 0x3d, 0x9f, 0x4e, 0x92, 0x03, 0x83, 0xde, 0xe5, 0x08, 0xb0, 0xef,
-	0xa8, 0x0e, 0x49, 0x9d, 0x2a, 0x9c, 0x59, 0x15, 0x19, 0xde, 0x5c, 0x63, 0x47, 0x5a, 0x55, 0x3e,
-	0x10, 0x81, 0xaa, 0xe8, 0x9b, 0x09, 0xcd, 0x5c, 0x33, 0x58, 0x94, 0x04, 0x36, 0x78, 0xe5, 0x91,
-	0x5c, 0x35, 0xc4, 0x3a, 0x32, 0xac, 0x99, 0xd7, 0x10, 0x08, 0xac, 0x0e, 0x85, 0x23, 0xd7, 0x98,
-	0x62, 0xa4, 0x2d, 0x02, 0xd8, 0x82, 0x12, 0x06, 0x50, 0x1c, 0x91, 0x33, 0x82, 0x41, 0x2d, 0x17,
-	0x19, 0x98, 0x91, 0x6d, 0x0c, 0x94, 0x7e, 0x2d, 0x0b, 0xb5, 0x8e, 0x39, 0x8f, 0x6a, 0xa6, 0x06,
-	0xf9, 0x8e, 0xdd, 0xf3, 0xa6, 0x1e, 0xd3, 0x8a, 0x00, 0xc5, 0x8e, 0xcd, 0x84, 0x9a, 0x0e, 0x45,
-	0xdd, 0xf2, 0x96, 0x73, 0x06, 0xa5, 0x5a, 0xb9, 0x02, 0x35, 0x2c, 0x26, 0xcf, 0x1f, 0xdb, 0x2e,
-	0x32, 0xcc, 0x33, 0xae, 0x18, 0xa2, 0x2d, 0x3c, 0x51, 0xe5, 0xbd, 0x39, 0xe1, 0x7a, 0x21, 0xc0,
-	0xa1, 0xe1, 0xce, 0x87, 0xae, 0x73, 0xc2, 0xb5, 0x42, 0xe8, 0x8e, 0x5c, 0xf3, 0xe7, 0x96, 0xc8,
-	0xc6, 0xfd, 0x0b, 0x21, 0xaa, 0x8a, 0x26, 0x96, 0x8b, 0x4c, 0x9f, 0xeb, 0xa4, 0x0e, 0x85, 0x8e,
-	0xad, 0x98, 0x67, 0x0e, 0x57, 0x08, 0x51, 0x12, 0x06, 0xa8, 0x68, 0xc1, 0xf5, 0x41, 0xe8, 0xe1,
-	0x91, 0x3d, 0xdf, 0x98, 0x2f, 0xb8, 0x42, 0x88, 0xee, 0x03, 0x28, 0x41, 0xaf, 0x84, 0x03, 0x61,
-	0x0b, 0xea, 0x19, 0xde, 0x5b, 0x8f, 0xe9, 0x84, 0xcc, 0x8a, 0x03, 0x09, 0x72, 0x8d, 0x33, 0x30,
-	0x58, 0xfa, 0x44, 0x4c, 0x75, 0x2e, 0xf1, 0xc1, 0xd2, 0x67, 0x12, 0x11, 0xf8, 0x48, 0xd8, 0x1e,
-	0xa2, 0x22, 0xd9, 0xe2, 0x8c, 0x0d, 0x96, 0x7e, 0x28, 0x13, 0x31, 0x02, 0x0d, 0x85, 0xb2, 0xcd,
-	0x2d, 0x78, 0xb0, 0xf4, 0x23, 0x52, 0xd9, 0x89, 0x20, 0x87, 0x62, 0xd9, 0xe5, 0xba, 0xc2, 0x4c,
-	0x10, 0xb9, 0x5c, 0x89, 0x98, 0x5f, 0x20, 0x98, 0xab, 0x11, 0x9a, 0x11, 0xc9, 0x34, 0x08, 0xb8,
-	0x01, 0x42, 0x14, 0x4c, 0x3a, 0x5c, 0x8b, 0x8c, 0x16, 0xca, 0xa6, 0x19, 0x99, 0x5f, 0x4c, 0x38,
-	0xd7, 0x89, 0x55, 0xfd, 0x6a, 0x1a, 0xaa, 0x9a, 0x19, 0x35, 0x2a, 0x6c, 0xf0, 0xbe, 0x23, 0xcf,
-	0xa6, 0x8e, 0x6b, 0xf9, 0x67, 0x73, 0x66, 0x5a, 0x35, 0xc8, 0xab, 0xbe, 0xd3, 0xb3, 0x6c, 0x66,
-	0x58, 0xec, 0xdb, 0x78, 0xcf, 0x4c, 0xaa, 0x0e, 0x85, 0x9e, 0xf1, 0xbe, 0xe5, 0xd8, 0x76, 0x68,
-	0x4b, 0xb2, 0xe9, 0x5b, 0xe7, 0x68, 0xb0, 0x40, 0x36, 0xb7, 0xa5, 0x1d, 0xa8, 0x0c, 0x0d, 0xcf,
-	0x0b, 0xa0, 0x81, 0x31, 0xc9, 0xbe, 0x8f, 0xe6, 0x0b, 0x9f, 0x2e, 0x82, 0xc0, 0x98, 0x14, 0xcf,
-	0x37, 0x4e, 0x70, 0x28, 0x0e, 0x8c, 0x69, 0x0b, 0x4a, 0xad, 0xa5, 0xeb, 0x92, 0x06, 0x66, 0x4e,
-	0x64, 0x11, 0x8c, 0xd0, 0x94, 0x9b, 0x12, 0x55, 0x37, 0x01, 0x04, 0xcb, 0x5a, 0x45, 0xbe, 0x6b,
-	0xd8, 0x1e, 0x01, 0x56, 0xc2, 0x5e, 0x8a, 0xeb, 0x72, 0xe3, 0xa1, 0xbd, 0x54, 0xec, 0x21, 0x6a,
-	0x6b, 0x57, 0x0e, 0x31, 0x1d, 0xe9, 0x1f, 0xa5, 0xa0, 0x3a, 0x9e, 0x44, 0xc5, 0x45, 0x4c, 0x31,
-	0x74, 0x5a, 0x29, 0x4e, 0xad, 0xef, 0x0c, 0x1d, 0xd7, 0xe7, 0xeb, 0x30, 0xba, 0x32, 0x33, 0x11,
-	0x3d, 0x85, 0x1d, 0x03, 0xd7, 0xa8, 0x9a, 0xe7, 0x27, 0xcb, 0xd3, 0x98, 0x6b, 0xdc, 0x81, 0xca,
-	0xc8, 0x9e, 0x84, 0xd0, 0xfc, 0x5a, 0x0e, 0x0b, 0x01, 0x74, 0x6a, 0x3b, 0x2e, 0x9a, 0xf4, 0x96,
-	0x33, 0xdf, 0xa2, 0x72, 0x93, 0xfe, 0x69, 0x0a, 0x6a, 0xa3, 0x7e, 0x6f, 0x18, 0x61, 0xfc, 0x00,
-	0x8a, 0xd6, 0x42, 0xf7, 0x7c, 0xc3, 0xf7, 0x56, 0x0f, 0x8a, 0x62, 0x01, 0xe0, 0x11, 0x80, 0x65,
-	0xce, 0x39, 0x6e, 0x3a, 0x79, 0x60, 0x9b, 0x70, 0x4a, 0x0f, 0xa0, 0xe4, 0x9b, 0x1c, 0x39, 0x93,
-	0x3c, 0x33, 0x88, 0xdb, 0xda, 0x03, 0x28, 0x2d, 0x27, 0x1c, 0x37, 0x9b, 0xc4, 0x8d, 0x09, 0x5a,
-	0xfa, 0xbb, 0x29, 0xa8, 0xe1, 0x30, 0x1f, 0xe9, 0x1e, 0xe6, 0x3c, 0xa9, 0xcb, 0xe6, 0x3c, 0xc9,
-	0x3c, 0x2c, 0xfd, 0xdd, 0xf2, 0xb0, 0x6d, 0x28, 0x93, 0xf8, 0xab, 0x47, 0xe3, 0xb4, 0x08, 0xb0,
-	0xf4, 0xd0, 0x84, 0xc1, 0x48, 0xb0, 0x96, 0x7e, 0x05, 0xc2, 0xfb, 0xbb, 0x08, 0xc7, 0x5b, 0x50,
-	0xf2, 0xf9, 0xa2, 0xa5, 0x1b, 0x42, 0xf1, 0x3a, 0x6c, 0x9b, 0x8b, 0xa5, 0xa7, 0x2f, 0x3d, 0x76,
-	0x71, 0xa2, 0x7b, 0xc8, 0x64, 0xc7, 0xb0, 0xe2, 0x4d, 0xd8, 0x25, 0x8d, 0xde, 0x07, 0xcf, 0x47,
-	0xf3, 0x48, 0x33, 0x39, 0x87, 0xc5, 0x23, 0x93, 0x66, 0xc2, 0x13, 0x3d, 0x7e, 0xc5, 0x1e, 0x63,
-	0x8e, 0xe6, 0xba, 0xeb, 0x79, 0x8c, 0x21, 0x9a, 0x29, 0x5c, 0x85, 0x3a, 0x06, 0x47, 0xb9, 0xcf,
-	0xf3, 0x06, 0x42, 0xc3, 0x76, 0xd9, 0x81, 0x0d, 0xb5, 0xa4, 0xaa, 0x78, 0x0d, 0xb6, 0x78, 0x83,
-	0x7f, 0xe6, 0x3a, 0xbe, 0x3f, 0x43, 0xf4, 0xf0, 0xa9, 0x2a, 0xee, 0x43, 0x83, 0x34, 0x05, 0xf0,
-	0x08, 0x67, 0x25, 0xc2, 0xc5, 0x15, 0xa8, 0xe1, 0xe1, 0x4e, 0xad, 0x19, 0x62, 0xa3, 0x91, 0xec,
-	0x82, 0xc3, 0x0d, 0xdb, 0xb1, 0x19, 0xbc, 0x4c, 0xe0, 0x37, 0x61, 0x17, 0xc3, 0xe7, 0xc6, 0x62,
-	0x81, 0x26, 0xd1, 0x6e, 0x15, 0xd2, 0x7c, 0x17, 0xb2, 0x0b, 0xe4, 0x9e, 0xb2, 0xb3, 0xa4, 0x88,
-	0xf1, 0x0d, 0x91, 0x7b, 0x1a, 0x91, 0xef, 0x15, 0xa8, 0xd9, 0xc8, 0xd7, 0xdd, 0xf7, 0x3a, 0x4f,
-	0x8b, 0x6a, 0xa4, 0xff, 0x0e, 0x54, 0x18, 0x9c, 0x52, 0xad, 0x13, 0xe8, 0x2e, 0x54, 0x19, 0x14,
-	0x85, 0xc1, 0x20, 0x1b, 0x21, 0x82, 0xd3, 0xaf, 0x05, 0x9a, 0x90, 0x58, 0x10, 0xc0, 0xfd, 0x90,
-	0xb8, 0x18, 0x25, 0xee, 0x73, 0xe2, 0xdb, 0x51, 0xe2, 0x7e, 0x40, 0x7c, 0x27, 0x41, 0x84, 0x13,
-	0xdf, 0x25, 0xf0, 0x5b, 0x70, 0x8d, 0xc0, 0xcd, 0x85, 0xee, 0xfa, 0xbe, 0x3e, 0xb7, 0x4c, 0xd7,
-	0xc1, 0xf2, 0xd4, 0x17, 0xcf, 0x1e, 0x93, 0x00, 0x91, 0xba, 0x00, 0xe5, 0x7b, 0x8f, 0x49, 0xb8,
-	0xb8, 0x10, 0xe5, 0x19, 0x09, 0x1d, 0x17, 0xa2, 0x7c, 0x8f, 0xc4, 0x90, 0x14, 0x8e, 0x2e, 0x78,
-	0x5f, 0x19, 0x33, 0x96, 0x26, 0x37, 0x16, 0xd2, 0x12, 0xb1, 0xf7, 0xeb, 0xa4, 0x41, 0x82, 0x26,
-	0xa7, 0x6a, 0x10, 0xb7, 0xaf, 0x9b, 0x8e, 0x6d, 0x23, 0x13, 0xef, 0xa0, 0xbc, 0xc6, 0x0d, 0x42,
-	0xf6, 0x0e, 0xdc, 0xe4, 0x38, 0xc4, 0x5c, 0xde, 0x19, 0x96, 0x1f, 0x43, 0xbb, 0x49, 0xd0, 0xc8,
-	0xd6, 0xc3, 0x31, 0x91, 0xe7, 0x21, 0xaf, 0xb1, 0x47, 0xec, 0xad, 0x0e, 0x05, 0xff, 0xcc, 0x45,
-	0xc6, 0xc4, 0x6b, 0x7c, 0xcc, 0x0d, 0x90, 0x58, 0xb3, 0xf3, 0x4e, 0x5f, 0xb8, 0xc8, 0xf3, 0x96,
-	0x2e, 0x1e, 0x70, 0x69, 0xfb, 0xc8, 0x6d, 0xec, 0x13, 0x86, 0x6e, 0xc3, 0x75, 0x62, 0x50, 0x68,
-	0x62, 0x2d, 0xe7, 0xab, 0x48, 0xb7, 0x08, 0xd2, 0x1d, 0xb8, 0x89, 0x91, 0x4c, 0xd7, 0xf2, 0x2d,
-	0xd3, 0x98, 0xad, 0xa2, 0x49, 0x04, 0xed, 0x67, 0x61, 0x8f, 0x30, 0x4e, 0x93, 0x7a, 0xcc, 0x32,
-	0xce, 0xea, 0x89, 0xdb, 0xa2, 0x76, 0xd7, 0xb8, 0x9d, 0xbc, 0x67, 0xdc, 0xb8, 0x01, 0x60, 0xeb,
-	0xd0, 0x77, 0x7c, 0x63, 0xc6, 0x24, 0xf8, 0x49, 0x74, 0x05, 0xd0, 0x86, 0x39, 0x9a, 0x7b, 0xef,
-	0x58, 0xf3, 0x1d, 0xd2, 0x7c, 0x03, 0x76, 0x70, 0xb3, 0xe7, 0x9c, 0xfa, 0x31, 0xbd, 0xdc, 0x8d,
-	0xae, 0x6e, 0x72, 0xc8, 0xcd, 0x1a, 0xee, 0x45, 0xd7, 0x9b, 0xf7, 0xce, 0x58, 0x30, 0xf8, 0x41,
-	0x74, 0xb4, 0xa5, 0x8d, 0xce, 0x2d, 0x93, 0x9c, 0xa0, 0xb3, 0xe6, 0xfb, 0xa4, 0xf9, 0x19, 0x6c,
-	0xe3, 0x19, 0x7b, 0x36, 0x73, 0xfb, 0x6c, 0x9a, 0x0f, 0x92, 0xcb, 0x2f, 0x11, 0x53, 0x9e, 0x30,
-	0xf3, 0x88, 0x74, 0x79, 0x48, 0x24, 0xd3, 0x88, 0x9d, 0x1a, 0x47, 0x7c, 0xb8, 0xf4, 0x6f, 0x32,
-	0x78, 0x37, 0x45, 0x1d, 0xe5, 0xd8, 0x33, 0xa6, 0x48, 0xfc, 0x1c, 0x4a, 0xfc, 0xdc, 0x9d, 0x5f,
-	0x46, 0xac, 0x39, 0x71, 0x20, 0xb8, 0xc1, 0x11, 0xb0, 0x78, 0x0b, 0x72, 0x44, 0x72, 0x8d, 0xf4,
-	0xa6, 0x83, 0xd1, 0xe6, 0x8f, 0xd3, 0x50, 0x0c, 0xf0, 0x3f, 0x85, 0x6a, 0x78, 0xb8, 0x6f, 0x9f,
-	0x3a, 0xec, 0x78, 0xff, 0xca, 0xfa, 0xd3, 0x65, 0xf1, 0x0e, 0x94, 0xd8, 0x09, 0x05, 0x9a, 0x6c,
-	0x1e, 0x42, 0x7c, 0x0c, 0x10, 0x99, 0x7a, 0x66, 0xd3, 0x59, 0x44, 0x44, 0x62, 0x0f, 0xa1, 0x12,
-	0x9c, 0xc6, 0xeb, 0xe4, 0x44, 0x39, 0xbd, 0xb1, 0x26, 0x44, 0xfc, 0x02, 0x72, 0x3e, 0x49, 0xea,
-	0xe8, 0xa9, 0xee, 0x9d, 0x6f, 0x93, 0xca, 0xa1, 0x66, 0x78, 0x6f, 0x9b, 0x7f, 0x02, 0xb2, 0xf8,
-	0x6f, 0xe2, 0x88, 0xeb, 0x06, 0xd9, 0x88, 0xd2, 0x0a, 0x8d, 0xc8, 0x69, 0x02, 0x2b, 0x77, 0xb9,
-	0xe4, 0x59, 0x73, 0x78, 0x06, 0x92, 0x5d, 0x7f, 0x06, 0x22, 0xfd, 0x03, 0x80, 0x5a, 0xc2, 0x47,
-	0xaf, 0x89, 0x81, 0x42, 0xac, 0x2c, 0x03, 0x43, 0x6a, 0x90, 0x37, 0x3f, 0x98, 0xb3, 0x20, 0xc6,
-	0x7e, 0x0c, 0x57, 0x3d, 0xdf, 0x98, 0xe1, 0x50, 0x43, 0xe1, 0xfa, 0xa9, 0xeb, 0xd8, 0x3e, 0xb2,
-	0x27, 0x6c, 0x77, 0xbc, 0x07, 0x57, 0x12, 0x08, 0x78, 0x6f, 0x8d, 0xdb, 0x73, 0xdc, 0x49, 0x5b,
-	0xb6, 0xe7, 0xbb, 0x4b, 0xe6, 0x6b, 0x68, 0xf0, 0x6b, 0x80, 0x40, 0xd7, 0x8c, 0x8b, 0x4e, 0x91,
-	0x8b, 0x43, 0xbc, 0xc7, 0xb6, 0xce, 0x3b, 0x50, 0xa1, 0x2d, 0x73, 0x8b, 0x38, 0xa2, 0x22, 0xdf,
-	0x2e, 0x9f, 0xb8, 0x86, 0x6d, 0x9e, 0x21, 0xbe, 0x81, 0xde, 0x85, 0x2a, 0x85, 0x70, 0x44, 0xe0,
-	0x39, 0xc1, 0xc9, 0xd2, 0x63, 0xac, 0xb0, 0x18, 0x27, 0x02, 0xb8, 0xe8, 0x94, 0xc3, 0x68, 0x60,
-	0xdb, 0x82, 0x92, 0xb9, 0x58, 0xea, 0xe6, 0xcc, 0x31, 0xdf, 0x92, 0xe8, 0x46, 0x82, 0x3a, 0xd6,
-	0x32, 0x83, 0xd5, 0x08, 0x6c, 0x1b, 0xca, 0x0b, 0x63, 0x8a, 0x74, 0xb2, 0xe5, 0xe6, 0xe1, 0x6b,
-	0x07, 0x2a, 0x73, 0xcb, 0x76, 0x5c, 0x0e, 0x15, 0x02, 0xa8, 0xf1, 0xc7, 0x43, 0xe8, 0x56, 0x30,
-	0x51, 0x2c, 0xaf, 0xf7, 0xbe, 0xee, 0xbd, 0xb3, 0x7c, 0x32, 0x01, 0x91, 0x7b, 0x08, 0xcc, 0xc1,
-	0xdc, 0x9a, 0x52, 0x05, 0xf0, 0xf8, 0xd5, 0x00, 0xc1, 0x98, 0x59, 0x53, 0x72, 0x8d, 0xc7, 0x69,
-	0xed, 0xf0, 0x16, 0x34, 0x5f, 0xce, 0xe8, 0x69, 0x1d, 0x6b, 0xd9, 0xe5, 0x6e, 0x68, 0xf6, 0x44,
-	0x9f, 0x50, 0xc1, 0xcd, 0x1c, 0xec, 0xaf, 0xaf, 0x70, 0x77, 0x13, 0x6f, 0xe0, 0xd2, 0xba, 0xca,
-	0x29, 0x86, 0xcd, 0x9e, 0xef, 0xb8, 0x88, 0x6e, 0x74, 0x88, 0x5a, 0x13, 0x2d, 0xbc, 0xe7, 0x35,
-	0xee, 0x16, 0xc3, 0xf6, 0x05, 0xd6, 0x22, 0x9d, 0x5b, 0x93, 0x07, 0xd5, 0xd5, 0x56, 0x4e, 0xe0,
-	0x7a, 0x84, 0x65, 0x2b, 0xca, 0xf2, 0x8d, 0x08, 0xcb, 0xd6, 0x2a, 0xcb, 0x37, 0x23, 0x03, 0x5b,
-	0x2b, 0x03, 0xef, 0x45, 0x06, 0xb6, 0xd6, 0x0f, 0xfc, 0x31, 0xd7, 0xfc, 0x6c, 0x66, 0xb2, 0x21,
-	0xf7, 0x03, 0x5e, 0x18, 0x88, 0xe3, 0xde, 0xe2, 0x96, 0x83, 0x1b, 0x98, 0x64, 0xa4, 0x40, 0x66,
-	0x1c, 0xc6, 0xb1, 0x6f, 0x73, 0x8d, 0xe2, 0x96, 0x08, 0x53, 0x34, 0xc2, 0x5c, 0x87, 0xed, 0x28,
-	0x9c, 0x77, 0xba, 0xc3, 0x87, 0x98, 0xf8, 0xb3, 0x13, 0xc6, 0xcf, 0x5d, 0x3e, 0x44, 0x00, 0xe3,
-	0xd8, 0x34, 0xac, 0x6c, 0x43, 0x99, 0xb4, 0x30, 0x8e, 0x68, 0x4c, 0xb9, 0x06, 0x5b, 0x21, 0x90,
-	0xe3, 0xdf, 0x0f, 0xf2, 0x06, 0xdc, 0x14, 0xe1, 0xe9, 0x01, 0x17, 0x63, 0xac, 0x81, 0x77, 0x7b,
-	0xc8, 0x99, 0xb2, 0x42, 0xa6, 0x1e, 0x71, 0xa6, 0xac, 0x24, 0x53, 0x9f, 0x72, 0xcb, 0x67, 0x4b,
-	0x91, 0xe2, 0x1f, 0x12, 0x68, 0x13, 0xc4, 0x08, 0x94, 0xf7, 0xf8, 0x8c, 0xd3, 0xb7, 0x9d, 0x09,
-	0xd7, 0xfb, 0x63, 0x4e, 0x3f, 0x80, 0x71, 0xec, 0x27, 0x7c, 0xd2, 0xa4, 0x85, 0x4d, 0xfa, 0x29,
-	0x9f, 0x74, 0x08, 0xe4, 0xf8, 0x9f, 0xf3, 0x49, 0x93, 0xa6, 0xc8, 0xa4, 0xbf, 0xe0, 0x93, 0x8e,
-	0x35, 0xf0, 0x6e, 0xcf, 0xc8, 0xd6, 0x61, 0x0c, 0x05, 0x76, 0x5a, 0x25, 0xde, 0x86, 0xa2, 0x31,
-	0xc5, 0xeb, 0xcf, 0xe2, 0x97, 0xf9, 0x6b, 0x2e, 0xea, 0x62, 0xbe, 0x7a, 0x63, 0x6c, 0x92, 0xfe,
-	0x65, 0x09, 0x72, 0xa4, 0x00, 0x92, 0x5d, 0xfc, 0xa5, 0x92, 0xc5, 0x79, 0xbc, 0x3a, 0x32, 0x79,
-	0xdf, 0x9c, 0x4e, 0x86, 0xa4, 0xe8, 0x7d, 0x73, 0x94, 0xc3, 0xcc, 0x4a, 0xb9, 0x1f, 0xe3, 0x30,
-	0x7a, 0x97, 0x99, 0x5d, 0xbd, 0xcb, 0xdc, 0x7c, 0x45, 0xfe, 0x00, 0x2a, 0x91, 0x2b, 0x78, 0xec,
-	0xb4, 0x33, 0x1b, 0xef, 0xe0, 0xe3, 0xf7, 0x9e, 0x85, 0xcd, 0xf7, 0x9e, 0x4d, 0xc8, 0x2c, 0xdd,
-	0x19, 0xbb, 0x02, 0xa9, 0x46, 0xb6, 0x9b, 0x6a, 0x77, 0x4d, 0xbd, 0x5d, 0xe9, 0xe2, 0x7a, 0xbb,
-	0x75, 0x77, 0x17, 0x70, 0xc9, 0xbb, 0x8b, 0xe6, 0x3f, 0xc9, 0x43, 0x69, 0xb0, 0x40, 0xd4, 0xef,
-	0x8a, 0x8f, 0x62, 0xd7, 0xa9, 0x7b, 0x09, 0xc5, 0x1c, 0x06, 0x88, 0xf4, 0x2c, 0xfd, 0x31, 0x0e,
-	0xbd, 0x4b, 0xdb, 0xe4, 0xa7, 0xe9, 0xfb, 0x9b, 0xf1, 0xbb, 0x04, 0x4f, 0x7c, 0x0a, 0x05, 0x7a,
-	0x05, 0xc4, 0xaf, 0x08, 0x6e, 0x6d, 0xee, 0x42, 0xef, 0x3f, 0x90, 0xf8, 0x25, 0x94, 0x96, 0x36,
-	0xef, 0x95, 0x4d, 0x56, 0x15, 0x25, 0x7b, 0x8d, 0x39, 0x2a, 0xe6, 0xce, 0x24, 0xa7, 0x97, 0xec,
-	0x3e, 0xeb, 0x02, 0xee, 0xe8, 0x29, 0x27, 0xe6, 0x6e, 0x82, 0x3c, 0xdf, 0x75, 0x3e, 0xb0, 0x3b,
-	0xbb, 0x0b, 0xb8, 0x6b, 0x53, 0x44, 0xf1, 0x67, 0xa0, 0x42, 0x65, 0xa0, 0x4f, 0x5d, 0x67, 0xc9,
-	0xcb, 0xb9, 0xee, 0x7c, 0x9b, 0x24, 0x8e, 0x31, 0x72, 0xf3, 0x31, 0xe4, 0x99, 0x60, 0xee, 0xb2,
-	0x80, 0x8b, 0x95, 0xc7, 0x33, 0x4e, 0x31, 0x91, 0x12, 0x61, 0x75, 0x4d, 0xa0, 0x1c, 0x21, 0x20,
-	0x1e, 0x40, 0x91, 0x1b, 0xe7, 0xb7, 0x64, 0x8f, 0x0f, 0xd9, 0x00, 0x94, 0x4b, 0xba, 0x9e, 0xae,
-	0xc6, 0x07, 0x20, 0x24, 0xc9, 0x28, 0x8f, 0xf1, 0xf2, 0xa7, 0x52, 0x8c, 0xad, 0x92, 0xd4, 0xc6,
-	0xc4, 0xf6, 0x29, 0x94, 0x42, 0xc9, 0x5f, 0xb2, 0xcf, 0xa7, 0x90, 0x67, 0x82, 0xbf, 0x0d, 0x05,
-	0x7a, 0xb5, 0x74, 0x11, 0xfa, 0x21, 0x14, 0xb8, 0xd0, 0x2f, 0x83, 0x2f, 0x9d, 0xae, 0xbb, 0x4c,
-	0x01, 0xc8, 0x77, 0xe5, 0x71, 0xbf, 0xf5, 0x52, 0xc0, 0x19, 0x5f, 0x85, 0xfe, 0xaf, 0x1f, 0xab,
-	0x83, 0xf1, 0x50, 0xc8, 0x63, 0x54, 0x55, 0x19, 0x29, 0xea, 0x6b, 0x45, 0x48, 0x8b, 0x55, 0x28,
-	0x8d, 0xfb, 0xfc, 0x33, 0x43, 0xaa, 0x36, 0x54, 0x45, 0xd6, 0x14, 0x21, 0x4b, 0xcb, 0x39, 0x46,
-	0x9a, 0x3a, 0xf8, 0x5a, 0xc8, 0x49, 0xbf, 0x9b, 0x82, 0x4a, 0xc7, 0x3e, 0x47, 0xae, 0x87, 0x2e,
-	0xe5, 0xdb, 0xd8, 0xda, 0x4f, 0xaf, 0x5b, 0xfb, 0x49, 0xbf, 0x97, 0xb9, 0xac, 0xdf, 0xcb, 0x6e,
-	0xf2, 0xcc, 0xab, 0xde, 0x24, 0x47, 0x68, 0x6e, 0xf6, 0x26, 0x31, 0xed, 0xe5, 0x37, 0x8a, 0xf7,
-	0xdf, 0x66, 0xa0, 0xc8, 0xcd, 0x32, 0x91, 0xd7, 0xdf, 0x82, 0x02, 0x35, 0xe6, 0xcd, 0xc9, 0xfd,
-	0xa5, 0x7c, 0x76, 0x8c, 0x93, 0xec, 0x46, 0x0f, 0x1d, 0x5d, 0x04, 0xb9, 0xe4, 0x29, 0x62, 0x6c,
-	0x11, 0xf0, 0x1a, 0xa9, 0x3c, 0xa9, 0x91, 0xfa, 0x0e, 0xc5, 0x4f, 0x67, 0xa4, 0x3c, 0x4f, 0x27,
-	0xf5, 0xc3, 0xab, 0xc5, 0x4f, 0xd1, 0xf2, 0xc7, 0x58, 0x69, 0x53, 0xe9, 0xe2, 0xd2, 0xa6, 0x70,
-	0xeb, 0x02, 0x1b, 0xea, 0x8e, 0x62, 0xc5, 0x4f, 0xe5, 0x8b, 0x8b, 0x9f, 0xee, 0x43, 0xf9, 0xad,
-	0x35, 0x9b, 0xe9, 0x0b, 0x52, 0x88, 0xc7, 0x6e, 0xa1, 0x23, 0x71, 0x2a, 0x52, 0xa4, 0x27, 0x41,
-	0x8e, 0x4e, 0xa5, 0x9a, 0xbc, 0xe9, 0x0f, 0x2a, 0x03, 0xa5, 0xa7, 0x50, 0x8d, 0x39, 0x05, 0xb2,
-	0xbd, 0x25, 0x3b, 0xbf, 0x8d, 0xde, 0x49, 0xfa, 0x49, 0x66, 0xed, 0x3e, 0xef, 0x12, 0xf6, 0xf0,
-	0x9d, 0x0c, 0x3f, 0x51, 0x15, 0x97, 0x4d, 0xce, 0x34, 0x12, 0x91, 0xa3, 0x76, 0x96, 0xdb, 0x64,
-	0x67, 0x12, 0x29, 0xda, 0xf7, 0x51, 0x23, 0x4f, 0xee, 0x92, 0xb7, 0xe3, 0xdc, 0xe1, 0x6d, 0x63,
-	0xc2, 0xa7, 0x15, 0x2e, 0x28, 0xa8, 0x0b, 0x2b, 0x2e, 0x8b, 0xc9, 0x4c, 0x81, 0x53, 0x5b, 0x7a,
-	0xe2, 0x63, 0xd8, 0xa6, 0x78, 0xfa, 0x72, 0x31, 0x31, 0x7c, 0xa4, 0x53, 0x06, 0x4a, 0x24, 0xee,
-	0xae, 0x65, 0xa0, 0x09, 0x62, 0xbc, 0xc7, 0x72, 0x69, 0xd1, 0xda, 0x86, 0xca, 0x25, 0x0a, 0xc7,
-	0xbf, 0x4b, 0x15, 0x5d, 0xcc, 0x84, 0xab, 0x17, 0x9b, 0x30, 0x2f, 0xa6, 0xac, 0x91, 0xfb, 0xeb,
-	0xbf, 0x95, 0x86, 0x3a, 0xb1, 0x20, 0x3a, 0xcb, 0xef, 0x54, 0xba, 0xfd, 0x34, 0x59, 0xba, 0x7d,
-	0x2b, 0x81, 0x1a, 0xd2, 0x0c, 0x0a, 0xb8, 0x1f, 0xc5, 0x0a, 0xb8, 0xf7, 0x36, 0x77, 0x20, 0xf5,
-	0xd0, 0x0f, 0x68, 0xed, 0x6d, 0x36, 0x59, 0x0e, 0x92, 0x44, 0xd6, 0xcc, 0x45, 0xf3, 0x46, 0x58,
-	0x76, 0xbd, 0x05, 0x25, 0xf4, 0x9e, 0x9c, 0x12, 0x4e, 0xe8, 0x2c, 0x72, 0xcd, 0xeb, 0xac, 0xc2,
-	0x7a, 0x1b, 0xca, 0x4c, 0x27, 0x41, 0x63, 0xb5, 0xd9, 0xa0, 0xa5, 0xd5, 0x5b, 0x50, 0xf2, 0x96,
-	0xa6, 0x89, 0xd0, 0x04, 0xd1, 0xc4, 0xb9, 0x28, 0xfd, 0x5e, 0x19, 0x20, 0x62, 0x03, 0x91, 0x65,
-	0x91, 0xda, 0xb0, 0x2c, 0x02, 0xcb, 0x4c, 0x6f, 0xb6, 0x4c, 0xee, 0xd4, 0x32, 0xc4, 0x14, 0xea,
-	0x50, 0x98, 0x23, 0xcf, 0x33, 0xa6, 0x88, 0x55, 0x06, 0xc6, 0x57, 0xc0, 0x86, 0x28, 0x11, 0x3b,
-	0x0f, 0x21, 0xf5, 0xcf, 0xc9, 0x45, 0x56, 0xb8, 0x60, 0x91, 0xd5, 0xa1, 0x40, 0x1d, 0xe4, 0x07,
-	0xe2, 0x1b, 0x8b, 0xe2, 0xc3, 0xe0, 0x52, 0xa4, 0x94, 0x2c, 0x98, 0x0c, 0xe7, 0xcf, 0x6f, 0x43,
-	0x1e, 0x42, 0xde, 0x45, 0x86, 0xe7, 0xd8, 0xc4, 0x98, 0x37, 0x21, 0xab, 0x04, 0x85, 0xd8, 0x1b,
-	0xb6, 0xfb, 0x72, 0xc2, 0xee, 0x2b, 0x1b, 0xec, 0xfe, 0x73, 0x7a, 0xe6, 0x40, 0xcf, 0xb6, 0xa8,
-	0xae, 0x98, 0x49, 0x5f, 0x5b, 0x63, 0xd2, 0x4c, 0x31, 0x8f, 0x40, 0x58, 0xd2, 0x2b, 0x58, 0x72,
-	0x28, 0x89, 0x25, 0xc3, 0x2a, 0x43, 0xd7, 0xbd, 0xe7, 0xf9, 0x0c, 0x2a, 0xc4, 0x99, 0x72, 0xf2,
-	0xf5, 0x15, 0xf2, 0x71, 0xfb, 0x92, 0x5e, 0x04, 0x35, 0x2c, 0x5b, 0x50, 0xa5, 0xcf, 0x22, 0xf4,
-	0x9e, 0x3c, 0xd2, 0x14, 0x55, 0xf8, 0x08, 0x27, 0x25, 0x0c, 0x24, 0x1f, 0x2b, 0x7d, 0x4d, 0x48,
-	0x89, 0xdb, 0x50, 0x67, 0x10, 0xe5, 0x2b, 0xa5, 0x35, 0xd6, 0x06, 0xaa, 0x90, 0x96, 0x7e, 0xb5,
-	0x00, 0x79, 0x26, 0x12, 0x09, 0xf6, 0x54, 0x45, 0x1e, 0x0d, 0xfa, 0x3a, 0x2b, 0xd3, 0x0e, 0xf0,
-	0xf4, 0x23, 0xb9, 0xd3, 0x55, 0xda, 0xc2, 0x47, 0x31, 0x9c, 0xbe, 0x26, 0x77, 0xfa, 0x8a, 0xaa,
-	0xb3, 0xdc, 0x87, 0xe1, 0xec, 0x8a, 0x1f, 0xc3, 0xf5, 0x55, 0x9c, 0x4e, 0xaf, 0xa3, 0xc9, 0x5a,
-	0x67, 0xd0, 0x17, 0xb6, 0xc5, 0x4f, 0x60, 0xff, 0x02, 0x04, 0xbd, 0xdd, 0x19, 0xbd, 0x12, 0x76,
-	0xc4, 0xbb, 0x20, 0x5d, 0x84, 0xd5, 0x53, 0x7a, 0x03, 0xf5, 0x6b, 0xa1, 0x28, 0xee, 0x41, 0x73,
-	0x05, 0x6f, 0xa8, 0x2a, 0x4a, 0x6f, 0xa8, 0x29, 0x6d, 0x61, 0x6b, 0x2d, 0xcb, 0xe3, 0x61, 0x5b,
-	0xd6, 0x14, 0xce, 0xf2, 0x15, 0xf1, 0x00, 0x3e, 0x61, 0x38, 0xc1, 0x94, 0x55, 0xe5, 0xb8, 0x33,
-	0xd2, 0x54, 0x3a, 0x98, 0xd6, 0xe9, 0x29, 0x83, 0xb1, 0x26, 0x5c, 0x15, 0x1f, 0xc0, 0xdd, 0x55,
-	0xcc, 0xb5, 0xb8, 0x8d, 0x08, 0x67, 0x01, 0xae, 0xa6, 0xa8, 0xbd, 0x4e, 0x5f, 0xc6, 0x9c, 0xa5,
-	0xc4, 0x7d, 0xb8, 0x91, 0x6c, 0xc7, 0x89, 0x22, 0xa6, 0xa5, 0xa8, 0x4a, 0x5b, 0x48, 0x8b, 0x37,
-	0xa0, 0xc1, 0x30, 0x8e, 0x54, 0xb9, 0xa7, 0xbc, 0x19, 0xa8, 0xaf, 0x74, 0x55, 0xe9, 0x0d, 0x5e,
-	0x2b, 0x6d, 0x21, 0x83, 0x15, 0xca, 0x5a, 0x8f, 0x5b, 0xba, 0xa2, 0xaa, 0x03, 0x55, 0xc8, 0x46,
-	0x06, 0xed, 0xf4, 0x5f, 0xcb, 0xdd, 0x4e, 0x3b, 0xec, 0xda, 0x69, 0x0b, 0x39, 0xf1, 0x1a, 0xec,
-	0x26, 0xda, 0x07, 0x47, 0x47, 0x8a, 0x3a, 0x12, 0xf2, 0x11, 0x7e, 0x3a, 0x03, 0x7d, 0xf4, 0xa6,
-	0xa3, 0xb5, 0x5e, 0xbe, 0x18, 0xc8, 0x2a, 0xb6, 0x83, 0x0e, 0xe6, 0xf8, 0x7a, 0x84, 0x38, 0xb5,
-	0x33, 0xac, 0xab, 0xd6, 0xa0, 0xdf, 0x57, 0x5a, 0xb8, 0xbd, 0x10, 0x21, 0xae, 0x2a, 0xad, 0x41,
-	0xbf, 0xd5, 0xe9, 0x76, 0xa8, 0xd2, 0x4b, 0x91, 0xa9, 0x04, 0x4f, 0x78, 0x74, 0x9e, 0x4e, 0x8b,
-	0xe2, 0x4d, 0xb8, 0xc6, 0x5a, 0x89, 0xb5, 0xc6, 0xe9, 0x82, 0xd8, 0x80, 0x9d, 0x58, 0x33, 0x97,
-	0x41, 0x59, 0x6c, 0xc2, 0x95, 0x44, 0xcb, 0x48, 0x93, 0x55, 0xdc, 0xab, 0xb2, 0xd2, 0x8b, 0x0f,
-	0x57, 0x8d, 0x58, 0x20, 0x79, 0x81, 0xd4, 0x7a, 0xa9, 0xb4, 0x5e, 0x91, 0xf7, 0x47, 0xe3, 0x11,
-	0xb3, 0x8d, 0xb6, 0x70, 0x23, 0xc2, 0x14, 0xc1, 0x22, 0xc9, 0x3d, 0x97, 0x9a, 0x70, 0x2d, 0x62,
-	0x58, 0x91, 0xe6, 0x71, 0x5f, 0x1e, 0x6b, 0x2f, 0x07, 0x6a, 0xe7, 0xfb, 0x4a, 0x5b, 0x68, 0xd2,
-	0xc7, 0x4f, 0x21, 0x0e, 0xef, 0x5c, 0x8b, 0x88, 0x83, 0x34, 0xc4, 0xba, 0xd5, 0x93, 0xdd, 0x38,
-	0xe3, 0x82, 0xf4, 0x09, 0x14, 0x8e, 0xac, 0x99, 0x8f, 0x5c, 0x4f, 0xbc, 0x06, 0x35, 0x17, 0x9d,
-	0x2e, 0x3d, 0xa4, 0x87, 0x2f, 0x20, 0xc9, 0x0b, 0xb5, 0x67, 0xd2, 0x8f, 0x53, 0x50, 0x8e, 0x3e,
-	0x5c, 0x78, 0x02, 0xa5, 0x73, 0xc3, 0xb5, 0xb0, 0x13, 0xe2, 0x59, 0xd7, 0xde, 0xda, 0x27, 0x0e,
-	0x87, 0xaf, 0x19, 0x5a, 0xf3, 0xef, 0xa7, 0xa0, 0xc8, 0x3f, 0x12, 0x59, 0x58, 0x50, 0x83, 0x9b,
-	0x66, 0xcf, 0xd4, 0x68, 0x5c, 0xce, 0x24, 0x2b, 0xa7, 0xd7, 0xd1, 0x25, 0x21, 0xfa, 0x79, 0xee,
-	0xb5, 0xdc, 0x1d, 0x2b, 0xd8, 0xeb, 0x7a, 0xc8, 0x74, 0x83, 0x02, 0xe5, 0x88, 0xd7, 0x1d, 0x11,
-	0xb8, 0xf4, 0x60, 0xdd, 0xd6, 0xab, 0x04, 0xb4, 0x3f, 0xad, 0x80, 0x1f, 0x29, 0x2d, 0x55, 0xd1,
-	0x84, 0xb4, 0x74, 0x0f, 0x4a, 0xe1, 0x13, 0xcb, 0x32, 0x64, 0xde, 0xa2, 0x0f, 0xab, 0x0c, 0xa7,
-	0x0f, 0x4a, 0xd2, 0x17, 0x00, 0x01, 0xa2, 0x27, 0xde, 0x85, 0xd2, 0x82, 0x7f, 0x31, 0xd9, 0xac,
-	0x7b, 0xb4, 0x29, 0x7d, 0x06, 0xd0, 0x72, 0xd1, 0x04, 0xd9, 0xbe, 0x65, 0xcc, 0x92, 0x35, 0x94,
-	0x69, 0xf6, 0x66, 0x86, 0xce, 0x86, 0xbe, 0xa4, 0xfc, 0x69, 0x28, 0x87, 0x1d, 0x3c, 0x1c, 0x06,
-	0xcd, 0xf0, 0x93, 0x8d, 0x14, 0x09, 0x83, 0x21, 0xae, 0xf4, 0x3b, 0x29, 0xc8, 0x53, 0x01, 0x88,
-	0xb7, 0x63, 0x49, 0xcf, 0x6e, 0x52, 0x40, 0x34, 0xe3, 0xf9, 0x14, 0xa7, 0x94, 0xec, 0xc8, 0x9f,
-	0xe5, 0x3c, 0xcd, 0x15, 0x4c, 0x95, 0x63, 0x88, 0x77, 0xa2, 0xcf, 0x58, 0x62, 0x7b, 0x1c, 0x86,
-	0x4a, 0xaa, 0x74, 0x9b, 0x77, 0xa1, 0x14, 0xf6, 0x89, 0x5b, 0x00, 0x93, 0x6e, 0x9a, 0x97, 0x20,
-	0xd2, 0x02, 0x77, 0x9e, 0x3f, 0x60, 0x9c, 0x8a, 0xf4, 0xe9, 0x3a, 0xd5, 0x55, 0xa1, 0xa4, 0x2a,
-	0x47, 0x8a, 0xaa, 0xf4, 0x5b, 0x0a, 0xad, 0x43, 0xa4, 0x9a, 0x4c, 0x4b, 0x7f, 0x18, 0x4a, 0xaa,
-	0xe1, 0xa3, 0xae, 0x35, 0xb7, 0x7c, 0x4c, 0xff, 0x9b, 0x05, 0xb3, 0xe7, 0x64, 0xf5, 0x66, 0x9a,
-	0x3e, 0x52, 0x30, 0x8d, 0x85, 0x61, 0xf2, 0x37, 0xa4, 0x59, 0xc9, 0x07, 0x08, 0xba, 0x7b, 0xe2,
-	0x6d, 0xc8, 0xb3, 0xca, 0xc2, 0x15, 0x85, 0x86, 0x83, 0xdc, 0x84, 0x5d, 0x63, 0x3a, 0x75, 0xd1,
-	0x14, 0xe7, 0xc0, 0x13, 0x5a, 0x00, 0xa8, 0xe3, 0x61, 0x69, 0xb5, 0x82, 0x04, 0xcd, 0xd5, 0xe6,
-	0xc4, 0xa8, 0xff, 0x2a, 0x0d, 0xb9, 0xce, 0xdc, 0x98, 0x5e, 0x50, 0xdc, 0x4f, 0x9a, 0xa9, 0x9a,
-	0x24, 0xc8, 0x1a, 0x8b, 0x85, 0xc9, 0x34, 0xb4, 0x82, 0x23, 0x2f, 0x16, 0xa6, 0x78, 0x17, 0xf2,
-	0x13, 0xc7, 0x7c, 0x8b, 0xd6, 0x14, 0x62, 0x53, 0xac, 0x36, 0x69, 0x15, 0x77, 0x20, 0x4f, 0xce,
-	0xe3, 0xe9, 0xa6, 0x85, 0x3d, 0x0d, 0x6a, 0xbe, 0x80, 0x2c, 0xa1, 0x12, 0xd7, 0x16, 0xb0, 0xdb,
-	0xb1, 0x78, 0xa1, 0x6f, 0x66, 0x43, 0xa1, 0xef, 0x29, 0xe4, 0xd9, 0x18, 0x71, 0x2a, 0x8f, 0x00,
-	0x42, 0xfb, 0x5d, 0x9d, 0x43, 0x68, 0xbe, 0xe4, 0x61, 0xce, 0x3e, 0xe4, 0x4d, 0xc7, 0x3e, 0xb5,
-	0xa6, 0xab, 0xe3, 0xb0, 0xa5, 0x7d, 0x83, 0xd9, 0x47, 0x11, 0xb2, 0xf2, 0x70, 0xd8, 0xa2, 0x8b,
-	0xb9, 0x3d, 0x68, 0xbd, 0x52, 0x48, 0x5a, 0x92, 0x83, 0x3c, 0x2b, 0x06, 0xbe, 0x02, 0xb5, 0x30,
-	0xf3, 0x22, 0x25, 0xb7, 0x41, 0x55, 0xef, 0x99, 0xe3, 0xf9, 0x7a, 0xe4, 0xd9, 0xda, 0x6d, 0xf6,
-	0x16, 0x39, 0x43, 0xb4, 0xb0, 0x9b, 0xac, 0x2b, 0xa6, 0xcf, 0x90, 0xf7, 0x20, 0x67, 0xcd, 0x79,
-	0x5a, 0x5b, 0x7e, 0x5a, 0x4f, 0x48, 0x58, 0xbc, 0x17, 0xe4, 0x9c, 0xb9, 0xe4, 0x96, 0x85, 0x91,
-	0x61, 0x15, 0xc7, 0xbf, 0x9d, 0x09, 0xf2, 0xaf, 0x07, 0xb1, 0x65, 0x7a, 0x63, 0x43, 0x0f, 0x6a,
-	0x06, 0x3f, 0x03, 0x55, 0xaa, 0x62, 0x3d, 0x56, 0x05, 0xfd, 0xc9, 0xa6, 0x4e, 0x54, 0x1b, 0x4c,
-	0x18, 0xdf, 0x83, 0x8a, 0x67, 0xd8, 0x93, 0x13, 0xe7, 0xbd, 0x1e, 0x3c, 0x3a, 0x8f, 0x1d, 0x63,
-	0xc6, 0xfb, 0x8e, 0x28, 0x2e, 0x29, 0x1c, 0xfe, 0x56, 0x6f, 0xdb, 0xfc, 0x3e, 0x54, 0x62, 0x83,
-	0xd5, 0x20, 0x3f, 0x71, 0xad, 0x73, 0xe2, 0x17, 0x53, 0x2b, 0xcf, 0xa8, 0x1f, 0x41, 0x8d, 0xb6,
-	0xea, 0xce, 0x82, 0xde, 0xb5, 0x65, 0x92, 0x46, 0x11, 0xba, 0xd9, 0xe6, 0x9f, 0x82, 0x72, 0x94,
-	0x99, 0x2f, 0x63, 0x02, 0x3b, 0xb8, 0x04, 0xff, 0x54, 0x78, 0xe1, 0x33, 0x45, 0xec, 0xc9, 0xef,
-	0x6f, 0x28, 0x73, 0x1e, 0x29, 0xdd, 0x23, 0x6a, 0x50, 0x43, 0x59, 0xc5, 0xc9, 0x6f, 0x5a, 0x6a,
-	0xaf, 0x43, 0xdd, 0x82, 0x2a, 0xb5, 0x38, 0xfd, 0xf5, 0xa0, 0x3b, 0xee, 0x29, 0xf4, 0x2c, 0x6f,
-	0x24, 0xf7, 0xdb, 0x2f, 0x06, 0x5f, 0xe9, 0xa4, 0x58, 0x3a, 0x1d, 0x89, 0x31, 0x19, 0xe9, 0x4a,
-	0xf8, 0x20, 0x5d, 0x7d, 0x23, 0xa4, 0xc8, 0xdf, 0x81, 0x90, 0x96, 0x7e, 0x92, 0x86, 0x72, 0x1f,
-	0xf9, 0xc1, 0xf3, 0xf3, 0x1a, 0xe4, 0xc9, 0xf9, 0x28, 0xbd, 0x6f, 0x2e, 0x7d, 0xfb, 0xdd, 0xb2,
-	0xf8, 0x0c, 0x2a, 0xd6, 0x42, 0x67, 0xef, 0xaa, 0x82, 0x7b, 0x84, 0x8f, 0x43, 0xbc, 0x08, 0xf9,
-	0xc3, 0xce, 0x30, 0xf2, 0xe3, 0x03, 0x44, 0x25, 0x79, 0x16, 0x8a, 0xab, 0x0b, 0xc7, 0xf5, 0x49,
-	0xe5, 0x91, 0x65, 0x4f, 0xf9, 0xf9, 0xc2, 0xad, 0xf5, 0x54, 0x86, 0x8e, 0xeb, 0xf7, 0x28, 0x66,
-	0xf3, 0xe7, 0xa0, 0x14, 0x12, 0x7d, 0x0c, 0x45, 0xf2, 0x73, 0x14, 0xa6, 0x33, 0x5b, 0x3d, 0xc0,
-	0x8f, 0x51, 0x60, 0x58, 0xe4, 0x6e, 0x2b, 0xe0, 0x9e, 0xc5, 0x85, 0x9f, 0x85, 0x72, 0x64, 0x84,
-	0x70, 0xb9, 0x86, 0x6f, 0x4e, 0xe3, 0x2b, 0x1b, 0xc3, 0xe9, 0x23, 0x35, 0x21, 0x32, 0x3e, 0x79,
-	0x6a, 0x29, 0xed, 0x41, 0x31, 0x18, 0xab, 0x08, 0xd9, 0xce, 0xf0, 0xfc, 0x0b, 0xfa, 0x86, 0xb4,
-	0x33, 0x3c, 0xff, 0x52, 0x48, 0x4b, 0xff, 0x22, 0x07, 0xb5, 0xf0, 0x79, 0x16, 0x51, 0xc1, 0xf7,
-	0x12, 0xaf, 0xe7, 0x71, 0x24, 0x88, 0xa5, 0x27, 0x71, 0xfc, 0xc8, 0xa7, 0xf4, 0x8b, 0xb9, 0xd8,
-	0xd3, 0xb0, 0xc4, 0xb9, 0x6f, 0xae, 0xf5, 0x12, 0xff, 0xfb, 0x1f, 0x0a, 0xe2, 0x16, 0x54, 0xda,
-	0x72, 0x4b, 0x1f, 0xbc, 0x56, 0x54, 0xb5, 0xd3, 0x56, 0x84, 0xff, 0x58, 0x10, 0x77, 0xa0, 0x8e,
-	0x41, 0xaa, 0x22, 0xb7, 0xf5, 0x91, 0x22, 0xab, 0xad, 0x97, 0xc2, 0x7f, 0x2a, 0x88, 0x65, 0xc8,
-	0x1f, 0x0d, 0xde, 0xf4, 0x15, 0x55, 0xf8, 0x0d, 0xfa, 0x31, 0x52, 0xb4, 0x4e, 0x5b, 0xf8, 0xcf,
-	0x05, 0xb1, 0x04, 0xd9, 0x57, 0x9d, 0x6e, 0x57, 0xf8, 0x4d, 0x02, 0x1f, 0x29, 0xda, 0x71, 0xa7,
-	0x2d, 0xfc, 0x17, 0xfe, 0x31, 0xee, 0xb4, 0x85, 0xdf, 0x2a, 0x88, 0x15, 0x28, 0x8c, 0x14, 0x6d,
-	0xd8, 0x92, 0x87, 0xc2, 0x6f, 0x93, 0x21, 0xba, 0x9d, 0xfe, 0xf8, 0x2b, 0xbd, 0xd3, 0xeb, 0x8d,
-	0x35, 0xf9, 0x45, 0x57, 0x11, 0x7e, 0xa7, 0x20, 0xee, 0x82, 0xd0, 0x57, 0x34, 0xfd, 0x45, 0xa7,
-	0x8f, 0x07, 0x56, 0x5f, 0x77, 0x5a, 0x8a, 0xf0, 0xe3, 0x82, 0x28, 0x42, 0x95, 0x80, 0xd5, 0x81,
-	0xdc, 0x6e, 0xc9, 0x23, 0x4d, 0xf8, 0xaf, 0x05, 0xb1, 0x06, 0x25, 0x0c, 0x93, 0xdb, 0xbd, 0x4e,
-	0x5f, 0xf8, 0x5d, 0x42, 0x1e, 0x7f, 0xab, 0xf2, 0x1b, 0xe1, 0xbf, 0x15, 0xc4, 0x2a, 0x14, 0x3b,
-	0xc3, 0x96, 0xde, 0x1d, 0xb4, 0x5e, 0x09, 0xff, 0x9d, 0x20, 0xe3, 0x4f, 0xca, 0xfd, 0xef, 0x15,
-	0xc4, 0x3a, 0xc0, 0xe8, 0xeb, 0x91, 0xde, 0x1b, 0xb4, 0xc7, 0x5d, 0x45, 0xf8, 0x1f, 0x04, 0x01,
-	0x03, 0x54, 0xf9, 0x4d, 0x67, 0x20, 0xfc, 0xcf, 0x00, 0xa1, 0xf5, 0x52, 0x1d, 0x0c, 0x34, 0xe1,
-	0x7f, 0x05, 0x80, 0xa1, 0xa6, 0xca, 0x2d, 0x45, 0xf8, 0xdf, 0x41, 0x8f, 0xa1, 0xdc, 0x6a, 0x69,
-	0xc2, 0xff, 0x09, 0xbe, 0x29, 0x3f, 0x3f, 0x21, 0x1c, 0xe0, 0xef, 0x17, 0xb8, 0xff, 0xef, 0x07,
-	0x9f, 0x7d, 0x3c, 0xa3, 0xff, 0x4b, 0x84, 0x4e, 0xc6, 0x63, 0x9b, 0x08, 0xe1, 0x17, 0x8a, 0x1c,
-	0x03, 0x6f, 0xbc, 0x84, 0x3f, 0x5d, 0x14, 0xb7, 0xa1, 0x46, 0x3e, 0xb5, 0xaf, 0xf1, 0x8e, 0xef,
-	0xa8, 0x73, 0x2c, 0xfc, 0x99, 0x22, 0xd6, 0x5b, 0xef, 0x55, 0x7f, 0xd0, 0x16, 0x7e, 0x91, 0xfc,
-	0xdf, 0x55, 0xe4, 0x91, 0x22, 0xfc, 0xd9, 0xa2, 0x28, 0x40, 0x59, 0x1e, 0xb7, 0x3b, 0x9a, 0xfe,
-	0x46, 0xed, 0x68, 0x8a, 0xf0, 0xe7, 0x8a, 0x58, 0x64, 0x14, 0x82, 0xb7, 0x8b, 0xea, 0xa0, 0x2b,
-	0xfc, 0xa0, 0xc8, 0x34, 0x70, 0x84, 0x35, 0xf0, 0x4b, 0x45, 0xcc, 0x42, 0x2f, 0xaa, 0xf7, 0x3f,
-	0x5f, 0xc4, 0x73, 0xc0, 0x20, 0x3a, 0x87, 0xbf, 0x50, 0x24, 0xfa, 0xfb, 0x7a, 0xd4, 0x1d, 0x1c,
-	0x0b, 0x7f, 0xb1, 0x88, 0x25, 0xf0, 0x46, 0x7e, 0xa5, 0xe8, 0x72, 0x57, 0x56, 0x7b, 0xc2, 0x5f,
-	0x22, 0x43, 0xbc, 0xc0, 0x02, 0xd6, 0x47, 0xe3, 0xd1, 0x50, 0xe9, 0xb7, 0x85, 0x1f, 0x12, 0x24,
-	0x3a, 0x2c, 0xb6, 0x1d, 0xe1, 0x2f, 0x17, 0xa5, 0x3f, 0x02, 0xa5, 0xae, 0x65, 0x2f, 0xdf, 0xb3,
-	0x97, 0x41, 0xf5, 0xc0, 0x9a, 0x3f, 0xf0, 0x22, 0x9f, 0xe4, 0x8f, 0x0d, 0xc4, 0x0c, 0x5a, 0xfa,
-	0x3b, 0x19, 0x00, 0x95, 0xa4, 0x3a, 0x84, 0xc2, 0x23, 0x28, 0xb8, 0xb1, 0xa4, 0x28, 0xfa, 0xc4,
-	0x2a, 0x40, 0x63, 0xff, 0x36, 0x7f, 0x33, 0x0d, 0x79, 0xfa, 0xaf, 0x78, 0x18, 0x73, 0xd5, 0xfb,
-	0x17, 0xf4, 0x0a, 0x5c, 0xf4, 0x99, 0xe1, 0x4e, 0xd8, 0x33, 0x90, 0x0a, 0x64, 0x3d, 0xe7, 0xd4,
-	0x67, 0x09, 0xd3, 0x5f, 0x4f, 0x6f, 0x78, 0xd4, 0xaa, 0x76, 0x7b, 0x9a, 0x2e, 0x8f, 0x84, 0x14,
-	0x49, 0x11, 0xf1, 0x47, 0x6b, 0xa0, 0x2a, 0x42, 0x5a, 0xac, 0x40, 0x91, 0x7e, 0x0e, 0xc7, 0x42,
-	0x26, 0x68, 0x6c, 0xcb, 0x9a, 0x2c, 0x64, 0xc5, 0x1a, 0x9e, 0x61, 0x4f, 0xd3, 0x8f, 0x46, 0x9d,
-	0xef, 0xb3, 0xdf, 0x7e, 0x20, 0xdf, 0x58, 0xb6, 0x78, 0x43, 0x2b, 0x40, 0x85, 0x7c, 0xf7, 0x94,
-	0x1e, 0xb1, 0x67, 0x6c, 0x3d, 0x55, 0x0a, 0x19, 0x1d, 0xff, 0xdc, 0x58, 0x19, 0x2b, 0x42, 0x31,
-	0xa0, 0x49, 0x0c, 0xac, 0x24, 0xd6, 0xa1, 0x4c, 0x3f, 0x07, 0x47, 0x9d, 0xae, 0x22, 0x40, 0x40,
-	0xb4, 0x3f, 0x54, 0x07, 0x2d, 0xa1, 0x1c, 0x70, 0xa4, 0x8e, 0x46, 0x42, 0x25, 0x40, 0x57, 0xb5,
-	0xa1, 0xda, 0x19, 0x08, 0xd5, 0x08, 0x80, 0xd8, 0x63, 0x8d, 0xec, 0xd2, 0x31, 0x60, 0xd4, 0x39,
-	0xc6, 0xba, 0xee, 0xf4, 0x8f, 0x85, 0x7a, 0x40, 0x74, 0xa4, 0xc9, 0xad, 0x57, 0x82, 0x20, 0x59,
-	0x50, 0xd0, 0xb4, 0xaf, 0xf9, 0x23, 0xb0, 0x77, 0x96, 0x3d, 0x71, 0xde, 0xe9, 0x9e, 0xf5, 0xf3,
-	0xbc, 0x1a, 0x38, 0x92, 0x52, 0x30, 0xbc, 0xc3, 0x37, 0x04, 0x69, 0x64, 0xfd, 0x3c, 0x6a, 0x3e,
-	0x04, 0x08, 0xbf, 0xe8, 0x53, 0xa0, 0x77, 0x1e, 0x73, 0xb2, 0x75, 0x28, 0x98, 0x38, 0xa6, 0xda,
-	0xf4, 0x27, 0x6c, 0xaa, 0xd2, 0x6f, 0xe4, 0xa1, 0x9a, 0x7c, 0x19, 0x1d, 0x4d, 0x5e, 0x6f, 0x6c,
-	0x38, 0xa2, 0xa5, 0xda, 0xbd, 0x15, 0xde, 0x98, 0xd1, 0xeb, 0xf9, 0xb5, 0xaf, 0xb7, 0x62, 0x39,
-	0xac, 0xb4, 0x89, 0x20, 0x4d, 0x36, 0x56, 0x5e, 0x08, 0xd3, 0xe3, 0xc6, 0xc7, 0x90, 0x23, 0xdd,
-	0x58, 0x16, 0x76, 0x6b, 0x13, 0x91, 0x1e, 0x06, 0x33, 0x0b, 0xaf, 0xda, 0x34, 0x38, 0xb1, 0xdb,
-	0xcf, 0x42, 0xf2, 0x99, 0x69, 0x34, 0x44, 0xdf, 0x03, 0x98, 0xe1, 0xe5, 0x45, 0x17, 0x53, 0x31,
-	0x79, 0x7f, 0x11, 0x2e, 0xbd, 0xfb, 0x50, 0xa6, 0x0b, 0x87, 0x62, 0x96, 0x92, 0x49, 0x4e, 0x64,
-	0x8d, 0xdd, 0x86, 0xa2, 0xcf, 0x97, 0x27, 0x24, 0x8f, 0x48, 0x99, 0xde, 0x9a, 0x7f, 0x3b, 0x03,
-	0x10, 0x99, 0x79, 0x95, 0xa7, 0xa3, 0x34, 0xab, 0x95, 0xa1, 0xc0, 0x26, 0xc1, 0x7e, 0x51, 0xe7,
-	0xc1, 0xb7, 0x4b, 0x8f, 0xcf, 0xeb, 0x79, 0xf6, 0xe5, 0x60, 0xa4, 0x89, 0x4a, 0x32, 0x0b, 0xa0,
-	0x35, 0x6f, 0x87, 0x97, 0x20, 0x14, 0x0d, 0xd8, 0xd7, 0x00, 0x16, 0xae, 0x75, 0x6e, 0xcd, 0xd0,
-	0x34, 0xd8, 0x66, 0xb0, 0x9f, 0xb9, 0xb9, 0x07, 0x10, 0xec, 0x99, 0xd7, 0x3c, 0xcb, 0x0e, 0xb7,
-	0xe1, 0x0d, 0x10, 0x4e, 0x1d, 0xd7, 0x44, 0xfa, 0x62, 0x39, 0x9b, 0xe9, 0x74, 0x9e, 0xe4, 0xf7,
-	0x11, 0xc4, 0x6b, 0x50, 0xa5, 0x76, 0xa4, 0xb3, 0x14, 0xb3, 0xc0, 0x1f, 0xf5, 0xff, 0x81, 0x26,
-	0x0e, 0x9f, 0x43, 0x81, 0x09, 0x87, 0xfc, 0xe2, 0xc4, 0x60, 0xc4, 0xde, 0xcd, 0xbf, 0x50, 0x3b,
-	0xed, 0x63, 0x85, 0x3e, 0x0c, 0xee, 0x0f, 0xfa, 0x8a, 0x90, 0xc1, 0xff, 0x8d, 0x47, 0x8a, 0x2a,
-	0x64, 0x9b, 0x0f, 0xa1, 0x14, 0x5a, 0xd5, 0x5e, 0xa8, 0x9f, 0x75, 0xdb, 0x05, 0xe9, 0x66, 0xf8,
-	0x04, 0x99, 0xed, 0x5e, 0xe8, 0xfb, 0x3a, 0x65, 0x34, 0x18, 0x09, 0x69, 0xe9, 0xef, 0xa5, 0xa0,
-	0xbe, 0x7a, 0x2c, 0x9c, 0x30, 0xd4, 0xd4, 0x45, 0x86, 0x7a, 0x1f, 0xca, 0x26, 0x49, 0x26, 0xa9,
-	0x5d, 0xad, 0xee, 0xbc, 0xa6, 0xc1, 0xcd, 0xda, 0x4e, 0xa4, 0xc4, 0x64, 0xc1, 0x7e, 0xe3, 0xa8,
-	0xba, 0xa6, 0x2c, 0xf3, 0x82, 0x9f, 0xea, 0x1a, 0x03, 0x44, 0x08, 0x3e, 0x22, 0xd6, 0xa8, 0x9b,
-	0x33, 0xfe, 0xac, 0xe2, 0xfa, 0xba, 0x71, 0x31, 0xbb, 0xad, 0x99, 0xd7, 0xbc, 0x06, 0x79, 0xfa,
-	0x1f, 0x71, 0x3a, 0x33, 0xc3, 0xf3, 0x58, 0xa9, 0x4f, 0x55, 0xba, 0x0f, 0x79, 0x96, 0xe8, 0x7e,
-	0x1c, 0xa4, 0xc2, 0x74, 0xd6, 0xf5, 0x44, 0x2a, 0x2c, 0xdd, 0x86, 0x1c, 0xf9, 0x67, 0xe3, 0x19,
-	0x0e, 0xd6, 0xeb, 0x5f, 0x4d, 0x41, 0x16, 0x1b, 0x09, 0xce, 0xb4, 0xed, 0xe5, 0xfc, 0x84, 0xfd,
-	0xd4, 0x53, 0x35, 0xb2, 0x47, 0x61, 0xbf, 0x66, 0x10, 0x37, 0x08, 0xf1, 0x4b, 0x80, 0x73, 0xcb,
-	0xb3, 0xd8, 0x15, 0x76, 0x96, 0x2c, 0x31, 0x69, 0xc3, 0x05, 0xd6, 0xe1, 0xeb, 0x00, 0x33, 0x92,
-	0xc1, 0xe7, 0x36, 0x54, 0x87, 0xde, 0x85, 0x1c, 0x79, 0x25, 0x23, 0xde, 0x84, 0xdc, 0x82, 0x3c,
-	0x97, 0xa1, 0x13, 0xac, 0x45, 0x16, 0x86, 0xe3, 0xfa, 0xd2, 0x2f, 0xa5, 0xa1, 0x1a, 0xbf, 0x27,
-	0x8b, 0xf3, 0x44, 0xbd, 0xf0, 0x65, 0x78, 0x8a, 0xcf, 0x75, 0x3b, 0xfe, 0x4b, 0x26, 0xc1, 0x0f,
-	0xb7, 0xf0, 0x2a, 0x1d, 0xe6, 0x57, 0x23, 0x3f, 0xe7, 0x40, 0x7f, 0xdf, 0x61, 0x8f, 0xb3, 0x9b,
-	0x4f, 0x1a, 0x38, 0x9d, 0x4e, 0x38, 0xf3, 0xc2, 0x86, 0x99, 0x7f, 0x09, 0x10, 0xe1, 0xaa, 0x0a,
-	0xa5, 0xe0, 0xc4, 0x99, 0xfd, 0xea, 0x4b, 0x77, 0x4c, 0x2e, 0x25, 0xc8, 0x0f, 0x78, 0x29, 0x5f,
-	0x69, 0x8a, 0xda, 0x97, 0xbb, 0x42, 0x5a, 0x7a, 0x00, 0xf0, 0x06, 0x59, 0xd3, 0x33, 0x9f, 0xef,
-	0x99, 0xde, 0x91, 0x2f, 0x56, 0x47, 0xcb, 0xdf, 0x31, 0x07, 0x0a, 0x2f, 0xbf, 0xa6, 0x7c, 0x13,
-	0xec, 0xc8, 0x34, 0x82, 0x5f, 0x50, 0x39, 0x59, 0x5a, 0xb3, 0x89, 0x3e, 0xa1, 0xd7, 0x5c, 0xa9,
-	0x28, 0x8c, 0xdc, 0xbc, 0x04, 0xcf, 0x4c, 0x28, 0x8c, 0x5c, 0x37, 0x06, 0x32, 0x99, 0x5a, 0xbe,
-	0xee, 0x9d, 0x19, 0x4c, 0x26, 0x22, 0x00, 0x06, 0xd0, 0x5a, 0x3b, 0xb6, 0xb9, 0x62, 0x48, 0xbe,
-	0x31, 0xa5, 0xbe, 0x4a, 0xba, 0x0d, 0xd9, 0xa3, 0x99, 0x31, 0xbd, 0xf0, 0x74, 0x54, 0x3a, 0x87,
-	0xac, 0xea, 0xac, 0x1c, 0xa1, 0x86, 0x73, 0xa5, 0x15, 0xc2, 0xf7, 0x01, 0x82, 0x5b, 0x6b, 0xee,
-	0xaf, 0x37, 0xdc, 0x59, 0x5f, 0xae, 0x96, 0x41, 0xba, 0x03, 0xf9, 0x1e, 0xf2, 0x5d, 0xcb, 0xbc,
-	0x88, 0xbd, 0x94, 0xf4, 0x0b, 0x29, 0x28, 0x1e, 0x59, 0xec, 0xa5, 0x3b, 0xdf, 0x5c, 0x07, 0x98,
-	0xf6, 0xcc, 0xb2, 0x69, 0x1c, 0xca, 0x91, 0x44, 0x0e, 0xe7, 0x23, 0x19, 0x56, 0x13, 0x9a, 0x9b,
-	0x13, 0xa1, 0x66, 0x37, 0x5e, 0x67, 0x55, 0xd8, 0x61, 0x0c, 0xf9, 0x99, 0x24, 0xbc, 0x98, 0x97,
-	0xec, 0x17, 0x3a, 0xc8, 0xf9, 0xe1, 0x94, 0x5d, 0x05, 0x96, 0xa4, 0x2b, 0x90, 0x6f, 0xa3, 0x73,
-	0xcb, 0x44, 0xf1, 0xf1, 0xa5, 0x5f, 0x4e, 0x41, 0x85, 0x36, 0xc8, 0xa6, 0x89, 0xb7, 0xa5, 0xfb,
-	0x90, 0x9f, 0x90, 0xef, 0xd5, 0x5b, 0x4e, 0x46, 0xe0, 0x53, 0xc8, 0x1b, 0x04, 0x97, 0x95, 0x07,
-	0xdc, 0x4c, 0x62, 0x50, 0x4a, 0x87, 0xf4, 0x4f, 0xf3, 0x0b, 0xc8, 0x33, 0xd2, 0xd8, 0xd6, 0x90,
-	0xc1, 0xae, 0x57, 0xf1, 0xcc, 0xdf, 0xb9, 0x96, 0xcf, 0x7f, 0x87, 0xa7, 0x0a, 0xb9, 0xf9, 0x5b,
-	0xdb, 0xa1, 0xee, 0xb4, 0x28, 0xbd, 0x80, 0x3a, 0x25, 0xf6, 0xe6, 0xcc, 0xf2, 0xd1, 0xcc, 0xf2,
-	0x7c, 0xf1, 0x33, 0x5a, 0x37, 0xf7, 0x0e, 0x4d, 0x74, 0xca, 0x21, 0x5f, 0xfb, 0x57, 0xd6, 0x33,
-	0xf0, 0xe0, 0x8f, 0x42, 0x9e, 0xc5, 0x82, 0x2b, 0x20, 0xb6, 0xd5, 0xce, 0x6b, 0x45, 0xd5, 0xfb,
-	0x03, 0x92, 0x0e, 0xaa, 0xf4, 0x6e, 0x48, 0x84, 0x1a, 0x83, 0xab, 0xe3, 0x3e, 0xfb, 0xc1, 0xbb,
-	0x10, 0x26, 0xbf, 0x18, 0x10, 0xbc, 0x4c, 0x04, 0x36, 0xd2, 0x06, 0xc3, 0xa1, 0xd2, 0x16, 0xb2,
-	0x0f, 0x7e, 0x98, 0x86, 0x52, 0x78, 0xad, 0x2b, 0x40, 0x85, 0x5c, 0x22, 0x8c, 0x34, 0xf9, 0x18,
-	0xd3, 0xc9, 0xe3, 0x24, 0x98, 0x43, 0x54, 0x0d, 0x83, 0x3e, 0x0a, 0x90, 0xf8, 0x60, 0xa9, 0x00,
-	0xc2, 0x7e, 0x9d, 0x4d, 0x28, 0x06, 0xdd, 0x8e, 0x3a, 0xfd, 0xce, 0xe8, 0x25, 0xb9, 0x9f, 0xaa,
-	0x43, 0x99, 0x82, 0xe8, 0x45, 0x5a, 0x26, 0x00, 0xe0, 0x5e, 0x98, 0x17, 0x9c, 0xe8, 0x12, 0x00,
-	0xbd, 0x9e, 0xc2, 0xbb, 0xb9, 0x12, 0xf9, 0xee, 0xe2, 0x50, 0x9c, 0x0b, 0x46, 0x69, 0xab, 0x94,
-	0xf9, 0x92, 0xb8, 0x03, 0x02, 0xbb, 0xf3, 0x50, 0x15, 0xb9, 0xf5, 0x92, 0xec, 0x6f, 0x21, 0xe8,
-	0x76, 0x8c, 0x63, 0x75, 0x59, 0xbc, 0x06, 0xbb, 0xc1, 0xa7, 0xfe, 0xe2, 0x6b, 0x7d, 0x30, 0x54,
-	0x54, 0x59, 0x1b, 0xa8, 0x42, 0x25, 0xa0, 0x18, 0x5c, 0xf6, 0xbc, 0xf8, 0xe2, 0x9f, 0xfd, 0x68,
-	0x2f, 0xf5, 0xcf, 0x7f, 0xb4, 0x97, 0xfa, 0x77, 0x3f, 0xda, 0x4b, 0xfd, 0x8d, 0x7f, 0xbf, 0xf7,
-	0x11, 0x6c, 0x3b, 0xee, 0xf4, 0xd0, 0x58, 0x18, 0xe6, 0x19, 0x0a, 0x14, 0xf4, 0x22, 0x4f, 0x5f,
-	0x64, 0x7f, 0x9f, 0xa6, 0x9d, 0xff, 0x2f, 0x00, 0x00, 0xff, 0xff, 0x61, 0x29, 0x13, 0xdb, 0x9c,
-	0x53, 0x00, 0x00,
+	// 9197 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x7c, 0x5b, 0x8c, 0x24, 0x4b,
+	0x76, 0xd0, 0xad, 0x77, 0xd5, 0xa9, 0x47, 0x67, 0x67, 0x3f, 0xa6, 0xbb, 0x7a, 0xa6, 0xbb, 0x6f,
+	0xce, 0xab, 0x67, 0xee, 0x9d, 0x9e, 0x99, 0x9e, 0x3b, 0x77, 0x77, 0x47, 0xbb, 0xd8, 0x35, 0x55,
+	0xd9, 0xdd, 0xc5, 0xd4, 0xeb, 0x66, 0x55, 0xcd, 0xdc, 0xbb, 0x42, 0x4e, 0xb2, 0xb3, 0xa2, 0xbb,
+	0xd3, 0x53, 0x55, 0x59, 0x37, 0x33, 0xab, 0x67, 0x66, 0x91, 0x25, 0xf0, 0xc5, 0x06, 0x6c, 0x23,
+	0xfb, 0xc7, 0x36, 0x1f, 0x48, 0xf8, 0x63, 0xfd, 0x61, 0x81, 0x2c, 0xc4, 0xe3, 0xcb, 0x16, 0x42,
+	0xc2, 0xbc, 0x7e, 0x00, 0x09, 0x3e, 0x10, 0x02, 0x09, 0x2d, 0x3f, 0xb6, 0xc1, 0x60, 0xf3, 0x5a,
+	0x1e, 0x66, 0x41, 0xf1, 0xca, 0x8c, 0xcc, 0xaa, 0xea, 0x69, 0x56, 0x48, 0x7c, 0x55, 0xe5, 0x89,
+	0x13, 0x11, 0x27, 0xce, 0x39, 0x71, 0xe2, 0x44, 0xc4, 0x39, 0x01, 0x4b, 0x43, 0xeb, 0xe4, 0xe1,
+	0x08, 0xb9, 0xb6, 0xbb, 0x3f, 0x71, 0x6c, 0xcf, 0x96, 0x53, 0xe4, 0x43, 0xb9, 0x0e, 0xf9, 0x43,
+	0xc7, 0x18, 0xa1, 0x37, 0xb6, 0xf3, 0xba, 0x5e, 0x93, 0x8b, 0x90, 0xba, 0x30, 0x86, 0x53, 0xb4,
+	0x11, 0xdb, 0x8d, 0xef, 0xe5, 0x94, 0x0d, 0xc8, 0xb4, 0x4f, 0x4f, 0x91, 0x33, 0xb7, 0xa4, 0x3b,
+	0x34, 0x2e, 0xd0, 0x6c, 0xc9, 0x35, 0x48, 0xf7, 0x0c, 0x77, 0x4e, 0x63, 0x5b, 0x00, 0xea, 0x5b,
+	0x64, 0x4e, 0x3d, 0x7b, 0x4e, 0x7b, 0x3f, 0x0a, 0xf9, 0xaa, 0x3d, 0xf6, 0x0c, 0x6b, 0x3c, 0xa7,
+	0x37, 0x59, 0x81, 0xf4, 0xc4, 0x70, 0xd0, 0xd8, 0xdb, 0x88, 0xef, 0xc6, 0xf6, 0xf2, 0x07, 0xf2,
+	0x3e, 0x1d, 0x8a, 0x50, 0x45, 0xb9, 0x09, 0xb2, 0x86, 0x5c, 0x7b, 0xea, 0x98, 0xa8, 0xe3, 0xd8,
+	0x17, 0xd6, 0x60, 0x1e, 0xd9, 0xd7, 0x21, 0xdf, 0x9e, 0x20, 0xc7, 0xf0, 0x2c, 0x7b, 0x3c, 0x5b,
+	0xba, 0x03, 0xd9, 0x9e, 0x35, 0x42, 0xf5, 0xf1, 0xa9, 0x2d, 0xaf, 0x40, 0x7e, 0x6c, 0x8c, 0x6d,
+	0x17, 0x99, 0xf6, 0x78, 0xe0, 0x12, 0x84, 0x84, 0x72, 0x13, 0x0a, 0xb5, 0x29, 0xab, 0xbd, 0x10,
+	0xe9, 0x29, 0x64, 0x2a, 0x83, 0x81, 0x83, 0x5c, 0x57, 0x96, 0x20, 0x7b, 0x6e, 0xbb, 0xde, 0xd8,
+	0x18, 0xe1, 0x2e, 0x62, 0x7b, 0x39, 0x19, 0x20, 0x6e, 0x4d, 0xc8, 0x28, 0x72, 0x72, 0x01, 0x92,
+	0x13, 0xdb, 0xf1, 0x36, 0x12, 0xbb, 0xf1, 0xbd, 0x94, 0xf2, 0x06, 0x12, 0x7d, 0xad, 0x21, 0x97,
+	0x20, 0xed, 0x9a, 0xe7, 0x68, 0xc4, 0x87, 0xbe, 0x03, 0x19, 0x83, 0xb6, 0xb6, 0x11, 0xdf, 0x8d,
+	0xef, 0xe5, 0x0f, 0x4a, 0x6c, 0xec, 0xbc, 0x0f, 0xdc, 0x8a, 0xe1, 0x9d, 0x6f, 0x24, 0x48, 0x9b,
+	0x3b, 0x90, 0xfa, 0x72, 0x8a, 0x9c, 0x77, 0x1b, 0xc9, 0xdd, 0xc4, 0x5e, 0xfe, 0x40, 0x62, 0xc8,
+	0x1d, 0x03, 0x0b, 0xd9, 0x43, 0x0e, 0x26, 0xe9, 0xd4, 0x31, 0xce, 0x46, 0x98, 0x99, 0x29, 0x5c,
+	0x45, 0x79, 0x05, 0xa5, 0xfe, 0xd8, 0xb8, 0x30, 0xac, 0xa1, 0x71, 0x62, 0x0d, 0x2d, 0xef, 0x9d,
+	0xbc, 0x0d, 0x29, 0xd7, 0x33, 0x1c, 0x8f, 0x90, 0x90, 0x3f, 0x58, 0x62, 0x8d, 0xf8, 0xbc, 0xb9,
+	0x0d, 0xd9, 0x01, 0x63, 0x03, 0x13, 0xc8, 0x0a, 0x43, 0x11, 0xb9, 0xa3, 0xdc, 0x83, 0x5c, 0xd3,
+	0x30, 0xcf, 0xad, 0x31, 0xd6, 0x92, 0x4b, 0x59, 0xa1, 0xfc, 0x5a, 0x0c, 0xf2, 0x1c, 0x17, 0xf7,
+	0x70, 0x1d, 0xe2, 0xd6, 0x80, 0x75, 0xcf, 0xc7, 0x10, 0xb4, 0x75, 0x1b, 0x92, 0x23, 0x7b, 0x80,
+	0x48, 0xdd, 0xd2, 0xc1, 0xb5, 0x48, 0xf9, 0xf8, 0xd4, 0xde, 0x6f, 0xda, 0x03, 0x24, 0x3f, 0x80,
+	0xd2, 0x34, 0x34, 0x30, 0xc2, 0xa3, 0xfc, 0xc1, 0x1a, 0xab, 0x10, 0x1e, 0xb5, 0x72, 0x07, 0x92,
+	0xa4, 0x5a, 0x1a, 0xe2, 0xfd, 0x8e, 0x14, 0x93, 0x0b, 0x90, 0xad, 0x69, 0x95, 0x7a, 0xab, 0xde,
+	0x3a, 0x92, 0xe2, 0x72, 0x16, 0x92, 0xb5, 0xf6, 0xab, 0x96, 0x94, 0x50, 0x7e, 0x23, 0x09, 0xc5,
+	0x60, 0xce, 0x60, 0x6a, 0x0b, 0x90, 0x9c, 0xba, 0xc8, 0x61, 0x12, 0x2b, 0x40, 0x92, 0x8c, 0x32,
+	0x4e, 0xbe, 0xb6, 0xc9, 0x48, 0x12, 0x21, 0xb5, 0x15, 0x67, 0xdc, 0x16, 0x48, 0xa7, 0x86, 0x35,
+	0xb4, 0x2f, 0x90, 0xa3, 0x7b, 0xd6, 0x08, 0xd9, 0x53, 0x6f, 0x23, 0xb9, 0x1b, 0xdb, 0x8b, 0x3d,
+	0x8b, 0x3d, 0x92, 0x37, 0x01, 0xcc, 0x73, 0x64, 0xbe, 0x9e, 0xd8, 0x16, 0x13, 0x57, 0xf6, 0x59,
+	0xea, 0xd4, 0x18, 0xba, 0x48, 0x5e, 0x81, 0xa4, 0x63, 0x0f, 0xd1, 0x46, 0x1a, 0xf3, 0xef, 0x59,
+	0xec, 0xfe, 0xf3, 0xf8, 0x46, 0x2c, 0xc4, 0xe4, 0x0c, 0x61, 0xf2, 0x32, 0xe4, 0x26, 0x8e, 0x35,
+	0x36, 0xad, 0x89, 0x31, 0xdc, 0xc8, 0x72, 0xd0, 0x1b, 0x74, 0x32, 0xb5, 0xf4, 0xa9, 0x33, 0xdc,
+	0xc8, 0x11, 0xd0, 0x53, 0x28, 0x98, 0xc6, 0x84, 0x32, 0xc2, 0x42, 0xee, 0x06, 0x10, 0xe5, 0xd9,
+	0x99, 0x21, 0x17, 0xb3, 0xb6, 0xca, 0x11, 0xdf, 0xc9, 0x37, 0x20, 0x3d, 0x34, 0x4e, 0xd0, 0xd0,
+	0xdd, 0xc8, 0x93, 0xf1, 0x15, 0x59, 0x85, 0x06, 0x01, 0xe2, 0xd9, 0x85, 0x49, 0x74, 0x37, 0x0a,
+	0xbb, 0x89, 0xbd, 0x5c, 0xf9, 0xab, 0x38, 0x80, 0x50, 0xf9, 0x00, 0x92, 0xde, 0xbb, 0x09, 0x55,
+	0x86, 0xd2, 0xc1, 0xad, 0xf7, 0xf4, 0xb5, 0xdf, 0x7b, 0x37, 0x41, 0xca, 0xdf, 0x8e, 0x41, 0x12,
+	0xff, 0x91, 0xf3, 0x90, 0xe9, 0xb7, 0x5e, 0xb4, 0xb0, 0x40, 0x3e, 0x90, 0xaf, 0xc1, 0x8a, 0xa6,
+	0xbe, 0x6c, 0x57, 0x2b, 0xcf, 0x1b, 0xaa, 0xae, 0xa9, 0xdd, 0x76, 0x5f, 0xab, 0xaa, 0x5d, 0x29,
+	0x26, 0xaf, 0x83, 0xdc, 0xab, 0x74, 0x5f, 0xe8, 0x2f, 0xea, 0x8d, 0x46, 0xbd, 0x75, 0xa4, 0x77,
+	0x7b, 0x95, 0x9e, 0x2a, 0xc5, 0xe5, 0x65, 0x28, 0x1e, 0x75, 0xfa, 0x02, 0x6a, 0x42, 0x5e, 0x05,
+	0xa9, 0x7b, 0x5c, 0xd1, 0xd4, 0x9a, 0x00, 0x4d, 0xca, 0x2b, 0xb0, 0xd4, 0xa9, 0x68, 0xbd, 0x7a,
+	0xaf, 0xde, 0x6e, 0xe9, 0x95, 0x57, 0x15, 0x4d, 0x95, 0x52, 0x72, 0x09, 0xa0, 0xd9, 0x6f, 0xf4,
+	0xea, 0xba, 0xd6, 0x6e, 0xa8, 0x52, 0x5a, 0x2e, 0xc3, 0xba, 0xa6, 0x76, 0x55, 0xed, 0x65, 0x85,
+	0xa0, 0x69, 0xea, 0x61, 0xbd, 0xa5, 0x36, 0xd5, 0x56, 0x4f, 0xca, 0xc8, 0x12, 0x14, 0x34, 0xf5,
+	0x28, 0xa8, 0x9d, 0x55, 0x7e, 0x39, 0x01, 0xb9, 0x2a, 0x96, 0x29, 0xd1, 0x9c, 0x9b, 0x21, 0x26,
+	0x70, 0xc5, 0xf4, 0xcb, 0xc9, 0xa8, 0xe5, 0x7b, 0x90, 0x31, 0xed, 0xd1, 0xc8, 0x18, 0x0f, 0xd8,
+	0x6c, 0xdb, 0x98, 0xc1, 0xab, 0xd2, 0x72, 0xdc, 0xde, 0xb9, 0xe7, 0x4d, 0x22, 0x8a, 0x1e, 0xe0,
+	0x1d, 0x7b, 0xde, 0x44, 0xde, 0x84, 0xe2, 0x00, 0x0d, 0x8d, 0x77, 0x3a, 0xb7, 0x5b, 0x54, 0xdf,
+	0xe2, 0x8f, 0x9f, 0xca, 0xd7, 0x41, 0xb2, 0xc6, 0x1e, 0x72, 0x2e, 0x8c, 0xa1, 0x5f, 0x9a, 0x62,
+	0xa5, 0x8f, 0xe4, 0x2d, 0x58, 0x62, 0x2a, 0xea, 0x17, 0xa6, 0x69, 0xe1, 0xc1, 0x23, 0xf9, 0x43,
+	0x48, 0x78, 0xe6, 0x84, 0xa8, 0x5d, 0xfe, 0x60, 0x75, 0x76, 0x24, 0xe6, 0xa4, 0xbc, 0x0f, 0x99,
+	0x80, 0x50, 0x7f, 0x4c, 0x74, 0x96, 0x07, 0x26, 0x9d, 0x40, 0x71, 0x9d, 0xb2, 0x02, 0x49, 0x42,
+	0x30, 0x37, 0x94, 0x18, 0xb3, 0xe8, 0x1b, 0x3c, 0x62, 0x39, 0xca, 0x2b, 0x90, 0xe8, 0x99, 0x11,
+	0x14, 0xe5, 0xc9, 0x3c, 0x35, 0xc9, 0x43, 0xa6, 0xda, 0x6e, 0x36, 0x2b, 0xad, 0x9a, 0x14, 0xc3,
+	0xd3, 0xf9, 0xb8, 0xd7, 0xeb, 0x48, 0x71, 0x39, 0x03, 0x89, 0x5e, 0xb5, 0x23, 0x25, 0x94, 0x7f,
+	0x95, 0x84, 0xfc, 0x31, 0x32, 0x86, 0xde, 0x39, 0xa1, 0x5a, 0xde, 0x67, 0xbc, 0x8c, 0x91, 0x11,
+	0xed, 0x32, 0xfa, 0x04, 0x8c, 0x7d, 0xdc, 0x42, 0x20, 0xcb, 0x19, 0xb6, 0xc6, 0x2f, 0x65, 0x6b,
+	0xe2, 0x32, 0xb6, 0x26, 0x7d, 0xb6, 0xee, 0xc0, 0xaa, 0x69, 0x8f, 0x5d, 0xbc, 0x6e, 0x5a, 0x17,
+	0x48, 0xc7, 0xb6, 0x62, 0xea, 0x20, 0x2a, 0x95, 0xe2, 0xb3, 0xd8, 0x13, 0x79, 0x17, 0x56, 0xcf,
+	0x1c, 0xc3, 0x44, 0xfa, 0x04, 0x39, 0x96, 0x3d, 0x88, 0x4a, 0xe6, 0xf1, 0x23, 0x91, 0xd7, 0x99,
+	0xc8, 0xf2, 0xe9, 0xf3, 0x1a, 0xdb, 0x54, 0xa2, 0x89, 0xd9, 0x90, 0x4d, 0x15, 0x47, 0x4b, 0x38,
+	0xfa, 0x31, 0x95, 0x72, 0x8e, 0xb4, 0xb3, 0x33, 0x0f, 0xab, 0x1a, 0xb0, 0xa4, 0xfc, 0x93, 0x31,
+	0x28, 0x86, 0x99, 0x74, 0x89, 0x28, 0x85, 0xa5, 0x8f, 0xae, 0x65, 0x12, 0x64, 0x5d, 0xcf, 0xf0,
+	0xa6, 0x2e, 0x72, 0xc9, 0x72, 0x56, 0x94, 0x9f, 0x40, 0x96, 0x78, 0x2f, 0xa6, 0x3d, 0x24, 0x0c,
+	0x28, 0x1d, 0x6c, 0x31, 0x12, 0x5a, 0xc8, 0xf3, 0xad, 0x46, 0x87, 0xa1, 0x3c, 0x4b, 0xd6, 0x3b,
+	0x17, 0x9f, 0x94, 0x3f, 0x83, 0x82, 0x48, 0x54, 0x84, 0x04, 0xb1, 0xc9, 0xf8, 0x15, 0x9b, 0xfc,
+	0xe1, 0xf4, 0xeb, 0x6b, 0x00, 0x2f, 0xac, 0xe1, 0xb0, 0x63, 0x0f, 0x2d, 0xf3, 0x9d, 0x7c, 0x0f,
+	0x0a, 0xa2, 0xd8, 0x98, 0x96, 0xcd, 0x5d, 0x47, 0x7f, 0x3a, 0x8e, 0x9d, 0xa3, 0x40, 0x54, 0xb7,
+	0x20, 0x39, 0x75, 0x2c, 0xec, 0x6e, 0x60, 0x2b, 0xbd, 0x3e, 0x2b, 0xcc, 0xfd, 0xbe, 0x56, 0x97,
+	0xef, 0x42, 0x1e, 0x8d, 0x2f, 0x2c, 0xc7, 0x1e, 0x8f, 0x66, 0x1d, 0x27, 0x35, 0x28, 0x09, 0x9c,
+	0xa0, 0x04, 0xf7, 0x4a, 0xc8, 0x62, 0x46, 0x9c, 0x03, 0x79, 0x05, 0x52, 0xee, 0x39, 0x1a, 0x0e,
+	0x89, 0x3a, 0x65, 0x9f, 0x25, 0x3d, 0x67, 0x8a, 0xf0, 0x0a, 0x62, 0x38, 0x67, 0x53, 0x5c, 0xdb,
+	0xdd, 0xc8, 0x10, 0xe3, 0x6e, 0x62, 0xef, 0xa5, 0x1e, 0xf5, 0xdb, 0x64, 0x00, 0x44, 0x5c, 0x3e,
+	0xe3, 0x64, 0x48, 0x97, 0xeb, 0xac, 0xbc, 0x06, 0x19, 0xf4, 0xd6, 0x73, 0x0c, 0xd3, 0x23, 0x1d,
+	0xf2, 0x36, 0x8b, 0x90, 0x32, 0x0d, 0xf3, 0x1c, 0x11, 0xd5, 0xcf, 0x62, 0xcf, 0xca, 0x9e, 0x7a,
+	0x93, 0xa9, 0xa7, 0x9f, 0x5a, 0x43, 0xc4, 0x3c, 0x95, 0x7f, 0x96, 0x80, 0x82, 0xef, 0x42, 0x62,
+	0x4e, 0xdc, 0x81, 0x3c, 0x62, 0xdf, 0xba, 0xef, 0x2f, 0x2c, 0xf3, 0x31, 0x06, 0xce, 0x66, 0x01,
+	0x92, 0x03, 0xc3, 0x33, 0x48, 0xdb, 0x05, 0x59, 0x81, 0x9c, 0xc3, 0x3c, 0x45, 0x3c, 0x8f, 0x12,
+	0x82, 0x8b, 0xc3, 0x3d, 0xc8, 0xab, 0xcd, 0x99, 0x3d, 0x28, 0x9c, 0xf2, 0xf5, 0x0a, 0xf7, 0x9f,
+	0x5d, 0xb8, 0xca, 0x73, 0x9f, 0x80, 0x2e, 0xb7, 0x32, 0xa4, 0x69, 0x37, 0x1b, 0x80, 0xbf, 0xc9,
+	0xd2, 0x7d, 0x17, 0x72, 0x26, 0xf7, 0x66, 0xd9, 0x72, 0xba, 0x3a, 0xe3, 0xe5, 0xe2, 0x4e, 0xef,
+	0x42, 0x6e, 0x60, 0xb9, 0x26, 0x76, 0x18, 0xde, 0x6d, 0x14, 0x42, 0x88, 0x35, 0x0e, 0x27, 0x88,
+	0x07, 0xb0, 0xe6, 0x9e, 0x4f, 0xbd, 0x81, 0xfd, 0x66, 0xac, 0x87, 0x54, 0xad, 0xb8, 0x50, 0xd5,
+	0x84, 0x15, 0xbd, 0x34, 0x6f, 0x45, 0xbf, 0xc3, 0x8c, 0xc4, 0x12, 0x99, 0x28, 0x1b, 0x51, 0x46,
+	0xf3, 0x15, 0x4b, 0xf9, 0x78, 0xc1, 0xfc, 0xa8, 0xa9, 0x87, 0x95, 0x7e, 0xa3, 0x27, 0xc5, 0x64,
+	0x80, 0x74, 0xb5, 0xdf, 0xed, 0xb5, 0x9b, 0x52, 0x5c, 0xf9, 0x7e, 0x0c, 0xa0, 0x66, 0x8f, 0x0c,
+	0x8b, 0xd2, 0xf0, 0x04, 0x0a, 0xa7, 0xc6, 0x74, 0xe8, 0xe9, 0x03, 0x02, 0x63, 0x33, 0xe3, 0x06,
+	0x27, 0xd7, 0x47, 0xdc, 0x3f, 0xc4, 0x58, 0xf4, 0xbb, 0xfc, 0xd7, 0x63, 0x90, 0x17, 0xbe, 0xe5,
+	0xaf, 0x43, 0xda, 0x41, 0x67, 0xd8, 0x41, 0xa5, 0x4a, 0xb1, 0x77, 0x69, 0xf5, 0x7d, 0x8d, 0xe0,
+	0x92, 0xee, 0x3f, 0x81, 0xe4, 0x77, 0xec, 0x31, 0x62, 0xde, 0xf6, 0x9d, 0xcb, 0xeb, 0x7d, 0xdb,
+	0xa6, 0x0e, 0x67, 0xb9, 0x0c, 0x20, 0xb4, 0xc1, 0xc5, 0x4d, 0x66, 0x41, 0x79, 0x03, 0xb2, 0x1c,
+	0x2f, 0x5c, 0xa2, 0xfc, 0xbd, 0x38, 0x40, 0xd3, 0x70, 0x3d, 0x26, 0x5a, 0xf0, 0xbd, 0xde, 0xc0,
+	0x3b, 0xc6, 0x36, 0x4a, 0x16, 0x36, 0x0a, 0xc5, 0x67, 0xc9, 0xa7, 0x8f, 0x9e, 0x3e, 0x92, 0xf3,
+	0x90, 0x98, 0x58, 0x03, 0xa2, 0xd1, 0xb9, 0x90, 0xdf, 0x47, 0xe7, 0xed, 0x12, 0x64, 0x2e, 0x90,
+	0xe3, 0x62, 0x06, 0xa4, 0xd9, 0xc6, 0xc0, 0xdf, 0x47, 0x50, 0x85, 0x8e, 0xee, 0x23, 0x3e, 0x84,
+	0x34, 0x63, 0x38, 0x55, 0xe3, 0xe5, 0x99, 0x91, 0xcb, 0x07, 0x11, 0x37, 0x31, 0x47, 0xe6, 0xce,
+	0x75, 0xdf, 0xff, 0xe6, 0x03, 0x11, 0xfc, 0xb6, 0xf2, 0x20, 0xe4, 0xf4, 0x3d, 0x0c, 0xf9, 0x3b,
+	0x1f, 0x5e, 0x56, 0x93, 0x6a, 0xd2, 0xed, 0x79, 0x9a, 0x24, 0x41, 0xa1, 0x72, 0xa4, 0xb6, 0x7a,
+	0x7a, 0xbf, 0x53, 0xc3, 0x1e, 0x5d, 0x4c, 0xf9, 0x2a, 0x01, 0x39, 0xba, 0x1f, 0xc5, 0x74, 0x86,
+	0xf7, 0x1a, 0x74, 0x03, 0x29, 0x4c, 0xf9, 0xc4, 0xfc, 0x29, 0x7f, 0x0b, 0xc0, 0xf0, 0x3c, 0xc7,
+	0x3a, 0x99, 0x7a, 0xbe, 0x5d, 0xe0, 0x7b, 0x8f, 0x0a, 0x2f, 0x90, 0xcb, 0x44, 0x46, 0xe9, 0x10,
+	0x0b, 0xf9, 0x4e, 0x38, 0xec, 0xae, 0x67, 0x44, 0x77, 0x9d, 0x8b, 0x10, 0xf3, 0x36, 0x45, 0x44,
+	0xf8, 0x58, 0xe0, 0x38, 0x2c, 0xe0, 0x78, 0xf9, 0x2f, 0xc7, 0x42, 0xec, 0xdb, 0x0f, 0xb1, 0x6f,
+	0x37, 0xd4, 0xfd, 0x3c, 0xee, 0x8d, 0xe6, 0x71, 0x2f, 0xec, 0xbf, 0xc6, 0xe4, 0x35, 0x58, 0x3e,
+	0xae, 0xab, 0x5a, 0x45, 0xab, 0x1e, 0xd7, 0xab, 0x95, 0x06, 0x05, 0xc7, 0x2f, 0x71, 0x6b, 0x13,
+	0xb8, 0x0a, 0x77, 0x93, 0xf5, 0x8e, 0xd6, 0x7e, 0x59, 0xaf, 0xa9, 0x9a, 0x94, 0x54, 0x7e, 0x2a,
+	0x0e, 0xeb, 0xd5, 0x6e, 0xbd, 0x33, 0x9c, 0x9e, 0x59, 0xe3, 0xb0, 0xd5, 0xfa, 0x1a, 0x64, 0x5d,
+	0xe4, 0x5c, 0x58, 0x98, 0xff, 0x78, 0xdd, 0x2a, 0x1d, 0xdc, 0xe6, 0xd6, 0x6d, 0x6e, 0x85, 0xfd,
+	0x2e, 0xc5, 0x16, 0x0d, 0x71, 0x7c, 0xa1, 0x21, 0xbe, 0x8a, 0x78, 0x43, 0x06, 0x36, 0xb9, 0xd8,
+	0xc0, 0x2a, 0x3f, 0x0a, 0x19, 0xde, 0x79, 0x88, 0x6f, 0xeb, 0x20, 0x57, 0xdb, 0xad, 0x9e, 0xd6,
+	0x6e, 0x34, 0x54, 0x4d, 0xc7, 0x9c, 0xa9, 0x57, 0x31, 0xff, 0x24, 0x28, 0xb4, 0xda, 0x35, 0xd5,
+	0x87, 0xc4, 0x95, 0x1f, 0x83, 0xa2, 0x3f, 0x2a, 0x3e, 0xeb, 0x99, 0xdc, 0x66, 0x37, 0x88, 0x8f,
+	0x01, 0x7c, 0xba, 0x38, 0xf1, 0x37, 0x2e, 0xe5, 0x8d, 0xf2, 0xab, 0x71, 0x58, 0x9d, 0x39, 0xeb,
+	0xa0, 0x4e, 0x1c, 0x35, 0x20, 0x78, 0x70, 0x9b, 0x11, 0x06, 0x08, 0x87, 0x22, 0x61, 0x4d, 0x8f,
+	0x2f, 0xd0, 0x74, 0x4e, 0x74, 0x22, 0x44, 0x74, 0x92, 0x7c, 0x7d, 0x0b, 0x56, 0x07, 0x88, 0x5a,
+	0x69, 0x07, 0x61, 0xc1, 0x92, 0x25, 0x84, 0xcf, 0x9a, 0x9d, 0x48, 0xd7, 0xf8, 0x0f, 0xc7, 0x61,
+	0x36, 0x36, 0xe3, 0x7a, 0xb6, 0x63, 0x9c, 0x21, 0x36, 0x93, 0x6e, 0x2e, 0x22, 0x96, 0xa8, 0x02,
+	0x45, 0x2d, 0x3f, 0x84, 0x0c, 0xfb, 0x2b, 0xdf, 0x82, 0xf4, 0x84, 0x30, 0x86, 0x99, 0xf7, 0xd5,
+	0x28, 0xc3, 0x08, 0x9f, 0xfe, 0x30, 0x0e, 0xa9, 0x97, 0xd8, 0x1d, 0x91, 0x77, 0x04, 0x01, 0x94,
+	0xfc, 0x89, 0x46, 0xca, 0xa8, 0x5f, 0x7b, 0x13, 0xfb, 0x9e, 0xc6, 0xd0, 0x70, 0x22, 0x07, 0x1a,
+	0x14, 0xa5, 0x4b, 0x8a, 0x30, 0x92, 0x63, 0x8c, 0xcf, 0x90, 0xcb, 0xf6, 0x57, 0x61, 0x24, 0x8d,
+	0x14, 0xc9, 0x37, 0x20, 0xe1, 0x22, 0x8f, 0x69, 0x98, 0x14, 0x6e, 0x06, 0x79, 0x84, 0x12, 0xf4,
+	0x96, 0x6e, 0xe6, 0xf3, 0x51, 0x4a, 0xd0, 0x5b, 0xaf, 0x7c, 0x0d, 0xd2, 0xac, 0xbb, 0x90, 0x33,
+	0x15, 0x2b, 0xdf, 0x84, 0x14, 0xe9, 0x02, 0xc3, 0x4f, 0x10, 0x1f, 0x7b, 0x12, 0xaf, 0x04, 0x88,
+	0xcc, 0x8e, 0xf8, 0x5e, 0xb2, 0xfc, 0x11, 0xa4, 0x19, 0x1d, 0x1f, 0x42, 0x8a, 0x10, 0xcb, 0xdc,
+	0x44, 0x79, 0x96, 0x56, 0xbc, 0x77, 0xc2, 0x24, 0x15, 0x20, 0x69, 0x79, 0x68, 0x44, 0x10, 0x73,
+	0xe5, 0x35, 0x48, 0x62, 0x3a, 0xa2, 0x67, 0x63, 0x8f, 0x99, 0x29, 0x01, 0x48, 0x77, 0xab, 0x95,
+	0x46, 0x45, 0x93, 0x3e, 0xc0, 0xff, 0xb5, 0x4a, 0xeb, 0x88, 0xec, 0xb5, 0x33, 0x90, 0xe8, 0xaa,
+	0x3d, 0x7a, 0x50, 0xd2, 0x53, 0x3f, 0xef, 0x49, 0x09, 0xe5, 0xb7, 0x62, 0x90, 0x0b, 0xa9, 0x93,
+	0x60, 0x90, 0xb9, 0x40, 0xe2, 0xef, 0x17, 0x48, 0xe2, 0x2a, 0x02, 0x49, 0x2e, 0x16, 0xc8, 0xfb,
+	0x38, 0xce, 0x25, 0x96, 0x9e, 0x2f, 0x31, 0xe5, 0x57, 0x00, 0xb2, 0xbe, 0x15, 0xf9, 0xff, 0x36,
+	0x0a, 0x46, 0x64, 0x6a, 0x81, 0x5a, 0xcd, 0x3d, 0x0e, 0xba, 0x03, 0xc9, 0x81, 0xe5, 0xbe, 0x66,
+	0x0b, 0xfe, 0x46, 0x74, 0x56, 0xd6, 0x2c, 0xf7, 0x35, 0x9b, 0x8e, 0x79, 0x61, 0x16, 0xb3, 0xf5,
+	0xff, 0xbd, 0x93, 0xf8, 0x11, 0x36, 0xba, 0x17, 0xb6, 0x49, 0x7c, 0xfb, 0x5c, 0xc8, 0x49, 0x13,
+	0xea, 0x30, 0x04, 0x52, 0xe3, 0x3e, 0xa4, 0xdd, 0x73, 0xc3, 0x41, 0x03, 0xb6, 0xe0, 0x95, 0xa3,
+	0xe8, 0x5d, 0x52, 0xca, 0x16, 0x8c, 0x25, 0x63, 0x38, 0xb4, 0x4d, 0xd2, 0x9f, 0x6e, 0x8d, 0x4f,
+	0x6d, 0xe6, 0x15, 0x6f, 0x47, 0x2b, 0x55, 0x7c, 0x34, 0x52, 0x71, 0x1f, 0xf2, 0x13, 0x66, 0x3d,
+	0xb0, 0x4f, 0x5e, 0x78, 0x9f, 0x31, 0x7c, 0x0a, 0x85, 0x90, 0x09, 0x2b, 0x5e, 0xc9, 0x84, 0x95,
+	0xb7, 0xa1, 0x14, 0xe9, 0xb8, 0xc0, 0x44, 0x40, 0x4e, 0x37, 0xb1, 0x43, 0xba, 0x14, 0xe5, 0x58,
+	0xe8, 0x30, 0x8e, 0x1e, 0x82, 0x06, 0x0e, 0x77, 0x7c, 0x9e, 0xc3, 0xcd, 0xdb, 0xa4, 0x5b, 0x33,
+	0x7e, 0x64, 0x96, 0x0c, 0x1d, 0x99, 0x2d, 0x22, 0xf1, 0x12, 0x57, 0x1c, 0x4f, 0xe2, 0x5e, 0xa5,
+	0x57, 0xaf, 0x4a, 0x31, 0xe2, 0x96, 0x7f, 0xd1, 0xaa, 0x34, 0xeb, 0x55, 0x29, 0x5e, 0xfe, 0xc5,
+	0x24, 0x64, 0x7d, 0xb5, 0xf8, 0x06, 0xe4, 0x27, 0xd8, 0x87, 0x74, 0x3d, 0x34, 0x36, 0x11, 0x5b,
+	0x56, 0x6e, 0x2d, 0xd2, 0xa2, 0xfd, 0x4e, 0x80, 0x8b, 0x87, 0x75, 0x61, 0x0f, 0xa7, 0x23, 0x14,
+	0x19, 0xd6, 0x4b, 0x02, 0x94, 0x1f, 0xfa, 0x1b, 0xa0, 0xc4, 0x7c, 0x5d, 0xf3, 0x1b, 0xed, 0x92,
+	0xef, 0xf2, 0xc7, 0x90, 0x17, 0x9b, 0x17, 0x1d, 0xe5, 0x10, 0x53, 0xe9, 0x99, 0xd0, 0x3f, 0x8e,
+	0x43, 0x9a, 0x56, 0x14, 0x4e, 0x19, 0xe3, 0xf3, 0x58, 0x16, 0xe9, 0x87, 0x4e, 0xda, 0x03, 0xe1,
+	0x54, 0x22, 0xff, 0xfe, 0x3a, 0x1d, 0xc3, 0x3b, 0x97, 0x3f, 0x81, 0xd4, 0xc8, 0x9e, 0x8e, 0x3d,
+	0x36, 0xa0, 0xdb, 0xef, 0xab, 0xd4, 0xc4, 0xc8, 0x6c, 0x1c, 0x49, 0xe6, 0xa0, 0x67, 0x47, 0xc8,
+	0x33, 0xc8, 0x3e, 0x35, 0x35, 0x4f, 0x17, 0x96, 0x20, 0x33, 0x71, 0x6c, 0xb2, 0x1d, 0x26, 0xb3,
+	0xbc, 0xbc, 0x0a, 0x49, 0xd2, 0x37, 0x51, 0x12, 0xdb, 0x63, 0x8a, 0xb7, 0x06, 0x29, 0xda, 0x78,
+	0x08, 0xac, 0x7c, 0x73, 0x9e, 0x1e, 0x64, 0x21, 0xd9, 0xa9, 0xf4, 0x8e, 0xa5, 0x98, 0x9c, 0x83,
+	0x54, 0xb3, 0xdd, 0x6f, 0x61, 0x03, 0x9e, 0x83, 0xd4, 0xf3, 0x46, 0xbb, 0xfa, 0x42, 0x4a, 0x60,
+	0xa3, 0xae, 0x55, 0x5e, 0x49, 0xc9, 0xf2, 0x12, 0x14, 0x43, 0x53, 0xb9, 0x5c, 0x00, 0x08, 0x26,
+	0xab, 0xf2, 0x9b, 0x31, 0xd8, 0xe8, 0x39, 0xc6, 0xe9, 0xa9, 0x65, 0x62, 0x4f, 0xc5, 0xb1, 0x87,
+	0x5d, 0xcf, 0xf0, 0x2c, 0xd7, 0xb3, 0x4c, 0x37, 0x24, 0xac, 0x25, 0xc8, 0x9c, 0x18, 0xe6, 0xeb,
+	0xa1, 0x7d, 0x46, 0xb8, 0x9b, 0x24, 0x6b, 0xd9, 0x3b, 0x8f, 0xad, 0xa8, 0xe4, 0x73, 0xe0, 0xd8,
+	0x13, 0x6a, 0x09, 0x93, 0xb2, 0x0c, 0x80, 0xf7, 0xb3, 0x43, 0x6b, 0x64, 0x79, 0xf4, 0xc8, 0x2b,
+	0x49, 0xd8, 0x60, 0x98, 0xaf, 0x91, 0x47, 0x8f, 0xb8, 0x92, 0x78, 0x9c, 0x5f, 0x0e, 0xd1, 0x98,
+	0x58, 0x39, 0x52, 0xec, 0x18, 0x1e, 0x3a, 0x99, 0xb8, 0xc4, 0x8e, 0xf9, 0x80, 0xc9, 0xc4, 0x25,
+	0x46, 0x2a, 0x89, 0x77, 0x07, 0x0e, 0xfa, 0x72, 0x8a, 0xa6, 0xe4, 0xa0, 0x3b, 0xb6, 0x97, 0x54,
+	0x7e, 0x31, 0x01, 0x85, 0xfa, 0x44, 0x20, 0x59, 0x06, 0x38, 0xb4, 0x9d, 0x37, 0x86, 0x33, 0xb0,
+	0xc6, 0x67, 0x84, 0x81, 0x09, 0x0c, 0xab, 0x51, 0x97, 0xa7, 0xd7, 0x6b, 0x10, 0xea, 0x09, 0xac,
+	0x3e, 0xd6, 0x90, 0x89, 0xac, 0x0b, 0x36, 0x84, 0x84, 0xbc, 0x02, 0xf9, 0xfa, 0xf8, 0x78, 0xe0,
+	0xa8, 0x8e, 0x63, 0x3b, 0x74, 0x20, 0x09, 0x79, 0x15, 0x0a, 0xf5, 0x31, 0xde, 0x69, 0x31, 0x68,
+	0x8a, 0x40, 0xd7, 0xa0, 0x88, 0xbb, 0xa9, 0x19, 0x9e, 0x71, 0xe6, 0x18, 0x23, 0x3a, 0xa0, 0x84,
+	0x7c, 0x0d, 0x96, 0xea, 0xe3, 0xfe, 0xf8, 0xf5, 0xd8, 0x7e, 0x33, 0x26, 0x07, 0x4f, 0x74, 0xcb,
+	0xc6, 0xba, 0xc3, 0x9b, 0x7c, 0xc3, 0x19, 0xd0, 0xe1, 0x71, 0x18, 0x1a, 0x5a, 0x78, 0xbb, 0x47,
+	0x46, 0x48, 0x48, 0x68, 0x4f, 0x3d, 0x0d, 0x0f, 0xd2, 0xf5, 0xe8, 0x20, 0x39, 0xd0, 0xaf, 0x9d,
+	0x17, 0x80, 0x2d, 0x5b, 0xb3, 0x89, 0x2b, 0x58, 0xe0, 0xc4, 0x6a, 0xc8, 0x70, 0x47, 0x3d, 0x76,
+	0x1d, 0x51, 0xe4, 0x1d, 0x11, 0xa8, 0x86, 0xbe, 0x1c, 0xd0, 0xe3, 0x81, 0x04, 0x66, 0x25, 0x81,
+	0xb5, 0x5f, 0xb8, 0xe4, 0x4c, 0x20, 0xc0, 0x3a, 0x34, 0xac, 0xa1, 0xbb, 0x21, 0x11, 0xd8, 0x12,
+	0x64, 0x0e, 0x1d, 0xe3, 0x0c, 0x23, 0x2d, 0x13, 0xc0, 0x32, 0xe4, 0x30, 0x80, 0xe2, 0xc8, 0x9c,
+	0x10, 0x0c, 0xaa, 0x3a, 0xc8, 0xc0, 0x84, 0xac, 0x60, 0xa0, 0xf2, 0x4f, 0x93, 0x50, 0xaa, 0x9b,
+	0x23, 0x51, 0x32, 0x25, 0x48, 0xd7, 0xc7, 0x4d, 0xf7, 0xcc, 0x65, 0x52, 0x91, 0x20, 0x5b, 0x1f,
+	0x33, 0xa6, 0xc6, 0x03, 0x56, 0x57, 0xdd, 0xe9, 0x88, 0x41, 0xa9, 0x54, 0xd6, 0xa1, 0x84, 0xd9,
+	0xe4, 0x7a, 0xfd, 0xb1, 0x83, 0x0c, 0xf3, 0x9c, 0x0b, 0x86, 0x48, 0x0b, 0x0f, 0x54, 0x7d, 0x6b,
+	0x0e, 0xb8, 0x5c, 0x08, 0xb0, 0x63, 0x38, 0xa3, 0x8e, 0x63, 0x9f, 0x70, 0xa9, 0x90, 0x76, 0xbb,
+	0x8e, 0xf9, 0xd9, 0x14, 0x8d, 0x71, 0xfd, 0x4c, 0x80, 0xaa, 0xa1, 0x81, 0xe5, 0x20, 0xd3, 0xe3,
+	0x32, 0x59, 0x82, 0x4c, 0x7d, 0xac, 0x9a, 0xe7, 0x36, 0x17, 0x08, 0x11, 0x12, 0x06, 0x68, 0x68,
+	0xc2, 0xe5, 0x41, 0xda, 0xc3, 0x3d, 0xbb, 0x9e, 0x31, 0x9a, 0x70, 0x81, 0x10, 0xd9, 0xfb, 0x50,
+	0x82, 0x5e, 0x08, 0x3a, 0xc2, 0x1a, 0xd4, 0x34, 0xdc, 0xd7, 0x2e, 0x93, 0x09, 0x19, 0x15, 0x07,
+	0x12, 0xe4, 0x12, 0x27, 0xa0, 0x3d, 0xf5, 0x08, 0x9b, 0x96, 0x38, 0xc7, 0xdb, 0x53, 0x8f, 0x71,
+	0x44, 0xe2, 0x3d, 0x61, 0x7d, 0x10, 0x59, 0xb2, 0xcc, 0x09, 0x6b, 0x4f, 0xbd, 0x80, 0x27, 0xb2,
+	0x00, 0x0d, 0x98, 0xb2, 0xc2, 0x35, 0xb8, 0x3d, 0xf5, 0x04, 0xae, 0xac, 0x0a, 0xc8, 0x01, 0x5b,
+	0xd6, 0xb8, 0xac, 0x30, 0x11, 0x84, 0x2f, 0xeb, 0x82, 0xfa, 0xf9, 0x8c, 0xb9, 0x26, 0xb4, 0x29,
+	0x70, 0x66, 0x83, 0x80, 0x37, 0x40, 0x12, 0xc1, 0xa4, 0xc2, 0xa6, 0xd0, 0x5b, 0xc0, 0x9b, 0xb2,
+	0x30, 0xbe, 0x10, 0x73, 0xb6, 0x88, 0x56, 0xfd, 0x95, 0x38, 0x14, 0x7b, 0xa6, 0xa8, 0x54, 0x58,
+	0xe1, 0x3d, 0xbb, 0x32, 0x3c, 0xb3, 0x1d, 0xcb, 0x3b, 0x1f, 0x31, 0xd5, 0x2a, 0x41, 0x5a, 0xf3,
+	0xec, 0xa6, 0x35, 0x66, 0x8a, 0xc5, 0xbe, 0x8d, 0xb7, 0x4c, 0xa5, 0x96, 0x20, 0xd3, 0x34, 0xde,
+	0x56, 0xed, 0xf1, 0x38, 0xd0, 0xa5, 0x8a, 0xe9, 0x59, 0x17, 0xa8, 0x3d, 0x41, 0x63, 0xae, 0x4b,
+	0xab, 0x50, 0xe8, 0x18, 0xae, 0xeb, 0x43, 0x7d, 0x65, 0xaa, 0x78, 0x1e, 0x1a, 0x4d, 0x3c, 0x3a,
+	0x09, 0x7c, 0x65, 0x52, 0x5d, 0xcf, 0x38, 0xc1, 0x0b, 0xb9, 0xaf, 0x4c, 0xcb, 0x90, 0xab, 0x4e,
+	0x1d, 0x87, 0x14, 0x30, 0x75, 0x22, 0x93, 0xa0, 0x8b, 0xce, 0xb8, 0x2a, 0x51, 0x71, 0x13, 0x80,
+	0x3f, 0xad, 0x35, 0xe4, 0x39, 0xc6, 0xd8, 0x25, 0xc0, 0x42, 0x50, 0x4b, 0x75, 0x1c, 0xae, 0x3c,
+	0xb4, 0x96, 0x86, 0x2d, 0x44, 0x69, 0xee, 0xcc, 0x21, 0xaa, 0xa3, 0xfc, 0xcd, 0x18, 0x14, 0xfb,
+	0x03, 0x91, 0x5d, 0x44, 0x15, 0x03, 0xa3, 0x15, 0xe3, 0xad, 0xb5, 0xec, 0x8e, 0xed, 0x78, 0x7c,
+	0x1e, 0x8a, 0x33, 0x33, 0x21, 0xc8, 0x29, 0xa8, 0xe8, 0x9b, 0x46, 0xcd, 0xbc, 0x38, 0x99, 0x9e,
+	0x86, 0x4c, 0xe3, 0x2a, 0x14, 0xba, 0xe3, 0x41, 0x00, 0x4d, 0xcf, 0xa5, 0x30, 0xe3, 0x43, 0xcf,
+	0xc6, 0xb6, 0x83, 0x06, 0xcd, 0xe9, 0xd0, 0xb3, 0x28, 0xdf, 0x94, 0xbf, 0x11, 0x83, 0x52, 0xb7,
+	0xd5, 0xec, 0x08, 0x84, 0xdf, 0x86, 0xac, 0x35, 0xd1, 0x5d, 0xcf, 0xf0, 0xdc, 0xc8, 0x79, 0x7b,
+	0xc8, 0xfa, 0xdf, 0x03, 0xb0, 0xcc, 0x11, 0x47, 0x8c, 0x87, 0xae, 0xd2, 0x22, 0xe6, 0xe8, 0x2e,
+	0xe4, 0x3c, 0x93, 0x63, 0x26, 0x42, 0x87, 0x0a, 0x61, 0x15, 0xbb, 0x0b, 0xb9, 0xe9, 0x80, 0x23,
+	0x86, 0x4f, 0x1f, 0x42, 0xcc, 0x55, 0x7e, 0x35, 0x06, 0x25, 0xec, 0x2c, 0x08, 0x75, 0x03, 0x6f,
+	0x29, 0x76, 0x25, 0x6f, 0x29, 0xea, 0xb8, 0xc5, 0xff, 0x2f, 0x1c, 0xb7, 0x15, 0xc8, 0x93, 0xd5,
+	0x56, 0x17, 0x57, 0x65, 0x19, 0x60, 0xea, 0xa2, 0x01, 0x83, 0x91, 0xa5, 0x59, 0xf9, 0xe7, 0x10,
+	0xc4, 0x5b, 0x08, 0xb4, 0x2e, 0x43, 0xce, 0xe3, 0x53, 0x94, 0xee, 0x5b, 0xe5, 0x2d, 0x58, 0x31,
+	0x27, 0x53, 0x57, 0x9f, 0xba, 0xec, 0x8a, 0x5b, 0x77, 0x91, 0xc9, 0x6e, 0xc7, 0xe4, 0x1b, 0xb0,
+	0x46, 0x0a, 0xdd, 0x77, 0xae, 0x87, 0x46, 0x42, 0x31, 0xb9, 0x1e, 0xc3, 0x3d, 0x93, 0x62, 0x42,
+	0x13, 0xbd, 0x15, 0xc3, 0xf6, 0x61, 0x84, 0x46, 0xba, 0xe3, 0xba, 0x8c, 0x20, 0xea, 0x17, 0x5c,
+	0x83, 0x25, 0x0c, 0x16, 0xa9, 0x4f, 0xf3, 0x02, 0xd2, 0xc6, 0xd8, 0x61, 0x07, 0xe0, 0x54, 0x6f,
+	0x8a, 0xf2, 0x26, 0x2c, 0xf3, 0x02, 0xef, 0xdc, 0xb1, 0x3d, 0x6f, 0x88, 0xe8, 0x19, 0x7e, 0x51,
+	0xde, 0x85, 0x0d, 0x52, 0xe4, 0xc3, 0x05, 0xca, 0x72, 0x84, 0x8a, 0x75, 0x28, 0xe1, 0xee, 0xb0,
+	0x3b, 0xc6, 0x7a, 0x23, 0xbe, 0x04, 0x87, 0x1b, 0x63, 0x7b, 0xcc, 0xe0, 0x79, 0x02, 0xbf, 0x01,
+	0x6b, 0x18, 0x3e, 0x32, 0x26, 0x13, 0x34, 0x10, 0xab, 0x15, 0x48, 0xf1, 0x4d, 0x48, 0x4e, 0x90,
+	0x73, 0xca, 0xce, 0xe6, 0xb9, 0xb6, 0x75, 0x90, 0x73, 0x2a, 0x30, 0x77, 0x1d, 0x4a, 0x63, 0xe4,
+	0xe9, 0xce, 0x5b, 0x9d, 0x7b, 0x40, 0x25, 0x52, 0x79, 0x15, 0x0a, 0x0c, 0x4e, 0x9b, 0x5c, 0x22,
+	0xd0, 0x35, 0x28, 0x32, 0x28, 0x0a, 0xec, 0x7e, 0x52, 0x68, 0x04, 0x7b, 0x5a, 0x13, 0x34, 0x20,
+	0x66, 0xdf, 0x87, 0x7b, 0x41, 0xe3, 0xb2, 0xd8, 0xb8, 0xc7, 0x1b, 0x5f, 0x11, 0x1b, 0xf7, 0xfc,
+	0xc6, 0x57, 0x23, 0x8d, 0xf0, 0xc6, 0xd7, 0x08, 0xfc, 0x43, 0xd8, 0x24, 0x70, 0x73, 0xa2, 0x3b,
+	0x9e, 0xa7, 0x8f, 0x2c, 0xd3, 0xb1, 0x31, 0x33, 0xf5, 0xc9, 0xd3, 0x47, 0x64, 0x2d, 0x88, 0x5d,
+	0x82, 0xf2, 0x8d, 0x47, 0x64, 0x65, 0xb8, 0x14, 0xe5, 0x29, 0x59, 0x25, 0x2e, 0x45, 0xf9, 0x06,
+	0x59, 0x2e, 0x62, 0x78, 0x21, 0xc1, 0xbb, 0xe2, 0x90, 0xa6, 0x94, 0xb9, 0xa6, 0x90, 0x12, 0x41,
+	0xd9, 0xb7, 0x48, 0x81, 0x02, 0x65, 0xde, 0xaa, 0x41, 0x2c, 0xbc, 0x6e, 0xda, 0xe3, 0x31, 0x32,
+	0xe9, 0x8e, 0xf1, 0x3a, 0x69, 0xf6, 0x36, 0xdc, 0xe0, 0x38, 0x44, 0x57, 0xde, 0x18, 0x96, 0x17,
+	0x42, 0xbb, 0x41, 0xd0, 0xc8, 0x76, 0xc5, 0x36, 0x91, 0xeb, 0x22, 0x77, 0x63, 0x9b, 0x28, 0xdb,
+	0x12, 0x64, 0xbc, 0x73, 0x07, 0x19, 0x03, 0x77, 0x63, 0x87, 0x6b, 0x1f, 0x51, 0x65, 0xfb, 0x8d,
+	0x3e, 0x71, 0x90, 0xeb, 0x4e, 0x1d, 0xdc, 0xe1, 0x74, 0xec, 0x21, 0x67, 0x63, 0x97, 0xa9, 0xcb,
+	0x16, 0xd1, 0x26, 0x34, 0xb0, 0xa6, 0xa3, 0x59, 0xa4, 0x0f, 0x09, 0xd2, 0x6d, 0xb8, 0x81, 0x91,
+	0x4c, 0xc7, 0xf2, 0x2c, 0xd3, 0x18, 0xce, 0xa2, 0x29, 0x04, 0xed, 0x08, 0xb6, 0x09, 0xe1, 0xd4,
+	0x7f, 0xc7, 0x24, 0x63, 0x07, 0x9e, 0x98, 0x2a, 0xaa, 0x77, 0x1b, 0x37, 0x43, 0x5b, 0xe2, 0x85,
+	0x8e, 0x3e, 0x9b, 0x81, 0x9e, 0xed, 0x19, 0x43, 0xc6, 0xbe, 0x5b, 0xa2, 0xee, 0xd3, 0x82, 0x11,
+	0x1a, 0xb9, 0x6f, 0x58, 0xf1, 0x6d, 0x52, 0x7c, 0x1d, 0x56, 0x71, 0xb1, 0x6b, 0x9f, 0x7a, 0x21,
+	0xa1, 0xdc, 0x11, 0xe7, 0x35, 0xb9, 0x1c, 0x64, 0x05, 0x77, 0xc5, 0x99, 0xe6, 0xbe, 0x31, 0x26,
+	0x0c, 0xbe, 0x27, 0xf6, 0x36, 0x1d, 0xa3, 0x0b, 0xcb, 0x24, 0x37, 0x8f, 0xac, 0xf8, 0x1e, 0x29,
+	0x3e, 0x80, 0x15, 0x3c, 0x5c, 0x77, 0xcc, 0x2c, 0x3c, 0x1b, 0xe3, 0xfd, 0xd0, 0xc4, 0x8b, 0x2c,
+	0x1c, 0xfb, 0x4c, 0x31, 0x04, 0xfc, 0x8f, 0x08, 0x4f, 0xd6, 0x82, 0x9b, 0x37, 0xd1, 0x62, 0x7f,
+	0x13, 0xa4, 0x93, 0xe1, 0x6b, 0xcb, 0x16, 0x2b, 0x7c, 0x4c, 0x3a, 0x50, 0xf8, 0x41, 0xe5, 0x99,
+	0x63, 0x4f, 0x27, 0xc4, 0xfc, 0x3e, 0xc7, 0x98, 0xfb, 0xc2, 0x12, 0xf0, 0xb7, 0x12, 0x78, 0xb7,
+	0x45, 0x4d, 0x6b, 0xdf, 0x35, 0xce, 0x90, 0xfc, 0x08, 0x72, 0xfc, 0x9e, 0x93, 0x5f, 0xfb, 0x46,
+	0x8f, 0x5a, 0x08, 0xa2, 0x7f, 0x15, 0x27, 0x6f, 0x43, 0x8a, 0xb0, 0x9b, 0x9d, 0xee, 0x46, 0x4f,
+	0xc3, 0xcb, 0xff, 0x22, 0x0e, 0x59, 0x1f, 0xf9, 0x3e, 0x14, 0x83, 0x6b, 0xd4, 0xf1, 0xa9, 0xcd,
+	0x0e, 0x55, 0x57, 0xe6, 0xdc, 0xef, 0xc9, 0x0a, 0xe4, 0xd8, 0xb9, 0x0c, 0x1a, 0x2c, 0x68, 0x5c,
+	0x7e, 0x00, 0x20, 0x0c, 0x3c, 0x31, 0xf7, 0x04, 0x46, 0xe0, 0xd6, 0x1e, 0x14, 0xfc, 0x13, 0x70,
+	0x9d, 0xec, 0x87, 0xe3, 0xf3, 0x63, 0xfc, 0xe4, 0xc7, 0x90, 0xf2, 0x88, 0x8b, 0x47, 0xcf, 0x99,
+	0x95, 0x4b, 0x79, 0xb0, 0xdf, 0x33, 0xdc, 0xd7, 0x65, 0x07, 0x92, 0xf8, 0x37, 0x72, 0x70, 0xb7,
+	0x49, 0xf6, 0xa4, 0xf4, 0x8a, 0x8f, 0x6f, 0xb3, 0x59, 0xd4, 0xe2, 0x55, 0xee, 0x12, 0x82, 0x53,
+	0x9b, 0xe4, 0x9c, 0x9d, 0xba, 0xf2, 0x57, 0x01, 0x4a, 0x11, 0xd3, 0x3d, 0x67, 0x5d, 0x94, 0x42,
+	0x51, 0x74, 0x18, 0x52, 0x82, 0xb4, 0xf9, 0xce, 0x1c, 0xfa, 0xeb, 0xee, 0x0e, 0x5c, 0x73, 0x3d,
+	0x63, 0x88, 0x97, 0x1f, 0x0a, 0xd7, 0x4f, 0x1d, 0x7b, 0xec, 0xa1, 0xf1, 0x80, 0xed, 0x8f, 0xb7,
+	0x61, 0x3d, 0x82, 0x80, 0x77, 0xd7, 0xb8, 0x3c, 0xc5, 0x6d, 0xb7, 0x35, 0x76, 0x3d, 0x67, 0xca,
+	0x4c, 0x10, 0x5d, 0x10, 0x37, 0x40, 0xa2, 0xb3, 0xc9, 0x41, 0xa7, 0xc8, 0xc1, 0xcb, 0xbe, 0xcb,
+	0x36, 0xcf, 0xab, 0x50, 0xa0, 0x25, 0x23, 0x8b, 0xd8, 0xa7, 0x2c, 0xdf, 0x30, 0x9f, 0x38, 0xc6,
+	0xd8, 0x3c, 0x47, 0x7c, 0x0b, 0xbd, 0x06, 0x45, 0x0a, 0xe1, 0x88, 0xc0, 0xfd, 0x84, 0x93, 0xa9,
+	0xcb, 0x48, 0x61, 0xeb, 0x9e, 0x0c, 0xe0, 0xa0, 0x53, 0x0e, 0xa3, 0x8b, 0xdd, 0x32, 0xe4, 0xcc,
+	0xc9, 0x54, 0x37, 0x87, 0xb6, 0xf9, 0x9a, 0xac, 0x78, 0x64, 0xa1, 0xc7, 0x92, 0x65, 0xb0, 0x12,
+	0x81, 0xad, 0x40, 0x7e, 0x62, 0x9c, 0x21, 0x9d, 0x6c, 0xba, 0xf9, 0xaa, 0xb6, 0x0a, 0x85, 0x91,
+	0x35, 0xb6, 0x1d, 0x0e, 0x95, 0x7c, 0xa8, 0xf1, 0xe3, 0x01, 0x74, 0xd9, 0x1f, 0x28, 0xe6, 0xd7,
+	0x5b, 0x4f, 0x77, 0xdf, 0x58, 0x1e, 0x19, 0x80, 0xcc, 0x6d, 0x07, 0xa6, 0x60, 0x64, 0x9d, 0x39,
+	0xec, 0xd8, 0x6f, 0x85, 0xd7, 0x30, 0x86, 0xd6, 0x19, 0x09, 0x8c, 0xe0, 0x6d, 0xad, 0xf2, 0x12,
+	0x34, 0x9a, 0x0e, 0xe9, 0x71, 0x24, 0x2b, 0x59, 0xe3, 0x06, 0x6a, 0xf8, 0x58, 0x1f, 0x50, 0xc6,
+	0x0d, 0x6d, 0x6c, 0xc6, 0xd7, 0xb9, 0x21, 0x0a, 0x17, 0x70, 0x6e, 0x5d, 0xe3, 0x2d, 0x06, 0xc5,
+	0xae, 0x67, 0x3b, 0x88, 0x6e, 0x75, 0x88, 0x58, 0x23, 0x25, 0xbc, 0xe6, 0x26, 0x37, 0x98, 0x41,
+	0xf9, 0x04, 0x4b, 0x91, 0x8e, 0xad, 0xcc, 0xd7, 0xda, 0xd9, 0x52, 0xde, 0xc0, 0x96, 0x40, 0xb2,
+	0x25, 0x92, 0x7c, 0x5d, 0x20, 0xd9, 0x9a, 0x25, 0xf9, 0x86, 0xd0, 0xb1, 0x35, 0xd3, 0xf1, 0xb6,
+	0xd0, 0xb1, 0x35, 0xbf, 0xe3, 0x1d, 0x2e, 0xf9, 0xe1, 0xd0, 0x64, 0x5d, 0xee, 0xfa, 0xb4, 0x30,
+	0x10, 0xc7, 0xfd, 0x90, 0x6b, 0x0e, 0x2e, 0x60, 0x9c, 0x51, 0x7c, 0x9e, 0x71, 0x18, 0xc7, 0xbe,
+	0xc9, 0x25, 0x8a, 0x4b, 0x04, 0xa2, 0xe8, 0xda, 0xb3, 0x05, 0x2b, 0x22, 0x9c, 0x57, 0xba, 0xcd,
+	0xbb, 0x18, 0x78, 0xc3, 0x13, 0x46, 0xcf, 0x1d, 0xde, 0x85, 0x0f, 0xe3, 0xd8, 0x74, 0xc1, 0x59,
+	0x81, 0x3c, 0x29, 0x61, 0x14, 0xd1, 0xd5, 0x66, 0x13, 0x96, 0x03, 0x20, 0xc7, 0xbf, 0xe7, 0xbb,
+	0x13, 0xb8, 0x48, 0xa0, 0xe9, 0x3e, 0x67, 0x63, 0xa8, 0x80, 0x57, 0xfb, 0x88, 0x13, 0x65, 0x05,
+	0x44, 0x7d, 0xcc, 0x89, 0xb2, 0xa2, 0x44, 0x3d, 0xe0, 0x9a, 0xcf, 0xa6, 0x22, 0xc5, 0xdf, 0x27,
+	0xd0, 0x32, 0xc8, 0x02, 0x94, 0xd7, 0x78, 0xc8, 0xdb, 0x1f, 0xdb, 0x03, 0x2e, 0xf7, 0x47, 0xbc,
+	0x7d, 0x1f, 0xc6, 0xb1, 0x1f, 0xf3, 0x41, 0x93, 0x12, 0x36, 0xe8, 0x03, 0x3e, 0xe8, 0x00, 0xc8,
+	0xf1, 0x9f, 0xf0, 0x41, 0x93, 0x22, 0x61, 0xd0, 0x9f, 0xf0, 0x41, 0x87, 0x0a, 0x78, 0xb5, 0xa7,
+	0x64, 0x3b, 0xd1, 0x86, 0x0c, 0x3b, 0xaf, 0x92, 0x77, 0x21, 0xeb, 0x0e, 0x8d, 0x0b, 0xa4, 0xfb,
+	0x57, 0x99, 0xd1, 0x7b, 0xf6, 0x90, 0x89, 0x9e, 0xbf, 0x06, 0x29, 0x3f, 0x5b, 0x82, 0x14, 0x89,
+	0x5d, 0x67, 0x37, 0xf6, 0xb1, 0x50, 0xf0, 0x34, 0x8f, 0x6a, 0x8f, 0x46, 0xf0, 0xc4, 0x43, 0x4b,
+	0x8f, 0x18, 0xc1, 0x23, 0x52, 0x95, 0x08, 0xb5, 0xc5, 0xa9, 0x12, 0xa3, 0x0e, 0x92, 0xb3, 0x51,
+	0x07, 0xa9, 0x45, 0xd7, 0xd2, 0x05, 0x21, 0x84, 0x09, 0x9b, 0xe8, 0xc4, 0xfc, 0x18, 0xa6, 0xf0,
+	0xa5, 0x6d, 0x66, 0xc1, 0xa5, 0xed, 0x35, 0x48, 0x4c, 0x9d, 0x21, 0xbb, 0xc2, 0x01, 0xbe, 0xc3,
+	0xd4, 0x1a, 0x73, 0x82, 0xa1, 0x73, 0x97, 0x04, 0x43, 0xcf, 0xbb, 0x7e, 0x81, 0x2b, 0x5d, 0xbf,
+	0x04, 0x41, 0x0d, 0xf9, 0x45, 0x41, 0x0d, 0xbf, 0x0f, 0x90, 0xf3, 0xa3, 0xf0, 0xe5, 0x7b, 0xa1,
+	0x98, 0x86, 0x2d, 0x51, 0x40, 0xfb, 0x3e, 0x16, 0x3d, 0x98, 0x7f, 0x80, 0x97, 0xdd, 0xe9, 0xd8,
+	0xe4, 0x47, 0xf3, 0x37, 0x16, 0x20, 0x37, 0x08, 0x92, 0xfc, 0x10, 0x32, 0xf4, 0x66, 0x87, 0x5f,
+	0x33, 0x6c, 0x2f, 0xc0, 0xa7, 0x17, 0x27, 0x48, 0x7e, 0x02, 0xb9, 0xe9, 0x98, 0x57, 0x49, 0x86,
+	0xc2, 0x3e, 0xa3, 0x55, 0xfa, 0x1c, 0x0f, 0x13, 0x65, 0x92, 0x53, 0x4b, 0x76, 0x6a, 0xbf, 0x88,
+	0x28, 0x7a, 0xb4, 0x89, 0x89, 0x1a, 0x20, 0xd7, 0x73, 0xec, 0x77, 0xec, 0xc2, 0x71, 0x11, 0x51,
+	0x35, 0x8a, 0x25, 0x7f, 0x1d, 0x0a, 0x74, 0xd0, 0x3a, 0x71, 0x19, 0xd9, 0x65, 0x9e, 0x72, 0xe9,
+	0xd0, 0x8f, 0x30, 0xa6, 0xfc, 0x0c, 0x8a, 0x94, 0x32, 0x9d, 0xdd, 0xc5, 0x64, 0x43, 0x77, 0xed,
+	0xf3, 0x09, 0x64, 0x37, 0x34, 0xdf, 0x84, 0x12, 0x23, 0x93, 0x57, 0xce, 0x85, 0x4e, 0x11, 0x16,
+	0x50, 0xcb, 0x6a, 0x7f, 0x1d, 0x0a, 0xac, 0xe7, 0x13, 0xb2, 0x9e, 0xc3, 0xa5, 0x34, 0xd3, 0x8e,
+	0x9f, 0x63, 0x4c, 0x4c, 0x33, 0xef, 0x97, 0x56, 0xcd, 0x5f, 0x4a, 0x33, 0xeb, 0x96, 0xd6, 0xa5,
+	0xa1, 0xf6, 0x85, 0x50, 0x94, 0x88, 0x90, 0xed, 0x51, 0x7e, 0x00, 0x69, 0xa6, 0x19, 0x37, 0x99,
+	0xb7, 0x81, 0xf5, 0x9a, 0x3b, 0xd4, 0x4b, 0xa2, 0x1b, 0x88, 0xd5, 0xf4, 0xc7, 0x20, 0x2f, 0x72,
+	0xf3, 0x36, 0x64, 0xf9, 0x44, 0xbd, 0xcc, 0x3f, 0xde, 0x63, 0x4d, 0x53, 0x61, 0xc5, 0x43, 0xd1,
+	0x09, 0xb8, 0xe9, 0x23, 0xee, 0xf7, 0x97, 0x1f, 0x60, 0x93, 0x47, 0x75, 0x28, 0x64, 0x28, 0x62,
+	0xf3, 0x3d, 0xf6, 0x87, 0x90, 0x0b, 0x94, 0xee, 0x2a, 0x15, 0xee, 0x43, 0x9a, 0xe9, 0xdc, 0x2e,
+	0x64, 0xa8, 0x10, 0x17, 0xe2, 0x7e, 0x04, 0x19, 0xae, 0x6f, 0xef, 0x47, 0xfe, 0x71, 0x28, 0x84,
+	0x74, 0x65, 0x47, 0x38, 0x9f, 0x8a, 0xcf, 0xb3, 0x71, 0xdf, 0x80, 0xbc, 0x67, 0x38, 0x67, 0x78,
+	0x93, 0x19, 0xdc, 0x96, 0x5f, 0xe9, 0x2e, 0xae, 0xfc, 0x08, 0x8a, 0x61, 0xd5, 0xda, 0xf1, 0x6f,
+	0x16, 0xe7, 0x77, 0x56, 0xde, 0x87, 0xbc, 0xa8, 0x50, 0xef, 0x23, 0xae, 0xbc, 0x0f, 0x85, 0x88,
+	0x16, 0xa5, 0xa8, 0xe6, 0xcd, 0xc7, 0x57, 0xfe, 0x5a, 0x6c, 0xc1, 0x8d, 0x6a, 0xa3, 0xd2, 0x6f,
+	0x55, 0x8f, 0x69, 0x40, 0x10, 0xfd, 0xaf, 0x1f, 0x69, 0xed, 0x7e, 0x47, 0x4a, 0x63, 0x54, 0x1a,
+	0x4b, 0xa5, 0x4a, 0x71, 0xb9, 0x08, 0xb9, 0x7e, 0x8b, 0x7f, 0x26, 0x48, 0x24, 0xa4, 0xa6, 0x56,
+	0x7a, 0xaa, 0x94, 0xa4, 0x21, 0x92, 0xdd, 0x9e, 0xd6, 0xfe, 0x42, 0x4a, 0xc9, 0xcb, 0x50, 0xa4,
+	0x05, 0xfa, 0xcb, 0x76, 0xa3, 0xdf, 0x54, 0xa5, 0x8c, 0x2c, 0x43, 0x89, 0x95, 0x73, 0x58, 0x16,
+	0xf7, 0xc6, 0xd0, 0xe8, 0xad, 0x5d, 0x0e, 0x57, 0xe4, 0x58, 0x14, 0x04, 0xca, 0xf7, 0x62, 0x50,
+	0xa8, 0x8f, 0x2f, 0x90, 0xe3, 0xa2, 0xf7, 0x2f, 0x8a, 0x6c, 0x0d, 0x89, 0xcf, 0xac, 0x21, 0xd1,
+	0xd5, 0x32, 0x71, 0xa5, 0xd5, 0x32, 0x39, 0x77, 0x0d, 0x9f, 0x5d, 0x8f, 0x52, 0xa4, 0xb5, 0x05,
+	0xeb, 0x51, 0x48, 0xe1, 0xd3, 0xf3, 0x97, 0xfc, 0xdf, 0x4c, 0x40, 0x96, 0xcf, 0xde, 0xc8, 0x7e,
+	0x6f, 0x1b, 0x32, 0x74, 0xc2, 0x2f, 0xd8, 0xf4, 0xbd, 0x7f, 0x75, 0x0f, 0x11, 0x90, 0x9c, 0xbf,
+	0x96, 0x8b, 0x26, 0x22, 0x15, 0x3a, 0x5f, 0x0e, 0x99, 0x08, 0x1e, 0x8d, 0x9c, 0x26, 0xd1, 0xc8,
+	0x57, 0x8d, 0x34, 0x3e, 0x27, 0x41, 0xf6, 0x3a, 0x09, 0x30, 0x8c, 0x44, 0x1a, 0x8b, 0x59, 0x0b,
+	0xa1, 0x30, 0xb7, 0xdc, 0x25, 0x71, 0xc4, 0xc1, 0x1e, 0x16, 0xe6, 0xdd, 0x36, 0x87, 0xc2, 0x8c,
+	0xf3, 0x97, 0x84, 0x19, 0xdf, 0x81, 0xfc, 0x6b, 0x6b, 0x38, 0xd4, 0x27, 0x24, 0xae, 0x9d, 0x99,
+	0x5f, 0xbe, 0xea, 0x0b, 0x01, 0xef, 0x3b, 0x90, 0xa2, 0xb4, 0x17, 0x43, 0x21, 0x2c, 0x7e, 0x5c,
+	0xbe, 0xf2, 0x10, 0x8a, 0x21, 0x03, 0x49, 0xce, 0x30, 0xc8, 0x6e, 0x7f, 0xbe, 0x81, 0x56, 0xfe,
+	0x65, 0x62, 0xee, 0xde, 0xfe, 0x7d, 0xb2, 0xbe, 0xba, 0x16, 0x47, 0xc2, 0xcb, 0x93, 0xa1, 0xa1,
+	0x09, 0xae, 0x99, 0xa8, 0x3d, 0xa9, 0xb9, 0xda, 0xb3, 0x43, 0x32, 0xea, 0x3c, 0xb4, 0x91, 0x26,
+	0xb6, 0x4f, 0x12, 0x28, 0xea, 0x62, 0x78, 0x58, 0xbd, 0x32, 0x8b, 0x62, 0xd2, 0x83, 0x7c, 0x88,
+	0x6c, 0xc8, 0x4d, 0xe4, 0xed, 0x4c, 0x5d, 0xf9, 0x01, 0xac, 0x50, 0x24, 0x7d, 0x3a, 0x19, 0xe0,
+	0x15, 0x98, 0xf6, 0x9b, 0x23, 0xde, 0xd5, 0x6c, 0xbf, 0x65, 0x90, 0xc3, 0xe8, 0xd3, 0xa9, 0x45,
+	0xc3, 0x73, 0x0a, 0xef, 0x4b, 0xef, 0xba, 0x72, 0x20, 0x7a, 0x48, 0x25, 0x8b, 0x97, 0xa8, 0x24,
+	0x4f, 0x3d, 0x28, 0xb1, 0x88, 0x85, 0xf5, 0x1e, 0xb9, 0xb9, 0xa3, 0xc3, 0x6f, 0x58, 0x23, 0xcb,
+	0xa3, 0x2e, 0xe3, 0x15, 0x56, 0x3f, 0x65, 0x0d, 0x92, 0xfd, 0x7e, 0x34, 0xc5, 0xb3, 0xa0, 0xfc,
+	0x41, 0x4c, 0xf4, 0x3d, 0xa3, 0xaa, 0x10, 0x5b, 0x18, 0xc0, 0x2f, 0x8a, 0x38, 0x3e, 0xd7, 0xa0,
+	0xdd, 0x82, 0x24, 0x71, 0x93, 0xa9, 0x3a, 0xad, 0xcf, 0x77, 0x58, 0xe4, 0x07, 0x50, 0x1c, 0x1a,
+	0x1e, 0x72, 0x3d, 0x9d, 0xb2, 0x9d, 0x1d, 0x76, 0xad, 0x47, 0xdd, 0x15, 0x26, 0xcd, 0x3d, 0x41,
+	0xe4, 0xa9, 0x50, 0xba, 0x47, 0x14, 0x73, 0x13, 0x92, 0x44, 0x74, 0x69, 0xd2, 0x5e, 0x9e, 0x5b,
+	0xd1, 0x7e, 0xbd, 0xa6, 0xfc, 0x46, 0x0c, 0x96, 0x66, 0x1b, 0x2e, 0xd8, 0x1c, 0x34, 0x3b, 0x72,
+	0x31, 0x47, 0xf6, 0x16, 0x57, 0x5d, 0xba, 0x6c, 0xaf, 0xcd, 0xeb, 0x1f, 0xc9, 0x4b, 0x90, 0x19,
+	0x21, 0xd7, 0x35, 0xce, 0x78, 0xac, 0xd2, 0xc7, 0xb0, 0x62, 0xda, 0x78, 0xc5, 0xf1, 0xd0, 0x40,
+	0x7f, 0xaf, 0xe5, 0xe4, 0xd4, 0x53, 0xab, 0x19, 0xa2, 0xfe, 0x17, 0xe2, 0xb0, 0x44, 0x8c, 0x04,
+	0xa5, 0xfc, 0xea, 0x69, 0x73, 0x0f, 0xa3, 0x91, 0xc3, 0xdb, 0x22, 0x5e, 0xd0, 0x9a, 0x9f, 0x3c,
+	0x77, 0x2f, 0x94, 0x3c, 0xb7, 0xb5, 0x00, 0x9b, 0x64, 0xa4, 0xdd, 0xa5, 0x69, 0x50, 0xc9, 0x50,
+	0x18, 0x5b, 0x14, 0xb3, 0x67, 0x4e, 0xca, 0xd7, 0x83, 0x94, 0xb7, 0x65, 0xc8, 0xa1, 0xb7, 0xe4,
+	0x4e, 0x60, 0x40, 0x29, 0x4f, 0x95, 0xb7, 0x58, 0x82, 0xdb, 0x0a, 0xe4, 0xd9, 0x2c, 0xf4, 0x0b,
+	0x8b, 0xe5, 0x0d, 0x9a, 0xd9, 0xb6, 0x0c, 0x39, 0x77, 0x6a, 0x9a, 0x08, 0x0d, 0x10, 0x15, 0x53,
+	0x56, 0xf9, 0x6e, 0x11, 0x40, 0x98, 0xf2, 0x82, 0xc1, 0x8b, 0xcd, 0x33, 0x78, 0x3b, 0x61, 0x09,
+	0xce, 0x1a, 0x01, 0xbe, 0x20, 0x25, 0xc8, 0xb4, 0x17, 0x44, 0x49, 0x23, 0x93, 0xc2, 0xe6, 0x6d,
+	0x9e, 0xee, 0x87, 0x4e, 0x37, 0x49, 0xe2, 0x59, 0xd4, 0x76, 0x66, 0x16, 0xd9, 0xce, 0x25, 0xc8,
+	0xd0, 0x95, 0xed, 0x1d, 0x59, 0xd4, 0xb2, 0xf2, 0x9e, 0xef, 0xb0, 0xe5, 0x42, 0x59, 0x26, 0xc1,
+	0x80, 0xf9, 0x35, 0xe7, 0x1e, 0xa4, 0x1d, 0x64, 0xb8, 0x36, 0x8d, 0x9f, 0x9f, 0x8b, 0xa9, 0x91,
+	0x72, 0x62, 0x58, 0xb0, 0x7a, 0xe5, 0x23, 0x76, 0xad, 0x30, 0xcf, 0xae, 0x3d, 0xa2, 0xa7, 0x86,
+	0xf4, 0x38, 0x9a, 0xcd, 0x52, 0x6a, 0xb5, 0xd6, 0xa3, 0x56, 0x8b, 0x09, 0xe0, 0x1e, 0x48, 0x53,
+	0x1a, 0x43, 0x41, 0x6e, 0x1b, 0x30, 0x2b, 0x58, 0xfe, 0xcc, 0x4c, 0xea, 0xf4, 0xc7, 0x50, 0x20,
+	0xab, 0x20, 0x6f, 0x78, 0x29, 0xdc, 0x70, 0x44, 0xcf, 0x1f, 0x03, 0x0c, 0x7d, 0xb3, 0x47, 0x8e,
+	0x3a, 0x83, 0xfd, 0xe5, 0x7c, 0xdb, 0xa8, 0x3c, 0xf7, 0x43, 0xdf, 0x96, 0xa1, 0xc8, 0x42, 0xf4,
+	0x9b, 0x95, 0x6e, 0x4f, 0xd5, 0x68, 0xe2, 0x04, 0x03, 0x75, 0x1b, 0x95, 0x97, 0xaa, 0x14, 0x93,
+	0x57, 0x60, 0x89, 0x41, 0xd4, 0xcf, 0xd5, 0x6a, 0xbf, 0xd7, 0xd6, 0xa4, 0xb8, 0xf2, 0x5b, 0x59,
+	0x48, 0x33, 0xce, 0x29, 0xb0, 0xad, 0xa9, 0x95, 0x6e, 0xbb, 0xa5, 0xb3, 0xdc, 0x36, 0x1f, 0x4f,
+	0x3f, 0xac, 0xd4, 0x1b, 0x6a, 0x4d, 0xfa, 0x20, 0x84, 0xd3, 0xea, 0x55, 0xea, 0x2d, 0x55, 0xd3,
+	0x99, 0x03, 0xcc, 0x70, 0xd6, 0xe4, 0x1d, 0xd8, 0x9a, 0xc5, 0xa9, 0x37, 0xeb, 0x3d, 0x92, 0x5d,
+	0x20, 0xad, 0xc8, 0xb7, 0x60, 0xf7, 0x12, 0x04, 0xbd, 0x56, 0xef, 0xbe, 0x90, 0x56, 0xe5, 0x3b,
+	0xa0, 0x5c, 0x86, 0xd5, 0x54, 0x9b, 0x6d, 0xed, 0x0b, 0x29, 0x2b, 0x6f, 0x43, 0x79, 0x06, 0xaf,
+	0xa3, 0xa9, 0x6a, 0xb3, 0xd3, 0x53, 0x6b, 0xd2, 0xf2, 0x5c, 0x92, 0x69, 0x32, 0x09, 0x27, 0x79,
+	0x5d, 0xde, 0x83, 0x5b, 0x0c, 0xc7, 0x1f, 0xb2, 0xa6, 0x1e, 0xd5, 0xbb, 0x3d, 0x8d, 0x76, 0xd6,
+	0xab, 0x37, 0xd5, 0x76, 0xbf, 0x27, 0x5d, 0x93, 0xef, 0xc3, 0x9d, 0x59, 0xcc, 0xb9, 0xb8, 0x1b,
+	0x02, 0x65, 0x3e, 0x6e, 0x4f, 0xd5, 0x9a, 0xf5, 0x56, 0x05, 0x53, 0x16, 0x93, 0x77, 0xe1, 0x7a,
+	0xb4, 0x1c, 0xef, 0x16, 0x70, 0x5b, 0xaa, 0xa6, 0xd6, 0xa4, 0xb8, 0x7c, 0x1d, 0x36, 0x18, 0xc6,
+	0xa1, 0x56, 0x69, 0xaa, 0xaf, 0xda, 0xda, 0x0b, 0x5d, 0x53, 0x9b, 0xed, 0x97, 0x6a, 0x4d, 0x4a,
+	0x60, 0x81, 0xb2, 0xd2, 0xa3, 0xaa, 0xae, 0x6a, 0x5a, 0x5b, 0x93, 0x92, 0x42, 0xa7, 0xf5, 0xd6,
+	0xcb, 0x4a, 0xa3, 0x5e, 0x0b, 0xaa, 0xd6, 0x6b, 0x52, 0x4a, 0xde, 0x84, 0xb5, 0x48, 0x79, 0xfb,
+	0xf0, 0x50, 0xd5, 0xba, 0x52, 0x5a, 0xa0, 0xa7, 0xde, 0xd6, 0xbb, 0xaf, 0xea, 0xbd, 0xea, 0xf1,
+	0xf3, 0x76, 0x45, 0xc3, 0x7a, 0x50, 0xc7, 0x14, 0x6f, 0x09, 0x8d, 0x53, 0x3d, 0xc3, 0xb2, 0xaa,
+	0xb6, 0x5b, 0x2d, 0xb5, 0x8a, 0xcb, 0x33, 0x42, 0xe3, 0x9a, 0x5a, 0x6d, 0xb7, 0xaa, 0xf5, 0x46,
+	0x9d, 0x0a, 0x3d, 0x27, 0x0c, 0xc5, 0xcf, 0xba, 0xd6, 0xf9, 0x9e, 0x4a, 0x96, 0x6f, 0xc0, 0x26,
+	0x2b, 0x25, 0xda, 0x1a, 0x6e, 0x17, 0xe4, 0x0d, 0x58, 0x0d, 0x15, 0x73, 0x1e, 0xe4, 0x05, 0x5d,
+	0x0a, 0x95, 0xe8, 0xcf, 0xbf, 0xd0, 0xdb, 0x1d, 0x55, 0xab, 0x60, 0x2d, 0xdf, 0x99, 0x69, 0x9e,
+	0x8b, 0x8c, 0xb0, 0x79, 0x97, 0xe6, 0xbf, 0x84, 0x8a, 0xbb, 0xbd, 0x8a, 0x86, 0xbb, 0x2e, 0xcc,
+	0x74, 0xcd, 0x69, 0x2e, 0x0a, 0x5d, 0xfb, 0x99, 0xe7, 0x6a, 0x4d, 0xaf, 0xf5, 0xb5, 0x7a, 0xeb,
+	0x88, 0x4d, 0x0a, 0x69, 0x3b, 0x8a, 0x55, 0x3d, 0x56, 0xab, 0x2f, 0x48, 0x76, 0x7a, 0xbf, 0xcb,
+	0xd4, 0xb0, 0x26, 0x5d, 0x97, 0x3f, 0x82, 0xbb, 0x22, 0xd6, 0xb1, 0x5a, 0x69, 0xf4, 0x8e, 0xe7,
+	0x23, 0xdf, 0x10, 0x46, 0x43, 0x90, 0xc9, 0xce, 0x93, 0x4b, 0x53, 0xda, 0x14, 0x14, 0x5e, 0x28,
+	0xee, 0xb7, 0x2a, 0xfd, 0xde, 0x71, 0x5b, 0xab, 0x7f, 0x5b, 0xad, 0x49, 0x65, 0x9a, 0x47, 0x1f,
+	0xe0, 0xf0, 0xca, 0x25, 0x41, 0x4c, 0xa4, 0x20, 0x54, 0x6d, 0x29, 0x5a, 0x8d, 0xf3, 0x42, 0x52,
+	0x6e, 0x41, 0xe6, 0xd0, 0x1a, 0x7a, 0xc8, 0xc1, 0xde, 0x49, 0xc9, 0x41, 0xa7, 0x53, 0x17, 0xe9,
+	0xc1, 0x5b, 0x19, 0xe4, 0x8d, 0x83, 0xa7, 0xca, 0xef, 0xc4, 0x20, 0x2f, 0xa6, 0xa3, 0xee, 0x43,
+	0xee, 0xc2, 0x70, 0x2c, 0x6c, 0x49, 0xb9, 0x73, 0xb7, 0x35, 0x9b, 0xb5, 0xba, 0xff, 0x92, 0xe1,
+	0x94, 0x7f, 0x2d, 0x06, 0x59, 0xfe, 0x11, 0xd9, 0x09, 0xf8, 0xbe, 0x5f, 0x9c, 0xbd, 0x72, 0xc0,
+	0x13, 0x5a, 0xc4, 0xec, 0xa9, 0x79, 0x8d, 0x12, 0x07, 0xe2, 0x59, 0xea, 0x65, 0xa5, 0xd1, 0x57,
+	0xf1, 0x72, 0xe1, 0x22, 0xd3, 0xf1, 0x73, 0x3a, 0xf8, 0x72, 0xd1, 0x25, 0x40, 0xe5, 0xfe, 0xbc,
+	0xe3, 0x80, 0x1c, 0xd0, 0xca, 0x34, 0xd3, 0xb1, 0xab, 0x56, 0x35, 0xb5, 0x27, 0xc5, 0x95, 0xbb,
+	0x90, 0x0b, 0x5e, 0xe2, 0xc8, 0x43, 0xe2, 0x35, 0x7a, 0x37, 0x4b, 0x2a, 0xcd, 0xb6, 0x00, 0x1f,
+	0xd1, 0x95, 0x6f, 0x42, 0x6e, 0xc2, 0xbf, 0x18, 0x4b, 0x66, 0x1e, 0xf6, 0x50, 0x1e, 0x02, 0x54,
+	0x1d, 0x34, 0x40, 0x63, 0xcf, 0x32, 0x86, 0xd1, 0x50, 0xf3, 0x38, 0x4b, 0xaf, 0xa6, 0xe3, 0xa0,
+	0x6f, 0x6e, 0x3c, 0x25, 0x07, 0x25, 0xac, 0x82, 0x8b, 0x17, 0x6c, 0x33, 0xf8, 0x64, 0xdd, 0xf0,
+	0x05, 0x3b, 0x40, 0x54, 0x7e, 0x3b, 0x06, 0x69, 0x3a, 0x74, 0x79, 0x37, 0xe4, 0x86, 0xc9, 0x21,
+	0xbe, 0x50, 0x1f, 0xec, 0x3e, 0xf6, 0xd4, 0xd9, 0x25, 0x23, 0xf3, 0xc2, 0xae, 0x85, 0xd1, 0x34,
+	0x5e, 0x2c, 0x2b, 0x62, 0x1e, 0x72, 0xb0, 0x75, 0x66, 0x78, 0x24, 0xd5, 0xa1, 0x7c, 0x07, 0x72,
+	0x41, 0x85, 0xb0, 0xb0, 0x19, 0x3b, 0xe3, 0x3c, 0x08, 0x9a, 0x26, 0xfe, 0x70, 0xd7, 0x86, 0x7a,
+	0xff, 0x0f, 0xe6, 0xc9, 0xaa, 0x08, 0x39, 0x4d, 0x3d, 0x54, 0x35, 0xb5, 0x45, 0xd2, 0xb9, 0x7c,
+	0xd1, 0xc5, 0x95, 0x6f, 0x41, 0x4e, 0x33, 0x3c, 0xba, 0xba, 0xe2, 0xf6, 0xbf, 0x9c, 0x30, 0xbd,
+	0x8d, 0x06, 0x9d, 0xc7, 0x69, 0x0e, 0xa6, 0x69, 0x4c, 0x0c, 0x93, 0xbf, 0x33, 0x92, 0x54, 0xbe,
+	0x04, 0xf0, 0xab, 0xbb, 0xf2, 0x2e, 0xa4, 0x59, 0x1c, 0x73, 0x58, 0x82, 0x41, 0x0f, 0x37, 0x60,
+	0xcd, 0x38, 0x3b, 0x73, 0xd0, 0x19, 0xde, 0x87, 0xf1, 0xf4, 0x2a, 0xdc, 0x27, 0x0d, 0x95, 0x52,
+	0xa0, 0x3c, 0x5b, 0x1c, 0xe9, 0xf2, 0xef, 0xc6, 0x21, 0x55, 0x1f, 0x19, 0x67, 0x8b, 0x32, 0x9e,
+	0x48, 0x19, 0x15, 0xcd, 0x0e, 0x24, 0x8d, 0xc9, 0xc4, 0x64, 0x52, 0x09, 0x23, 0x54, 0x26, 0x13,
+	0x53, 0xbe, 0x09, 0xe9, 0x81, 0x6d, 0xbe, 0x46, 0xd1, 0xdc, 0x15, 0x8a, 0x52, 0x23, 0x45, 0xf2,
+	0x2a, 0xa4, 0xc9, 0x7d, 0x1f, 0xdd, 0x1d, 0xb3, 0x64, 0xee, 0xf2, 0x8f, 0x40, 0x92, 0x34, 0x11,
+	0x96, 0x10, 0xb0, 0x4b, 0xf7, 0x70, 0xde, 0x43, 0x62, 0x8e, 0x0f, 0x56, 0xfe, 0xe3, 0x90, 0x66,
+	0x1d, 0x84, 0x9b, 0xb8, 0x07, 0x10, 0x28, 0x69, 0x84, 0xf4, 0x40, 0x47, 0x49, 0xf2, 0xcb, 0x0d,
+	0x48, 0x9b, 0xf6, 0xf8, 0xd4, 0x3a, 0x8b, 0xf4, 0xc0, 0xa6, 0xed, 0x75, 0xa6, 0x0a, 0x59, 0x48,
+	0x56, 0x3a, 0x9d, 0x2a, 0x9d, 0xa8, 0xb5, 0x76, 0xf5, 0x85, 0x8a, 0x3d, 0xa0, 0x9f, 0x00, 0x89,
+	0x04, 0xd1, 0x77, 0x1c, 0x7b, 0x62, 0x9c, 0xd1, 0xad, 0xdb, 0x7d, 0xf6, 0xea, 0x0c, 0xd5, 0x76,
+	0x3f, 0xeb, 0x35, 0x82, 0x46, 0x9e, 0x9e, 0x51, 0xbe, 0xc5, 0xde, 0x92, 0x09, 0x29, 0xda, 0x1a,
+	0x2c, 0x1f, 0xb7, 0xbb, 0x3d, 0xbd, 0xd7, 0x0e, 0xbc, 0x0e, 0x09, 0xeb, 0x52, 0xf1, 0x79, 0xbd,
+	0x56, 0xd7, 0xd4, 0x2a, 0x5e, 0x15, 0x2b, 0x0d, 0x29, 0xae, 0xfc, 0x4a, 0x1a, 0xd2, 0xec, 0xbc,
+	0x73, 0x1d, 0x4a, 0x81, 0x37, 0x4a, 0xd2, 0x12, 0xfc, 0xb4, 0x87, 0x73, 0xdb, 0xf5, 0x74, 0xe1,
+	0xfd, 0x84, 0x5d, 0x46, 0x60, 0x82, 0x88, 0x5c, 0x0e, 0xa5, 0x5c, 0xd0, 0x17, 0x71, 0xb6, 0x20,
+	0x65, 0x8d, 0xb8, 0x63, 0x9f, 0x3f, 0x28, 0x88, 0x12, 0x95, 0x6f, 0xf9, 0x8e, 0x77, 0x2a, 0xb4,
+	0x47, 0x67, 0x0d, 0xb0, 0x4c, 0x8c, 0xdf, 0x4b, 0xfa, 0x0e, 0xe6, 0xdd, 0xd0, 0xf4, 0xdf, 0x9c,
+	0x87, 0x4e, 0x55, 0xed, 0xeb, 0x50, 0xa4, 0x9a, 0xa4, 0x87, 0x92, 0x42, 0x3e, 0x9c, 0x5b, 0x83,
+	0xca, 0x9d, 0x8d, 0xfe, 0x53, 0x28, 0xb8, 0xc6, 0x78, 0x70, 0x62, 0xbf, 0xd5, 0xfd, 0x47, 0x8e,
+	0x82, 0x4b, 0x99, 0x70, 0xc5, 0x2e, 0x45, 0x24, 0x29, 0x11, 0x97, 0xdb, 0x6c, 0xf9, 0x91, 0xc8,
+	0xbc, 0xf0, 0xb5, 0x4d, 0xb8, 0xcd, 0x63, 0xdb, 0xf5, 0x70, 0x83, 0xe5, 0x57, 0x50, 0x08, 0x11,
+	0x56, 0x82, 0xf4, 0xc0, 0xb1, 0x2e, 0x88, 0x3d, 0x8e, 0xcd, 0xe4, 0x74, 0xde, 0x83, 0x12, 0x2d,
+	0xd5, 0xed, 0x09, 0x0d, 0x2f, 0x48, 0x84, 0x54, 0x35, 0xb0, 0xed, 0xe5, 0x06, 0x64, 0x79, 0x27,
+	0xfe, 0x73, 0x18, 0x54, 0xc2, 0x07, 0xb0, 0x4c, 0x52, 0x4a, 0xf4, 0x49, 0xa0, 0x5d, 0x11, 0x1b,
+	0x1a, 0x55, 0xbe, 0xf2, 0x9f, 0x80, 0xbc, 0xc8, 0x86, 0x27, 0x21, 0x09, 0xdd, 0x7e, 0x1f, 0xdb,
+	0xa8, 0xb4, 0x82, 0x47, 0x39, 0xf0, 0x4a, 0x74, 0x6f, 0x41, 0xde, 0x48, 0x57, 0x6d, 0x1c, 0xd2,
+	0x49, 0xd3, 0xa9, 0x68, 0x6a, 0x0b, 0xaf, 0x6e, 0xdd, 0x79, 0xa8, 0xcb, 0x50, 0xa4, 0xb3, 0x8a,
+	0x9f, 0x58, 0xc7, 0xb0, 0xc1, 0x25, 0xf3, 0x80, 0xa4, 0x9e, 0x24, 0xc9, 0xa6, 0xa4, 0xd2, 0xaa,
+	0x3d, 0x6f, 0x7f, 0x4e, 0x21, 0x71, 0x61, 0xc9, 0x4c, 0x28, 0xeb, 0xc1, 0xab, 0x4c, 0xda, 0x2b,
+	0x29, 0x46, 0x7e, 0xdb, 0x52, 0x5c, 0xf9, 0x7e, 0x1c, 0xf2, 0xc2, 0x0b, 0x1d, 0x58, 0x20, 0xe4,
+	0xca, 0x85, 0xc6, 0xec, 0xe4, 0xde, 0x13, 0xa2, 0x23, 0x1f, 0x40, 0xc1, 0x9a, 0xe8, 0x2c, 0x23,
+	0xde, 0x3f, 0x5c, 0xb9, 0x3e, 0xe7, 0xe9, 0x8f, 0x7a, 0x47, 0x78, 0x69, 0x8b, 0xc8, 0x38, 0xcd,
+	0xbc, 0x89, 0xe2, 0xc4, 0x76, 0x3c, 0x12, 0xd1, 0x69, 0x8d, 0xcf, 0xf8, 0xa9, 0xdd, 0xf6, 0xbc,
+	0xd7, 0x43, 0x6c, 0xc7, 0x6b, 0x52, 0xb4, 0x72, 0x0f, 0x72, 0x41, 0x8b, 0xe2, 0xe3, 0x23, 0xb1,
+	0x2b, 0x3e, 0x3e, 0x42, 0xe2, 0x03, 0x7c, 0xd2, 0xd9, 0x7a, 0xf7, 0x47, 0x21, 0x2f, 0x74, 0x12,
+	0x18, 0x87, 0xe0, 0x9d, 0x93, 0xb0, 0x1d, 0xc1, 0x70, 0xfa, 0xb6, 0x80, 0x24, 0x90, 0x40, 0x4e,
+	0x6e, 0x94, 0x6d, 0xc8, 0xf2, 0x1e, 0xb1, 0xa0, 0x71, 0x9f, 0xf4, 0x41, 0x93, 0x7a, 0xe7, 0xe2,
+	0x53, 0x29, 0xae, 0xfc, 0xa3, 0x14, 0x94, 0x82, 0x44, 0x73, 0xc2, 0xfc, 0x4f, 0x23, 0x0f, 0x03,
+	0xd0, 0x0c, 0x6f, 0x3e, 0x4d, 0xc3, 0xc8, 0xc2, 0xa7, 0xf2, 0x55, 0x2a, 0x94, 0xde, 0x1e, 0xb9,
+	0x51, 0x49, 0x55, 0x8f, 0xf1, 0xdf, 0xdf, 0xce, 0xc8, 0xcb, 0x50, 0xa8, 0x55, 0xaa, 0x7a, 0xfb,
+	0xa5, 0xaa, 0x69, 0xf5, 0x9a, 0x2a, 0xfd, 0x4e, 0x46, 0x5e, 0x85, 0x25, 0x0c, 0xd2, 0xd4, 0x4a,
+	0x4d, 0xef, 0xaa, 0x15, 0xad, 0x7a, 0x2c, 0xfd, 0x6e, 0x46, 0xce, 0x43, 0xfa, 0xb0, 0xfd, 0x0a,
+	0xdb, 0xd5, 0x7f, 0x4b, 0x3f, 0xba, 0x6a, 0xaf, 0x5e, 0x93, 0xfe, 0x5d, 0x46, 0xce, 0x41, 0x12,
+	0x3b, 0xe3, 0xd2, 0xef, 0x11, 0x78, 0x57, 0xed, 0x1d, 0xd5, 0x6b, 0xd2, 0xbf, 0xe7, 0x1f, 0xfd,
+	0x7a, 0x4d, 0xfa, 0x0f, 0x19, 0xb9, 0x00, 0x99, 0xae, 0xda, 0xeb, 0x54, 0x2b, 0x1d, 0xe9, 0xf7,
+	0x49, 0x17, 0x8d, 0x7a, 0xab, 0xff, 0xb9, 0x5e, 0x6f, 0x36, 0xfb, 0xbd, 0xca, 0xf3, 0x86, 0x2a,
+	0xfd, 0x41, 0x46, 0x5e, 0x03, 0xa9, 0xa5, 0xf6, 0xf4, 0xe7, 0xf5, 0x56, 0xcd, 0x4f, 0xf9, 0xfe,
+	0x8f, 0x19, 0x59, 0x86, 0x22, 0x01, 0x6b, 0xed, 0x4a, 0xad, 0x5a, 0xe9, 0xf6, 0xa4, 0xff, 0x94,
+	0x91, 0x4b, 0x90, 0xc3, 0xb0, 0x4a, 0xad, 0x59, 0x6f, 0x49, 0xff, 0x99, 0x34, 0x8f, 0xbf, 0xb5,
+	0xca, 0x2b, 0xe9, 0xbf, 0x64, 0xe4, 0x22, 0x64, 0xeb, 0x9d, 0xaa, 0x4e, 0x6e, 0x68, 0xfe, 0x2b,
+	0x41, 0xc6, 0x9f, 0x94, 0xfa, 0xef, 0x67, 0xe4, 0x25, 0x80, 0xee, 0x17, 0x5d, 0xbd, 0xd9, 0xae,
+	0xf5, 0x1b, 0xaa, 0xf4, 0xdf, 0x08, 0x02, 0x06, 0x68, 0x95, 0x57, 0xf5, 0xb6, 0xf4, 0xdf, 0x7d,
+	0x84, 0xea, 0xb1, 0xd6, 0x6e, 0xf7, 0xa4, 0xff, 0xe1, 0x03, 0x3a, 0x3d, 0xad, 0x52, 0x55, 0xa5,
+	0xff, 0xe9, 0xd7, 0xe8, 0x54, 0xaa, 0xd5, 0x9e, 0xf4, 0x87, 0xfe, 0x37, 0xa5, 0xe7, 0x7f, 0x11,
+	0x0a, 0xf0, 0xf7, 0x73, 0x5c, 0xff, 0x07, 0xfe, 0x67, 0x0b, 0x8f, 0xe8, 0x7f, 0x13, 0xa6, 0x93,
+	0xfe, 0xd8, 0xce, 0x4c, 0xfa, 0x93, 0x59, 0x8e, 0x81, 0x77, 0xb3, 0xd2, 0x9f, 0xca, 0xca, 0x2b,
+	0x50, 0x22, 0x9f, 0xbd, 0x2f, 0xf0, 0x82, 0x76, 0x58, 0x3f, 0x92, 0x7e, 0x32, 0x8b, 0xe5, 0xd6,
+	0x7c, 0xd1, 0x6a, 0xd7, 0xa4, 0xaf, 0xc8, 0xff, 0x86, 0x5a, 0xe9, 0xaa, 0xd2, 0x9f, 0xce, 0xca,
+	0x12, 0xe4, 0x2b, 0xfd, 0x5a, 0xbd, 0xa7, 0xbf, 0xd2, 0xea, 0x3d, 0x55, 0xfa, 0xa9, 0x2c, 0x66,
+	0x19, 0x85, 0xb0, 0xb4, 0x7a, 0xe9, 0xa7, 0xb3, 0x4c, 0x02, 0x87, 0x58, 0x02, 0x7f, 0x26, 0x8b,
+	0x49, 0x68, 0x8a, 0x72, 0xff, 0xb3, 0x59, 0x3c, 0x06, 0x0c, 0xa2, 0x63, 0xf8, 0x73, 0x59, 0x22,
+	0xbf, 0x2f, 0xba, 0x8d, 0xf6, 0x91, 0xf4, 0x33, 0x59, 0xcc, 0x81, 0x57, 0x95, 0x17, 0xaa, 0x5e,
+	0x69, 0x54, 0xb4, 0xa6, 0xf4, 0xb3, 0xa4, 0x0b, 0x72, 0x05, 0xa6, 0x77, 0xfb, 0xdd, 0x8e, 0xda,
+	0xaa, 0x49, 0x3f, 0x47, 0x90, 0x68, 0xb7, 0x58, 0x77, 0xa4, 0x3f, 0x9f, 0x55, 0xfe, 0x61, 0x0c,
+	0x72, 0x0d, 0x6b, 0x3c, 0x7d, 0xcb, 0x1e, 0xb9, 0x58, 0xf2, 0x75, 0xf9, 0x1d, 0x0f, 0x87, 0x0c,
+	0xbd, 0xa6, 0x15, 0x52, 0x67, 0xe2, 0x6b, 0x7c, 0x02, 0x6b, 0x27, 0xf6, 0x74, 0x3c, 0xb0, 0xc6,
+	0x67, 0x7a, 0x68, 0x22, 0xc4, 0x2f, 0xa9, 0x29, 0x3f, 0x85, 0x75, 0x74, 0x7a, 0x8a, 0x58, 0x40,
+	0xb1, 0x58, 0x2d, 0x71, 0x59, 0xb5, 0x2d, 0x58, 0x21, 0x59, 0xb4, 0xfa, 0xc4, 0x1a, 0xe8, 0xd8,
+	0x20, 0xb9, 0x13, 0xc3, 0x64, 0xef, 0xe6, 0x28, 0xdf, 0x4d, 0x00, 0x68, 0xc4, 0x9d, 0x24, 0xb8,
+	0xf7, 0x20, 0xe3, 0x84, 0xbc, 0x4e, 0x3f, 0x09, 0xd8, 0xc7, 0x61, 0x7f, 0xcb, 0xbf, 0x1b, 0x87,
+	0x34, 0xfd, 0x2b, 0x7f, 0x14, 0x5a, 0x36, 0x6e, 0x2c, 0xaa, 0xe2, 0x2f, 0x17, 0xe7, 0x86, 0x33,
+	0x60, 0xf9, 0x7c, 0x05, 0x48, 0xba, 0xf6, 0xa9, 0xc7, 0xdc, 0xd1, 0x5f, 0x8a, 0x2f, 0x78, 0x08,
+	0x46, 0x6b, 0x34, 0x7b, 0x7a, 0xa5, 0x4b, 0x17, 0x03, 0xf2, 0x51, 0x6d, 0x6b, 0xaa, 0x14, 0x97,
+	0x0b, 0x90, 0xa5, 0x9f, 0x9d, 0xbe, 0x94, 0xf0, 0x0b, 0x6b, 0x95, 0x5e, 0x45, 0x4a, 0xca, 0x25,
+	0x3c, 0xb6, 0x66, 0x4f, 0x3f, 0xec, 0xd6, 0xbf, 0xcd, 0x5e, 0x62, 0x23, 0xdf, 0x58, 0xc2, 0x5d,
+	0x29, 0x4d, 0x5e, 0x5b, 0xc3, 0xdf, 0x4d, 0xb5, 0x49, 0x66, 0x15, 0xd6, 0xe1, 0x22, 0x85, 0x74,
+	0x8f, 0x3e, 0xeb, 0xab, 0x7d, 0x55, 0xca, 0xfa, 0x6d, 0x12, 0x35, 0xcf, 0xc9, 0x4b, 0x90, 0xa7,
+	0x9f, 0xed, 0xc3, 0x7a, 0x43, 0x95, 0xc0, 0x6f, 0xb4, 0xd5, 0xd1, 0xda, 0x55, 0x29, 0xef, 0x53,
+	0xa4, 0x75, 0xbb, 0x52, 0xc1, 0x47, 0xd7, 0x7a, 0x1d, 0xad, 0xde, 0x96, 0x8a, 0x02, 0x80, 0xcc,
+	0x8a, 0x12, 0x39, 0x80, 0xc1, 0x80, 0x6e, 0xfd, 0x08, 0x6b, 0x5c, 0xbd, 0x75, 0x24, 0x2d, 0xf9,
+	0x8d, 0x76, 0x7b, 0x95, 0xea, 0x0b, 0x49, 0x52, 0x4e, 0x21, 0xd3, 0xeb, 0x7d, 0xc1, 0xf3, 0x95,
+	0xdf, 0x58, 0xe3, 0x81, 0xfd, 0x46, 0x77, 0xad, 0xef, 0xa0, 0xc8, 0xe3, 0x0d, 0x0c, 0x69, 0xff,
+	0x15, 0xc1, 0xe8, 0x5a, 0xdf, 0x41, 0xe5, 0x8f, 0x00, 0x82, 0x2f, 0x9a, 0xe4, 0xf9, 0xc6, 0x65,
+	0x46, 0x7e, 0x09, 0x32, 0x26, 0x5e, 0xdc, 0xc7, 0xf4, 0xb1, 0xc8, 0xa2, 0xf2, 0xf7, 0xd3, 0x50,
+	0x8c, 0x3e, 0x1f, 0x24, 0xee, 0x0b, 0x36, 0xe7, 0xdd, 0xc3, 0x50, 0xb9, 0x6e, 0x07, 0x71, 0x00,
+	0x34, 0xc4, 0x6a, 0x36, 0x87, 0x37, 0xb4, 0x3d, 0xd8, 0x99, 0xdb, 0x14, 0x75, 0x9a, 0x66, 0x5e,
+	0x65, 0xa1, 0x07, 0xcb, 0x0f, 0x80, 0xbe, 0x42, 0xca, 0x5c, 0xb0, 0xed, 0xb9, 0x2d, 0x34, 0x31,
+	0x8c, 0x29, 0x73, 0x71, 0x4c, 0x97, 0x45, 0x16, 0xb8, 0x91, 0x09, 0xbd, 0x6c, 0x20, 0x7a, 0x03,
+	0xb7, 0x00, 0x86, 0x78, 0x46, 0xd3, 0xf9, 0x9b, 0x0d, 0xdd, 0x38, 0x06, 0x53, 0xfd, 0x0e, 0xe4,
+	0xe9, 0xec, 0xa0, 0x68, 0xb9, 0x90, 0x8f, 0x26, 0xcc, 0xa2, 0x5d, 0xc8, 0x7a, 0xdc, 0x16, 0x40,
+	0xe8, 0x00, 0x9c, 0xc9, 0xa7, 0xfc, 0x4b, 0x09, 0x00, 0x61, 0xa8, 0x45, 0xee, 0x67, 0x53, 0x4f,
+	0xee, 0x8f, 0x40, 0x86, 0x11, 0xce, 0x9e, 0x18, 0xbb, 0xfb, 0x1e, 0x5e, 0xf1, 0xb1, 0x3c, 0x4b,
+	0x62, 0x47, 0x49, 0x7e, 0x1e, 0x75, 0x35, 0x68, 0x58, 0xf2, 0x47, 0xef, 0x6b, 0x45, 0x74, 0x09,
+	0x36, 0x01, 0x26, 0x8e, 0x75, 0x61, 0x0d, 0xd1, 0x99, 0xbf, 0x59, 0x63, 0x6f, 0xd3, 0xdc, 0x02,
+	0xf0, 0x8f, 0x17, 0xa2, 0x0f, 0xdf, 0x04, 0xc7, 0x15, 0x1b, 0x20, 0x9d, 0xda, 0x8e, 0x89, 0xf4,
+	0xc9, 0x74, 0x38, 0xd4, 0xe9, 0xf0, 0xc8, 0xa3, 0x60, 0xf2, 0x26, 0x14, 0xa9, 0xa6, 0xe8, 0xcc,
+	0x25, 0xce, 0xf0, 0x57, 0xad, 0xfe, 0x9f, 0xfa, 0x25, 0x4f, 0x20, 0xc3, 0xd8, 0x42, 0x5e, 0x57,
+	0x6b, 0x77, 0xd9, 0x3b, 0x52, 0xcf, 0xb5, 0x7a, 0xed, 0x48, 0xa5, 0x2f, 0x4f, 0xb4, 0xda, 0x2d,
+	0x55, 0x4a, 0xe0, 0x7f, 0xfd, 0xae, 0xaa, 0x49, 0xc9, 0xf2, 0x1e, 0xe4, 0x02, 0x05, 0xda, 0x0a,
+	0xc4, 0x32, 0xb3, 0xfd, 0x51, 0x6e, 0x04, 0x0f, 0x5c, 0xb0, 0x6d, 0x20, 0xcd, 0x8a, 0x56, 0xbb,
+	0xed, 0xae, 0x14, 0x57, 0xbe, 0x1b, 0x83, 0xa5, 0xd9, 0x73, 0xff, 0x88, 0x42, 0xc6, 0x16, 0x2a,
+	0xe4, 0x1d, 0xc8, 0x9b, 0xc4, 0x3f, 0xa5, 0x5a, 0x14, 0xd9, 0xb9, 0xfa, 0xc9, 0x00, 0xf2, 0xaa,
+	0x10, 0x0e, 0x38, 0x61, 0x0f, 0x87, 0x16, 0xe7, 0x44, 0xc8, 0x2f, 0x7a, 0x05, 0xf7, 0xab, 0x2c,
+	0x80, 0xd0, 0xdc, 0x3d, 0xa2, 0x79, 0xba, 0x39, 0xe4, 0x09, 0x6f, 0x1b, 0xb3, 0xf9, 0x07, 0x2d,
+	0xe4, 0x55, 0x87, 0x6e, 0xf9, 0xd7, 0x33, 0x90, 0x22, 0xa9, 0x08, 0x65, 0x95, 0x1f, 0x9e, 0x3c,
+	0x80, 0xb8, 0x3d, 0x89, 0xbc, 0xd5, 0x34, 0x93, 0xb8, 0x10, 0xdc, 0x6d, 0x86, 0x8e, 0xdb, 0x92,
+	0xe5, 0x5f, 0x4e, 0x40, 0xa2, 0x7a, 0xf8, 0x59, 0xf9, 0xe7, 0x13, 0x00, 0x42, 0x24, 0xfc, 0x2d,
+	0x48, 0x0f, 0xd0, 0x85, 0xe5, 0x67, 0xb3, 0xf9, 0x77, 0xc6, 0x04, 0xb8, 0xdf, 0x9a, 0x8e, 0x4e,
+	0x90, 0x83, 0x2d, 0x99, 0x8b, 0x4c, 0x8f, 0xa7, 0xf5, 0x92, 0x85, 0x85, 0xdc, 0xab, 0x24, 0x58,
+	0x12, 0x47, 0xde, 0xb2, 0x75, 0xf6, 0xa2, 0xd0, 0x80, 0xdd, 0x2a, 0xde, 0x58, 0x44, 0x22, 0x1d,
+	0xcd, 0xd7, 0x40, 0x0a, 0xea, 0xf8, 0xa9, 0x63, 0x57, 0xa8, 0xf8, 0x29, 0x2c, 0x09, 0x15, 0x09,
+	0x15, 0xe9, 0xab, 0xd4, 0x7b, 0x02, 0x05, 0xcb, 0xa6, 0x79, 0x40, 0xa4, 0x52, 0xe6, 0x2a, 0x95,
+	0x1e, 0x41, 0xce, 0xb2, 0xf5, 0x11, 0x72, 0xce, 0x48, 0x32, 0xda, 0x95, 0x6b, 0x90, 0x84, 0xf6,
+	0x01, 0x7b, 0x92, 0xeb, 0xf2, 0x1a, 0xe5, 0x5f, 0x8f, 0x01, 0xf4, 0x68, 0x66, 0x1b, 0xde, 0x92,
+	0xfc, 0xa5, 0xd8, 0x0f, 0x21, 0xa0, 0x88, 0x04, 0xe2, 0x3f, 0xac, 0x04, 0x12, 0x57, 0x21, 0xf8,
+	0xef, 0x84, 0x29, 0x7c, 0x02, 0x09, 0xf3, 0xf4, 0x4b, 0x36, 0xdb, 0xee, 0x2c, 0xaa, 0x5a, 0x3d,
+	0xfc, 0x4c, 0xc8, 0xaa, 0x91, 0xbf, 0x05, 0x45, 0xf3, 0xf4, 0x4b, 0xdd, 0x41, 0xe6, 0xd4, 0x71,
+	0xad, 0x0b, 0xc4, 0x48, 0xbe, 0x6a, 0xf5, 0x0a, 0x80, 0xe7, 0xb3, 0x8c, 0x51, 0xfd, 0x60, 0x51,
+	0xdd, 0x80, 0xb9, 0x62, 0x5e, 0x4f, 0x53, 0x0c, 0x3d, 0x88, 0x1e, 0x17, 0xf7, 0xda, 0xbd, 0x4a,
+	0x83, 0xee, 0xb3, 0x88, 0x5f, 0x4a, 0xde, 0x61, 0xa0, 0xae, 0x32, 0xb1, 0x67, 0xdd, 0x2f, 0x5a,
+	0x55, 0x29, 0x89, 0x81, 0x15, 0xf2, 0x37, 0x55, 0xde, 0x84, 0x34, 0x9d, 0xba, 0x64, 0xd9, 0x1f,
+	0x1a, 0xae, 0xcb, 0xee, 0xf1, 0x8b, 0xca, 0x1d, 0x48, 0xb3, 0x7d, 0xee, 0x75, 0x7f, 0x1b, 0x4c,
+	0xb9, 0x55, 0x10, 0xb7, 0xc1, 0xca, 0x4d, 0x48, 0x91, 0x3f, 0x0b, 0xcf, 0xa2, 0xb1, 0xdd, 0xfd,
+	0x99, 0x18, 0x24, 0xb1, 0x11, 0xc7, 0x5b, 0xec, 0x31, 0x11, 0x7e, 0xf0, 0x7a, 0x27, 0x3b, 0xf3,
+	0x60, 0x6f, 0xd0, 0x85, 0x0d, 0xb6, 0xfc, 0x04, 0xe0, 0xc2, 0x72, 0x2d, 0x16, 0xde, 0x45, 0x1f,
+	0x2d, 0xd9, 0x99, 0x17, 0x21, 0xb2, 0xff, 0xd2, 0x47, 0x13, 0xf6, 0xed, 0xf3, 0x1e, 0xc1, 0xc0,
+	0x14, 0x93, 0x24, 0x63, 0xb9, 0x0c, 0xa9, 0x09, 0xc9, 0x36, 0xa6, 0xe3, 0xe2, 0x21, 0x03, 0xb8,
+	0x50, 0xf9, 0x41, 0x0c, 0x8a, 0xe1, 0x10, 0x94, 0x30, 0x29, 0xd4, 0xf7, 0x79, 0x2f, 0x29, 0xe1,
+	0xf1, 0xad, 0x84, 0xdf, 0xd3, 0xf4, 0x9f, 0x28, 0xe5, 0xd1, 0xcf, 0xcc, 0xa7, 0x11, 0x1e, 0xde,
+	0xa3, 0x2f, 0xf1, 0x6d, 0x71, 0x42, 0xd3, 0xa1, 0x45, 0x87, 0x8e, 0x22, 0x18, 0x6d, 0x66, 0xde,
+	0x68, 0x3f, 0x05, 0x10, 0xe8, 0x29, 0x42, 0xce, 0xbf, 0xb6, 0x63, 0xef, 0x8d, 0x36, 0xfa, 0xe4,
+	0x66, 0x97, 0x3c, 0x56, 0xad, 0x7e, 0xde, 0x53, 0x35, 0x7a, 0x7e, 0x78, 0x1f, 0xe0, 0x15, 0xb2,
+	0xce, 0xce, 0x3d, 0x7e, 0x34, 0xf2, 0x86, 0x7c, 0xb1, 0xc4, 0x23, 0xfe, 0xa8, 0x0c, 0x15, 0xef,
+	0x2f, 0xc4, 0x20, 0xff, 0x92, 0x52, 0x4c, 0xb0, 0x85, 0x01, 0xf8, 0x8f, 0x78, 0x9e, 0x4c, 0xad,
+	0xe1, 0x40, 0x1f, 0xd0, 0x18, 0x82, 0x98, 0x08, 0xf3, 0x6d, 0x72, 0x2c, 0x80, 0x91, 0x18, 0x1e,
+	0x9f, 0x1b, 0x67, 0x96, 0xa7, 0xbb, 0xe7, 0x06, 0xe3, 0x86, 0x0c, 0x80, 0x01, 0x34, 0x39, 0x81,
+	0x9d, 0xa4, 0x30, 0x24, 0xcf, 0x38, 0xa3, 0x9e, 0x83, 0x72, 0x13, 0x92, 0x87, 0x43, 0xe3, 0xec,
+	0xd2, 0xdb, 0x1c, 0x65, 0x02, 0x49, 0xcd, 0x9e, 0xb9, 0xf2, 0x09, 0xc6, 0x4a, 0x53, 0xaa, 0xee,
+	0x00, 0xf8, 0x11, 0x3e, 0xdc, 0xd8, 0xcc, 0x8b, 0xef, 0xb9, 0x42, 0x78, 0x9f, 0x72, 0x1b, 0xd2,
+	0x4d, 0xe4, 0x39, 0x96, 0x79, 0x19, 0x61, 0x31, 0xe5, 0x27, 0x20, 0x7b, 0x68, 0x0d, 0xfd, 0xe7,
+	0x1e, 0x85, 0x13, 0xbd, 0x22, 0xa4, 0xc6, 0x43, 0x6b, 0x4c, 0xbd, 0xc0, 0x14, 0xd9, 0x2b, 0x61,
+	0x97, 0x3f, 0xc1, 0x92, 0x7e, 0x52, 0x23, 0xc2, 0xcd, 0xe4, 0xfc, 0xc8, 0x81, 0x02, 0x3b, 0xdd,
+	0x25, 0x0f, 0xff, 0xe2, 0x09, 0x3b, 0x65, 0xef, 0x10, 0x92, 0xab, 0x8f, 0x33, 0x16, 0x63, 0x91,
+	0x53, 0x1c, 0x48, 0x53, 0x4b, 0x2d, 0x74, 0x8e, 0x91, 0x6e, 0xf9, 0xb3, 0x37, 0xbe, 0xd8, 0xac,
+	0x97, 0x3f, 0x81, 0x34, 0x33, 0xf0, 0x7e, 0x4a, 0x95, 0x30, 0xe7, 0x85, 0xf4, 0x2b, 0xbf, 0xad,
+	0xf8, 0x5e, 0x52, 0xf9, 0xf9, 0x18, 0x14, 0x68, 0x3b, 0x15, 0xd3, 0x44, 0x2e, 0xd1, 0x6b, 0x7f,
+	0x0d, 0x11, 0x23, 0x52, 0x18, 0x65, 0xf7, 0x21, 0x6d, 0x10, 0x44, 0x16, 0xa1, 0x57, 0x0e, 0x15,
+	0xd3, 0x36, 0xf6, 0xe9, 0x0f, 0xa6, 0x88, 0x35, 0x8a, 0xf5, 0x16, 0x19, 0x2c, 0x08, 0x06, 0x33,
+	0xf3, 0x8d, 0x63, 0x79, 0xfc, 0x59, 0xd9, 0x22, 0xa4, 0x46, 0xaf, 0xc7, 0x36, 0xf5, 0x98, 0xb2,
+	0xca, 0x8f, 0xc0, 0x12, 0x6d, 0xec, 0xd5, 0xb9, 0xe5, 0xa1, 0xa1, 0xe5, 0x7a, 0xf2, 0xc7, 0x34,
+	0xa5, 0xe1, 0x0d, 0x1a, 0xe8, 0x94, 0x36, 0x6e, 0x3b, 0x56, 0xe6, 0xf4, 0x7e, 0xff, 0x8f, 0x41,
+	0x9a, 0x79, 0x79, 0xeb, 0x20, 0xd7, 0xb4, 0xfa, 0x4b, 0x55, 0xd3, 0x5b, 0x6d, 0xb2, 0x83, 0xd3,
+	0xe8, 0x4d, 0xbd, 0x0c, 0x25, 0x06, 0xd7, 0xfa, 0x2d, 0xf6, 0x4a, 0x7c, 0x00, 0xab, 0x3c, 0x6f,
+	0x13, 0xbc, 0x84, 0x00, 0xeb, 0xf6, 0xda, 0x9d, 0x8e, 0x5a, 0x93, 0x92, 0xf7, 0x7f, 0x2e, 0x0e,
+	0xb9, 0x20, 0xfe, 0x46, 0x82, 0x02, 0xb9, 0x3a, 0xed, 0xf6, 0x2a, 0x47, 0xb8, 0x9d, 0x34, 0xde,
+	0xb7, 0x72, 0x88, 0xd6, 0xc3, 0xa0, 0x0f, 0x7c, 0x24, 0xde, 0x59, 0xcc, 0x87, 0xb0, 0xe7, 0xcd,
+	0xa5, 0xac, 0x5f, 0xed, 0xb0, 0xde, 0xaa, 0x77, 0x8f, 0x49, 0xb4, 0xc0, 0x12, 0xe4, 0x29, 0x88,
+	0x86, 0x35, 0x24, 0x7c, 0x00, 0xbd, 0x9a, 0xa6, 0xbb, 0x6a, 0x02, 0xa0, 0xc1, 0x02, 0x19, 0x6c,
+	0x66, 0xc8, 0x77, 0x03, 0x7b, 0xd8, 0x29, 0xbf, 0x97, 0x9a, 0x46, 0x89, 0xcf, 0xc9, 0xab, 0x20,
+	0xb1, 0x9b, 0x5e, 0x4d, 0xad, 0x54, 0x8f, 0xc9, 0xc1, 0x18, 0xf8, 0xd5, 0x8e, 0xb0, 0x0b, 0x9e,
+	0x97, 0x37, 0x61, 0xcd, 0xff, 0x0c, 0x5d, 0xbc, 0x17, 0xfc, 0x16, 0xfd, 0x5b, 0xf3, 0xfb, 0x7f,
+	0x31, 0x06, 0xa5, 0x48, 0x40, 0xd9, 0x26, 0xac, 0xd1, 0x2a, 0xf5, 0x76, 0x4b, 0xef, 0xb7, 0xba,
+	0xfd, 0x4e, 0x87, 0x32, 0x94, 0xdc, 0xa3, 0x04, 0x45, 0x7c, 0x8f, 0x4d, 0x5e, 0x7b, 0x0f, 0xc0,
+	0x02, 0x07, 0x56, 0x41, 0x12, 0xe0, 0x9c, 0x0d, 0x2b, 0xb0, 0x14, 0x40, 0x79, 0x9c, 0x44, 0xa8,
+	0x65, 0x3e, 0xe0, 0xd4, 0xf3, 0xc7, 0xff, 0xe0, 0x7b, 0xdb, 0xb1, 0x7f, 0xf2, 0xbd, 0xed, 0xd8,
+	0xbf, 0xfe, 0xde, 0x76, 0xec, 0x2f, 0xfc, 0x9b, 0xed, 0x0f, 0x40, 0xb2, 0x9d, 0xb3, 0x7d, 0x63,
+	0x62, 0x98, 0xe7, 0x88, 0x2a, 0xcf, 0xf3, 0x34, 0x7d, 0xa9, 0xe7, 0xdb, 0x74, 0x47, 0xfb, 0x7f,
+	0x02, 0x00, 0x00, 0xff, 0xff, 0xc5, 0xf9, 0xaf, 0xf8, 0x70, 0x63, 0x00, 0x00,
 }
