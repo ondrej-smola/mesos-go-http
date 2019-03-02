@@ -91,11 +91,12 @@ func (a *Acks) Pull(ctx context.Context) (flow.Message, error) {
 
 			state := e.Update.Status
 
-			if state.AgentId == nil {
-				return nil, errors.Errorf("AgentId must be set on status update: %v", state)
-			}
-
 			if len(state.Uuid) > 0 {
+
+				if state.AgentId == nil {
+					return nil, errors.Errorf("AgentId must be set on status update: %v", state)
+				}
+
 				call := &scheduler.Call{
 					Type: scheduler.Call_ACKNOWLEDGE.Enum(),
 					Acknowledge: &scheduler.Call_Acknowledge{
